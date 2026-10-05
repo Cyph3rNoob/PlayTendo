@@ -3,3 +3,4 @@ sources/
 cores/macos/
 *.ipa
 .DS_Store
+Captures/
