@@ -648,16 +648,81 @@ PSP_COLORS = ["cyan", "vert", "rouge", "jaune", "bleu", "bleu", "violet", "orang
               "vert foncé", "marron", "bleu clair", "rose", "blanc", "bleu", "bleu", "gris"]
 
 
+PSP_BASE = 0x08804000
+
+
+def psp_finish(m, imports, name):
+    """Ajoute les fonctions « relais » (que le système remplace par ses propres fonctions,
+    désignées par leur NID) et l'en-tête du module, puis emballe le tout en ELF."""
+    for library, functions in imports:
+        m.label(f"stubs_{library}")
+        for function, _ in functions:
+            m.label(function)
+            m.jr(m.RA); m.nop()
+        m.label(f"nids_{library}")
+        for _, nid in functions:
+            m.op(nid)
+        m.label(f"name_{library}")
+        m.data(library.encode() + b"\0")
+    m.label("libstub")
+    for library, functions in imports:
+        m.addr(f"name_{library}")
+        m.op(0x4001 << 16 | 0x0011)                      # version, attributs
+        m.op(len(functions) << 16 | 0 << 8 | 5)          # taille de l'entrée (5 mots), 0 variable, n fonctions
+        m.addr(f"nids_{library}")
+        m.addr(f"stubs_{library}")
+    m.label("libstub_end")
+    m.label("modinfo")
+    m.op(0x0101 << 16 | 0x0000)                          # attributs, version
+    m.data(name.encode().ljust(28, b"\0"))
+    m.op(0)                                              # gp
+    m.addr("libstub"); m.addr("libstub")                 # aucune fonction exportée
+    m.addr("libstub"); m.addr("libstub_end")
+    body = m.resolve()
+
+    offset = 0x100
+    modinfo_offset = offset + m.labels["modinfo"] - PSP_BASE
+    elf = bytearray(offset)
+    elf[0:16] = b"\x7fELF\x01\x01\x01" + bytes(9)
+    struct.pack_into("<HHIIIIIHHHHHH", elf, 16, 2, 8, 1, PSP_BASE, 52, 0, 0x10A23001, 52, 32, 1, 40, 0, 0)
+    struct.pack_into("<IIIIIIII", elf, 52, 1, offset, PSP_BASE, modinfo_offset, len(body), len(body), 7, 16)
+    return bytes(elf) + body
+
+
+PSP_DISPLAY = ("sceDisplay", [("sceDisplaySetMode", 0x0E20F177), ("sceDisplaySetFrameBuf", 0x289D82FE),
+                              ("sceDisplayWaitVblankStart", 0x984C27E7)])
+
+
+def psp_color(name):
+    return 0xFF000000 | bgr24(name)                      # pixel 8888 : R, G, B, A en mémoire
+
+
+def psp_display_setup(m):
+    m.ori(m.A0, 0, 0); m.ori(m.A1, 0, 480); m.ori(m.A2, 0, 272); m.jal("sceDisplaySetMode")
+    m.lui(m.A0, 0x0400); m.ori(m.A1, 0, 512); m.ori(m.A2, 0, 3); m.ori(m.A3, 0, 1); m.jal("sceDisplaySetFrameBuf")
+
+
+def psp_fill(m, color_reg):
+    """Remplit l'écran avec la couleur du registre `color_reg`."""
+    T0, T1 = m.T0, m.T1
+    m.lui(T0, 0x4400)                                    # mémoire vidéo, sans cache
+    m.load32(T1, 512 * 272)
+    name = f"fill{len(m.words)}"
+    m.label(name)
+    m.sw(color_reg, 0, T0)
+    m.addiu(T0, T0, 4)
+    m.addiu(T1, T1, -1)
+    m.branch(5, T1, 0, name)
+
+
 def psp_elf():
     """Programme PSP au format ELF : il appelle l'écran et la manette du système (fonctions
     désignées par leur « NID »), lit la manette et remplit l'écran d'une couleur."""
-    base = 0x08804000
-    m = MipsAsm(base)
+    m = MipsAsm(PSP_BASE)
     A0, A1, A2, A3 = m.A0, m.A1, m.A2, m.A3
     T0, T1, T2, T3, T4, T5, T6, T7 = m.T0, m.T1, m.T2, m.T3, m.T4, m.T5, m.T6, m.T7
 
-    m.ori(A0, 0, 0); m.ori(A1, 0, 480); m.ori(A2, 0, 272); m.jal("sceDisplaySetMode")
-    m.lui(A0, 0x0400); m.ori(A1, 0, 512); m.ori(A2, 0, 3); m.ori(A3, 0, 1); m.jal("sceDisplaySetFrameBuf")
+    psp_display_setup(m)
     m.ori(A0, 0, 0); m.jal("sceCtrlSetSamplingCycle")
     m.ori(A0, 0, 1); m.jal("sceCtrlSetSamplingMode")     # avec le stick analogique
 
@@ -682,67 +747,75 @@ def psp_elf():
     m.la(T6, "repos")
     m.label("found")
     m.lw(T6, 0, T6)
-    m.lui(T0, 0x4400)                                    # mémoire vidéo, sans cache
-    m.load32(T1, 512 * 272)
-    m.label("fill")
-    m.sw(T6, 0, T0)
-    m.addiu(T0, T0, 4)
-    m.addiu(T1, T1, -1)
-    m.branch(5, T1, 0, "fill")
+    psp_fill(m, T6)
     m.jal("sceDisplayWaitVblankStart")
     m.branch(4, 0, 0, "main")
 
-    def color(name): return 0xFF000000 | bgr24(name)    # pixel 8888 : R, G, B, A en mémoire
     m.label("boutons")
     for name in PSP_COLORS:
-        m.op(color(name))
-    stick_tables(m, color)
-
-    # Petites fonctions « relais » que le système remplace par ses propres fonctions.
-    imports = [("sceDisplay", [("sceDisplaySetMode", 0x0E20F177), ("sceDisplaySetFrameBuf", 0x289D82FE),
-                               ("sceDisplayWaitVblankStart", 0x984C27E7)]),
-               ("sceCtrl", [("sceCtrlSetSamplingCycle", 0x6A2774F3), ("sceCtrlSetSamplingMode", 0x1F4011E6),
-                            ("sceCtrlReadBufferPositive", 0x1F803938)])]
-    for library, functions in imports:
-        m.label(f"stubs_{library}")
-        for name, _ in functions:
-            m.label(name)
-            m.jr(m.RA); m.nop()
-        m.label(f"nids_{library}")
-        for _, nid in functions:
-            m.op(nid)
-        m.label(f"name_{library}")
-        m.data(library.encode() + b"\0")
-    m.label("libstub")
-    for library, functions in imports:
-        m.addr(f"name_{library}")
-        m.op(0x4001 << 16 | 0x0011)                      # version, attributs
-        m.op(len(functions) << 16 | 0 << 8 | 5)          # taille de l'entrée (5 mots), 0 variable, n fonctions
-        m.addr(f"nids_{library}")
-        m.addr(f"stubs_{library}")
-    m.label("libstub_end")
-    m.label("modinfo")
-    m.op(0x0101 << 16 | 0x0000)                          # attributs, version
-    m.data(b"PlayTendoTest".ljust(28, b"\0"))
-    m.op(0)                                              # gp
-    m.addr("libstub"); m.addr("libstub")                 # aucune fonction exportée
-    m.addr("libstub"); m.addr("libstub_end")
+        m.op(psp_color(name))
+    stick_tables(m, psp_color)
     m.label("pad")
     m.data(bytes(16))                                    # état de la manette (SceCtrlData)
-    body = m.resolve()
+    return psp_finish(m, [PSP_DISPLAY,
+                          ("sceCtrl", [("sceCtrlSetSamplingCycle", 0x6A2774F3), ("sceCtrlSetSamplingMode", 0x1F4011E6),
+                                       ("sceCtrlReadBufferPositive", 0x1F803938)])], "PlayTendoTest")
 
-    offset = 0x100
-    modinfo_offset = offset + m.labels["modinfo"] - base
-    elf = bytearray(offset)
-    elf[0:16] = b"\x7fELF\x01\x01\x01" + bytes(9)
-    struct.pack_into("<HHIIIIIHHHHHH", elf, 16, 2, 8, 1, base, 52, 0, 0x10A23001, 52, 32, 1, 40, 0, 0)
-    struct.pack_into("<IIIIIIII", elf, 52, 1, offset, base, modinfo_offset, len(body), len(body), 7, 16)
-    return bytes(elf) + body
+
+def psp_save_elf():
+    """Programme PSP qui crée un dossier dans ms0:/PSP/SAVEDATA puis y écrit et relit un fichier,
+    comme un jeu qui sauvegarde. Écran vert : réussi ; rouge : création du fichier impossible ;
+    orange : écriture incomplète ; jaune : relecture impossible."""
+    m = MipsAsm(PSP_BASE)
+    A0, A1, A2 = m.A0, m.A1, m.A2
+    T1, T6 = m.T1, m.T6
+    V0, S0, S1, S2 = 2, 16, 17, 18
+
+    psp_display_setup(m)
+    m.la(A0, "dossier"); m.ori(A1, 0, 0o777); m.jal("sceIoMkdir")
+    m.la(A0, "fichier"); m.ori(A1, 0, 0x0602); m.ori(A2, 0, 0o777); m.jal("sceIoOpen")   # écriture, création
+    m.or_(S0, V0, 0)
+    m.la(T6, "c_creation"); m.slti(T1, S0, 0); m.branch(5, T1, 0, "show")
+    m.or_(A0, S0, 0); m.la(A1, "donnees"); m.ori(A2, 0, 16); m.jal("sceIoWrite")
+    m.or_(S1, V0, 0)
+    m.or_(A0, S0, 0); m.jal("sceIoClose")
+    m.la(T6, "c_ecriture"); m.ori(T1, 0, 16); m.branch(5, S1, T1, "show")
+    m.la(A0, "fichier"); m.ori(A1, 0, 0x0001); m.ori(A2, 0, 0); m.jal("sceIoOpen")      # lecture
+    m.or_(S0, V0, 0)
+    m.la(T6, "c_lecture"); m.slti(T1, S0, 0); m.branch(5, T1, 0, "show")
+    m.or_(A0, S0, 0); m.la(A1, "lu"); m.ori(A2, 0, 16); m.jal("sceIoRead")
+    m.or_(S1, V0, 0)
+    m.or_(A0, S0, 0); m.jal("sceIoClose")
+    m.la(T6, "c_lecture"); m.ori(T1, 0, 16); m.branch(5, S1, T1, "show")
+    m.la(T6, "c_ok")
+    m.label("show")
+    m.lw(S2, 0, T6)
+    m.label("loop")
+    psp_fill(m, S2)
+    m.jal("sceDisplayWaitVblankStart")
+    m.branch(4, 0, 0, "loop")
+
+    for label, name in [("c_ok", "vert"), ("c_creation", "rouge"), ("c_ecriture", "orange"), ("c_lecture", "jaune")]:
+        m.label(label)
+        m.op(psp_color(name))
+    m.label("dossier")
+    m.data(b"ms0:/PSP/SAVEDATA/PTTEST00\0")
+    m.label("fichier")
+    m.data(b"ms0:/PSP/SAVEDATA/PTTEST00/DATA.BIN\0")
+    m.label("donnees")
+    m.data(b"PlayTendo save!\0")
+    m.label("lu")
+    m.data(bytes(16))
+    return psp_finish(m, [PSP_DISPLAY,
+                          ("IoFileMgrForUser", [("sceIoMkdir", 0x06A70004), ("sceIoOpen", 0x109F50BC),
+                                                ("sceIoWrite", 0x42EC03AC), ("sceIoRead", 0x6A638D83),
+                                                ("sceIoClose", 0x810C4BC3)])], "PlayTendoSave")
+
 
 
 for name, data in [("test.nes", nes()), ("test.sfc", snes()), ("test.gb", gameboy()),
                    ("test.gba", gba()), ("test.nds", nds()), ("test.exe", ps1_exe()),
-                   ("test.z64", n64()), ("test.elf", psp_elf())]:
+                   ("test.z64", n64()), ("test.elf", psp_elf()), ("test_save.elf", psp_save_elf())]:
     with open(os.path.join(OUT, name), "wb") as f:
         f.write(data)
     print(f"{name:10s} {len(data):7d} octets")

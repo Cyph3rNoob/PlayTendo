@@ -11,6 +11,7 @@ struct EmulatorView: View {
     @State private var quitting = false
     @State private var screensSwapped: Bool
     @State private var touchSize: DSTouchSize
+    @State private var fillScreen: Bool
 
     init(game: Game) {
         self.game = game
@@ -18,9 +19,11 @@ struct EmulatorView: View {
         _screensSwapped = State(initialValue: UserDefaults.standard.bool(forKey: Self.swapKey(for: game)))
         let savedSize = UserDefaults.standard.string(forKey: Self.touchSizeKey) ?? ""
         _touchSize = State(initialValue: DSTouchSize(rawValue: savedSize) ?? .medium)
+        _fillScreen = State(initialValue: UserDefaults.standard.object(forKey: Self.fillScreenKey) as? Bool ?? true)
     }
 
     private static let touchSizeKey = "tailleEcranTactileDS"
+    private static let fillScreenKey = "pleinEcranPSP"
 
     private static func swapKey(for game: Game) -> String { "ecransInverses.\(game.id)" }
 
@@ -32,7 +35,8 @@ struct EmulatorView: View {
                                             bounds: bounds, safe: Self.safeAreaInsets(),
                                             controllerConnected: gamepad.isConnected,
                                             hideTouchControls: gamepad.isActive,
-                                            dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize))
+                                            dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
+                                            fillScreen: game.system.controls.canFillScreen && fillScreen)
             ZStack {
                 Color.black
 
@@ -59,6 +63,9 @@ struct EmulatorView: View {
                               onSwapScreens: game.system.controls.usesTouchScreen ? swapScreens : nil,
                               touchSizeLabel: game.system.controls.usesTouchScreen && landscape ? touchSize.label : nil,
                               onTouchSize: nextTouchSize,
+                              imageSizeLabel: game.system.controls.canFillScreen && landscape
+                                  ? (fillScreen ? "Plein écran" : "Réduite") : nil,
+                              onImageSize: toggleFillScreen,
                               onQuit: quit)
                     .transition(.opacity)
                 }
@@ -122,6 +129,13 @@ struct EmulatorView: View {
         closeMenu()
     }
 
+    /// PSP en paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à côté).
+    private func toggleFillScreen() {
+        fillScreen.toggle()
+        UserDefaults.standard.set(fillScreen, forKey: Self.fillScreenKey)
+        closeMenu()
+    }
+
     private func openMenu() {
         guard !showingMenu, session.state == .running else { return }
         session.clearInput()
@@ -160,6 +174,9 @@ private struct PauseMenu: View {
     /// DS en paysage : taille actuelle de l'écran tactile (nil = réglage masqué).
     let touchSizeLabel: String?
     let onTouchSize: () -> Void
+    /// PSP en paysage : taille actuelle de l'image (nil = réglage masqué).
+    let imageSizeLabel: String?
+    let onImageSize: () -> Void
     let onQuit: () -> Void
 
     private struct Item: Identifiable {
@@ -198,6 +215,10 @@ private struct PauseMenu: View {
         }
         if let touchSizeLabel {
             items.append(Item(title: "Écran tactile : \(touchSizeLabel)", icon: "hand.tap", action: onTouchSize))
+        }
+        if let imageSizeLabel {
+            items.append(Item(title: "Image : \(imageSizeLabel)", icon: "arrow.up.left.and.arrow.down.right",
+                              action: onImageSize))
         }
         items.append(Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset))
         items.append(Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit))

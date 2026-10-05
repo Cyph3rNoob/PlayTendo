@@ -52,6 +52,28 @@ enum Paths {
         }
     }
 
+    /// Dossier « sauvegardes » donné au moteur. Pour la PSP, c'est la carte mémoire entière : la
+    /// console y range ses sauvegardes dans PSP/SAVEDATA, comme sur une vraie carte. (Un dossier
+    /// nommé « PSP » faisait passer PPSSPP dans un mode de compatibilité qui crée les dossiers de
+    /// sauvegarde mais pas leurs fichiers sur un système sensible aux majuscules, comme l'iPhone.)
+    static func coreSaveDirectory(for system: GameSystem) -> URL {
+        guard system == .psp else { return saveDirectory(for: system) }
+        removeEmptyPSPSaveFolders()
+        return saves
+    }
+
+    /// Les dossiers de sauvegarde PSP restés vides à cause de ce bug font dire « données
+    /// corrompues » au jeu : on retire ceux qui ne contiennent absolument rien.
+    private static func removeEmptyPSPSaveFolders() {
+        let fileManager = FileManager.default
+        let folder = saves.appendingPathComponent("PSP/SAVEDATA", isDirectory: true)
+        guard let entries = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return }
+        for entry in entries where (try? fileManager.contentsOfDirectory(atPath: entry.path))?.isEmpty == true {
+            try? fileManager.removeItem(at: entry)
+            PTLogLine("Dossier de sauvegarde PSP vide retiré : \(entry.lastPathComponent)")
+        }
+    }
+
     static func saveDirectory(for system: GameSystem) -> URL {
         let url = saves.appendingPathComponent(system.folderName, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

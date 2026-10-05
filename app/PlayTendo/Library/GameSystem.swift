@@ -26,6 +26,8 @@ enum ControlScheme {
     var hasSelect: Bool { self != .nintendo64 }
     /// N64 : gâchette Z et boutons C jaunes (envoyés au stick analogique droit).
     var isNintendo64: Bool { self == .nintendo64 }
+    /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
+    var canFillScreen: Bool { self == .psp }
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {

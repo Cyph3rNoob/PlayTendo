@@ -89,9 +89,11 @@ struct ControlLayout: Equatable {
     /// `controllerConnected` : une manette est branchée — la DS garde alors ses grands écrans, et les
     /// boutons tactiles, s'ils réapparaissent, se superposent aux écrans au lieu de les réduire.
     /// `hideTouchControls` : la manette est en cours d'utilisation, seuls les boutons disparaissent.
+    /// `fillScreen` (PSP en paysage) : l'image prend toute la hauteur de l'écran et les boutons
+    /// passent par-dessus.
     static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect, safe: UIEdgeInsets,
                      controllerConnected: Bool, hideTouchControls: Bool,
-                     dual: DualScreenOptions = DualScreenOptions()) -> ControlLayout {
+                     dual: DualScreenOptions = DualScreenOptions(), fillScreen: Bool = false) -> ControlLayout {
         let usable = bounds.inset(by: safe)
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
@@ -175,16 +177,19 @@ struct ControlLayout: Equatable {
                                     width: max(0, usable.width - 2 * panel), height: usable.height)
                 layout.placeDualScreens(in: middle, portrait: false, maxStackHeight: 0, centered: true, dual: dual)
             } else {
-                var height = usable.height
+                var height = fillScreen ? bounds.height : usable.height
                 var width = height * aspect
-                // Consoles à stick : une bande d'au moins 128 points de chaque côté pour les commandes.
-                let side = analog ? max(150, max(safe.left, safe.right) + 128) : 150
+                // Consoles à stick : une bande d'au moins 128 points de chaque côté pour les commandes
+                // (en plein écran, seulement l'encoche à éviter).
+                let side = fillScreen ? max(safe.left, safe.right)
+                    : analog ? max(150, max(safe.left, safe.right) + 128) : 150
                 let maxWidth = bounds.width - 2 * side
                 if width > maxWidth {
                     width = maxWidth
                     height = width / aspect
                 }
-                layout.gameRect = CGRect(x: bounds.midX - width / 2, y: usable.midY - height / 2,
+                let centerY = fillScreen ? bounds.midY : usable.midY
+                layout.gameRect = CGRect(x: bounds.midX - width / 2, y: centerY - height / 2,
                                          width: width, height: height)
             }
 
@@ -196,7 +201,9 @@ struct ControlLayout: Equatable {
             if analog {
                 // Les blocs tiennent dans la bande libre à côté de l'image, sans la recouvrir
                 // (mais jamais sous 120 points, pour rester faciles à viser).
-                cluster = max(120, min(cluster, min(leftPanel.width, rightPanel.width) - 8))
+                if !fillScreen {
+                    cluster = max(120, min(cluster, min(leftPanel.width, rightPanel.width) - 8))
+                }
                 // Sous les gâchettes de gauche (L, et Z pour la N64), au-dessus de SELECT.
                 let gap: CGFloat = 8
                 let leftShoulderRows: CGFloat = narrowShoulders ? 2 : 1

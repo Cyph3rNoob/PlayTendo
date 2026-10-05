@@ -268,7 +268,7 @@ final class EmulatorSession: ObservableObject {
         do {
             try core.loadGame(atPath: game.url.path,
                               systemDirectory: Paths.systemDirectory(for: system).path,
-                              saveDirectory: Paths.saveDirectory(for: system).path,
+                              saveDirectory: Paths.coreSaveDirectory(for: system).path,
                               options: options)
         } catch {
             fail(error.localizedDescription)
