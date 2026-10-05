@@ -68,6 +68,9 @@ typedef void (^PTAudioHandler)(const int16_t *samples, size_t frames);
 - (nullable NSData *)saveRAM;
 - (void)restoreSaveRAM:(NSData *)data;
 
+/// Mémoire vive de la console émulée (débogage, codes de triche).
+- (nullable NSData *)systemRAM;
+
 /// Jeux sur plusieurs disques (PlayStation).
 @property (nonatomic, readonly) NSUInteger diskCount;
 @property (nonatomic, readonly) NSUInteger currentDiskIndex;

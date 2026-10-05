@@ -60,9 +60,16 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gbc: ["gbc"]
         case .gba: ["gba"]
         case .nds: ["nds"]
-        case .psx: ["cue", "chd", "pbp", "m3u"]
+        case .psx: Self.psxExtensions
         }
     }
+
+    #if DEBUG
+    /// En test, les programmes PS1 « .exe » (mini-jeux de test) sont aussi acceptés.
+    private static let psxExtensions: Set<String> = ["cue", "chd", "pbp", "m3u", "exe"]
+    #else
+    private static let psxExtensions: Set<String> = ["cue", "chd", "pbp", "m3u"]
+    #endif
 
     /// Nom du framework du moteur embarqué dans l'app.
     var coreName: String {

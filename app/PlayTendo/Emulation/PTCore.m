@@ -475,6 +475,13 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
     if (size > 0 && bytes) memcpy(bytes, data.bytes, MIN(size, data.length));
 }
 
+- (NSData *)systemRAM {
+    if (!_gameLoaded) return nil;
+    size_t size = _api.get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+    void *bytes = _api.get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+    return (size > 0 && bytes) ? [NSData dataWithBytes:bytes length:size] : nil;
+}
+
 #pragma mark Disques
 
 - (NSUInteger)diskCount {

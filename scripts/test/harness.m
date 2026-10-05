@@ -18,7 +18,8 @@ static PTButton ButtonNamed(NSString *name) {
     NSDictionary *map = @{@"a": @(PTButtonA), @"b": @(PTButtonB), @"x": @(PTButtonX), @"y": @(PTButtonY),
                           @"l": @(PTButtonL), @"r": @(PTButtonR), @"start": @(PTButtonStart),
                           @"select": @(PTButtonSelect), @"up": @(PTButtonUp), @"down": @(PTButtonDown),
-                          @"left": @(PTButtonLeft), @"right": @(PTButtonRight)};
+                          @"left": @(PTButtonLeft), @"right": @(PTButtonRight),
+                          @"l2": @(PTButtonL2), @"r2": @(PTButtonR2)};
     return (PTButton)[map[name.lowercaseString] integerValue];
 }
 
@@ -72,6 +73,9 @@ int main(int argc, const char *argv[]) {
         NSMutableArray<NSValue *> *touches = [NSMutableArray array];
         NSMutableSet<NSNumber *> *probes = [NSMutableSet set];
         NSMutableDictionary<NSString *, NSString *> *options = [NSMutableDictionary dictionary];
+        NSArray<NSString *> *sequence = @[];
+        NSMutableArray<NSNumber *> *peeks = [NSMutableArray array];
+        int sequenceStart = 120;
         for (int i = 5; i + 1 < argc; i += 2) {
             NSString *flag = @(argv[i]), *value = @(argv[i + 1]);
             NSArray *parts = [value componentsSeparatedByString:@":"];
@@ -86,6 +90,12 @@ int main(int argc, const char *argv[]) {
                 [touches addObject:[NSValue valueWithBytes:&t objCType:@encode(Touch)]];
             } else if ([flag isEqualToString:@"--probe"]) {
                 [probes addObject:@([value intValue])];
+            } else if ([flag isEqualToString:@"--sequence"]) {
+                sequence = [value componentsSeparatedByString:@","];
+            } else if ([flag isEqualToString:@"--peek"]) {
+                [peeks addObject:@(strtoul(value.UTF8String, NULL, 0))];
+            } else if ([flag isEqualToString:@"--start"]) {
+                sequenceStart = [value intValue];
             } else if ([flag isEqualToString:@"--opt"]) {
                 NSArray *kv = [value componentsSeparatedByString:@"="];
                 options[kv[0]] = kv[1];
@@ -122,6 +132,19 @@ int main(int argc, const char *argv[]) {
         printf("moteur   : %s %s\n", core.libraryName.UTF8String, core.libraryVersion.UTF8String);
         printf("cadence  : %.3f img/s, son %.0f Hz, format %.3f\n", core.framesPerSecond, core.sampleRate, core.aspectRatio);
 
+        for (NSUInteger s = 0; s < sequence.count; s++) {
+            int from = sequenceStart + (int)s * 30;
+            [probes addObject:@(from + 15)];
+            if ([sequence[s] isEqualToString:@"touch"]) {
+                Touch t = {0.5, 0.75, from, from + 20};
+                [touches addObject:[NSValue valueWithBytes:&t objCType:@encode(Touch)]];
+            } else {
+                Press p = {ButtonNamed(sequence[s]), from, from + 20};
+                [presses addObject:[NSValue valueWithBytes:&p objCType:@encode(Press)]];
+            }
+        }
+        if (sequence.count) frames = MAX(frames, sequenceStart + (int)sequence.count * 30 + 10);
+
         CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
         for (int i = 1; i <= frames; i++) {
             for (NSValue *v in presses) {
@@ -139,8 +162,15 @@ int main(int argc, const char *argv[]) {
                 uint8_t top[3], center[3];
                 PixelAt(frame, fw, fh, fpitch, fformat, 0.5, 0.5, center);
                 PixelAt(frame, fw, fh, fpitch, fformat, 0.5, 0.25, top);
-                printf("image %4d : centre #%02X%02X%02X, quart haut #%02X%02X%02X\n", i,
-                       center[0], center[1], center[2], top[0], top[1], top[2]);
+                int index = (i - sequenceStart - 15) / 30;
+                BOOL inSequence = sequence.count && i >= sequenceStart && (i - sequenceStart - 15) % 30 == 0
+                                  && index >= 0 && index < (int)sequence.count;
+                if (inSequence) {
+                    printf("bouton %-6s → #%02X%02X%02X\n", sequence[index].UTF8String, top[0], top[1], top[2]);
+                } else {
+                    printf("image %4d : centre #%02X%02X%02X, quart haut #%02X%02X%02X\n", i,
+                           center[0], center[1], center[2], top[0], top[1], top[2]);
+                }
             }
         }
         double elapsed = CFAbsoluteTimeGetCurrent() - start;
@@ -151,6 +181,16 @@ int main(int argc, const char *argv[]) {
         printf("vitesse  : %.2f ms par image (%.0f×  le temps réel)\n", elapsed * 1000 / frames,
                (frames / core.framesPerSecond) / elapsed);
 
+        NSData *ram = [core systemRAM];
+        for (NSNumber *offset in peeks) {
+            NSUInteger o = offset.unsignedIntegerValue;
+            if (ram && o + 4 <= ram.length) {
+                const uint8_t *b = (const uint8_t *)ram.bytes + o;
+                printf("mémoire  : [0x%06lX] = %02X %02X %02X %02X (taille %lu)\n", (unsigned long)o, b[0], b[1], b[2], b[3], (unsigned long)ram.length);
+            } else {
+                printf("mémoire  : indisponible (taille %lu)\n", (unsigned long)ram.length);
+            }
+        }
         NSData *state = [core saveState];
         BOOL restored = state ? [core loadState:state] : NO;
         printf("état     : %lu octets, rechargement %s\n", (unsigned long)state.length, restored ? "OK" : "ECHEC");

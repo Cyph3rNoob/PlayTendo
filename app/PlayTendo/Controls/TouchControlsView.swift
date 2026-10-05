@@ -133,6 +133,17 @@ final class TouchControlsView: UIView {
     }
 
     private func buttons(at point: CGPoint) -> Set<PTButton> {
+        // L, R, Start et Select passent en priorité : la zone élargie de la croix ne doit
+        // pas les recouvrir (c'était le cas sur la disposition compacte de la DS).
+        for control in layout.controls {
+            switch control.element {
+            case .shoulder(let button), .small(let button):
+                if control.frame.insetBy(dx: -8, dy: -4).contains(point) { return [button] }
+            default:
+                continue
+            }
+        }
+
         var result = Set<PTButton>()
         for control in layout.controls {
             switch control.element {
@@ -155,9 +166,7 @@ final class TouchControlsView: UIView {
                 if hypot(point.x - center.x, point.y - center.y) < layout.faceRadius * 1.15 {
                     result.insert(button)
                 }
-            case .shoulder(let button), .small(let button):
-                if control.frame.insetBy(dx: -10, dy: -10).contains(point) { result.insert(button) }
-            case .menu:
+            case .shoulder, .small, .menu:
                 break
             }
         }
