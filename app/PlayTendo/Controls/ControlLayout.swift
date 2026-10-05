@@ -14,50 +14,96 @@ struct PlacedControl {
     let label: String
 }
 
-/// Calcule la position de l'image du jeu et des boutons tactiles selon l'écran.
+/// Un écran affiché : où le dessiner, et quelle partie de l'image du jeu il montre (de 0 à 1).
+struct ScreenPlacement: Equatable {
+    var frame: CGRect
+    var source: CGRect
+    var isTouch: Bool
+}
+
+/// Taille de l'écran tactile de la DS en paysage.
+enum DSTouchSize: String, CaseIterable {
+    case small, medium, large
+
+    var label: String {
+        switch self {
+        case .small: "Petit"
+        case .medium: "Moyen"
+        case .large: "Grand"
+        }
+    }
+
+    /// Part de la largeur disponible donnée à l'écran tactile.
+    var fraction: CGFloat {
+        switch self {
+        case .small: 0.25
+        case .medium: 0.4
+        case .large: 0.5
+        }
+    }
+
+    var next: DSTouchSize {
+        switch self {
+        case .small: .medium
+        case .medium: .large
+        case .large: .small
+        }
+    }
+}
+
+/// Réglages d'affichage des consoles à deux écrans (DS).
+struct DualScreenOptions: Equatable {
+    var swapped = false
+    var touchSize: DSTouchSize = .medium
+}
+
+/// Calcule la position des écrans du jeu et des boutons tactiles selon l'écran de l'iPhone.
 struct ControlLayout: Equatable {
+    /// Zone englobant le ou les écrans du jeu.
     var gameRect: CGRect = .zero
+    var screens: [ScreenPlacement] = []
     var controls: [PlacedControl] = []
     var faceRadius: CGFloat = 30
-    /// Zone de l'écran tactile (DS) en coordonnées de l'écran, vide pour les autres consoles.
-    var touchScreenRect: CGRect = .zero
+
+    /// L'écran tactile (DS), s'il y en a un.
+    var touchScreen: ScreenPlacement? { screens.first(where: \.isTouch) }
+
+    static let fullImage = CGRect(x: 0, y: 0, width: 1, height: 1)
+    /// La DS est rendue avec ses deux écrans l'un au-dessus de l'autre ; chaque moitié est
+    /// ensuite affichée où l'on veut.
+    static let topScreen = CGRect(x: 0, y: 0, width: 1, height: 0.5)
+    static let bottomScreen = CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
 
     static func == (lhs: ControlLayout, rhs: ControlLayout) -> Bool {
-        lhs.gameRect == rhs.gameRect && lhs.touchScreenRect == rhs.touchScreenRect
+        lhs.gameRect == rhs.gameRect && lhs.screens == rhs.screens
             && lhs.controls.map(\.frame) == rhs.controls.map(\.frame)
     }
 
-    /// `touchRect` : position de l'écran tactile dans l'image du jeu (de 0 à 1).
-    static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect,
-                     safe: UIEdgeInsets, gamepad: Bool, touchRect: CGRect? = nil) -> ControlLayout {
-        var layout = makeControls(scheme: scheme, aspect: aspect, bounds: bounds, safe: safe, gamepad: gamepad)
-        if let touchRect {
-            let game = layout.gameRect
-            layout.touchScreenRect = CGRect(x: game.minX + touchRect.minX * game.width,
-                                            y: game.minY + touchRect.minY * game.height,
-                                            width: touchRect.width * game.width,
-                                            height: touchRect.height * game.height)
-        }
-        return layout
-    }
-
-    private static func makeControls(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect,
-                                     safe: UIEdgeInsets, gamepad: Bool) -> ControlLayout {
+    static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect, safe: UIEdgeInsets,
+                     gamepad: Bool, dual: DualScreenOptions = DualScreenOptions()) -> ControlLayout {
         let usable = bounds.inset(by: safe)
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
         let portrait = bounds.height >= bounds.width
         let menuSize: CGFloat = 38
+        let dualScreen = scheme.usesTouchScreen
 
         if gamepad {
-            // Manette branchée : l'image prend toute la place, seul le bouton menu reste.
-            var width = usable.width
-            var height = width / aspect
-            if height > usable.height {
-                height = usable.height
-                width = height * aspect
+            // Manette branchée : les écrans prennent toute la place, seul le bouton menu reste.
+            if dualScreen {
+                layout.placeDualScreens(in: usable, portrait: portrait, maxStackHeight: usable.height,
+                                        centered: true, dual: dual)
+            } else {
+                var width = usable.width
+                var height = width / aspect
+                if height > usable.height {
+                    height = usable.height
+                    width = height * aspect
+                }
+                layout.gameRect = CGRect(x: usable.midX - width / 2, y: usable.midY - height / 2,
+                                         width: width, height: height)
+                layout.screens = [ScreenPlacement(frame: layout.gameRect, source: fullImage, isTouch: false)]
             }
-            layout.gameRect = CGRect(x: usable.midX - width / 2, y: usable.midY - height / 2, width: width, height: height)
             layout.controls = [PlacedControl(element: .menu,
                                              frame: CGRect(x: usable.maxX - menuSize - 8, y: usable.minY + 8,
                                                            width: menuSize, height: menuSize),
@@ -72,14 +118,19 @@ struct ControlLayout: Equatable {
         var faceCenter: CGPoint
 
         if portrait {
-            var width = usable.width
-            var height = width / aspect
-            let maxHeight = usable.height * (scheme == .nintendoDS ? 0.70 : 0.55)
-            if height > maxHeight {
-                height = maxHeight
-                width = height * aspect
+            if dualScreen {
+                layout.placeDualScreens(in: usable, portrait: true, maxStackHeight: usable.height * 0.70,
+                                        centered: false, dual: dual)
+            } else {
+                var width = usable.width
+                var height = width / aspect
+                let maxHeight = usable.height * 0.55
+                if height > maxHeight {
+                    height = maxHeight
+                    width = height * aspect
+                }
+                layout.gameRect = CGRect(x: usable.midX - width / 2, y: usable.minY, width: width, height: height)
             }
-            layout.gameRect = CGRect(x: usable.midX - width / 2, y: usable.minY, width: width, height: height)
 
             let area = CGRect(x: usable.minX, y: layout.gameRect.maxY, width: usable.width,
                               height: usable.maxY - layout.gameRect.maxY)
@@ -106,19 +157,25 @@ struct ControlLayout: Equatable {
                                                                width: smallSize.width, height: smallSize.height),
                                                  label: "START"))
         } else {
-            // Avec un écran tactile (DS), les boutons ne doivent jamais le recouvrir :
-            // on garde de chaque côté la place d'un bloc de boutons entier.
-            let touch = scheme.usesTouchScreen
-            cluster = max(110, min(touch ? 150 : 168, usable.height * 0.42))
-            var height = usable.height
-            var width = height * aspect
-            let maxWidth = touch ? usable.width - 2 * (cluster + 16) : bounds.width - 2 * 150
-            if width > maxWidth {
-                width = maxWidth
-                height = width / aspect
+            cluster = max(110, min(dualScreen ? 150 : 168, usable.height * 0.42))
+            if dualScreen {
+                // Les boutons ne doivent jamais recouvrir l'écran tactile : on garde de chaque
+                // côté la place d'un bloc de boutons entier.
+                let panel = cluster + 16
+                let middle = CGRect(x: usable.minX + panel, y: usable.minY,
+                                    width: max(0, usable.width - 2 * panel), height: usable.height)
+                layout.placeDualScreens(in: middle, portrait: false, maxStackHeight: 0, centered: true, dual: dual)
+            } else {
+                var height = usable.height
+                var width = height * aspect
+                let maxWidth = bounds.width - 2 * 150
+                if width > maxWidth {
+                    width = maxWidth
+                    height = width / aspect
+                }
+                layout.gameRect = CGRect(x: bounds.midX - width / 2, y: usable.midY - height / 2,
+                                         width: width, height: height)
             }
-            let centerX = touch ? usable.midX : bounds.midX
-            layout.gameRect = CGRect(x: centerX - width / 2, y: usable.midY - height / 2, width: width, height: height)
 
             let leftPanel = CGRect(x: usable.minX, y: usable.minY, width: max(0, layout.gameRect.minX - usable.minX),
                                    height: usable.height)
@@ -144,11 +201,52 @@ struct ControlLayout: Equatable {
                                                                width: menuSize, height: menuSize), label: ""))
         }
 
+        if layout.screens.isEmpty {
+            layout.screens = [ScreenPlacement(frame: layout.gameRect, source: fullImage, isTouch: false)]
+        }
         layout.controls.append(PlacedControl(element: .dpad,
                                              frame: CGRect(x: dpadCenter.x - cluster / 2, y: dpadCenter.y - cluster / 2,
                                                            width: cluster, height: cluster), label: ""))
         layout.addFaceButtons(scheme: scheme, center: faceCenter, size: cluster)
         return layout
+    }
+
+    /// DS : place les deux écrans (4:3 chacun) dans `area`. En portrait ils sont empilés ;
+    /// en paysage, l'écran principal est à gauche et l'autre à droite, à la taille choisie.
+    private mutating func placeDualScreens(in area: CGRect, portrait: Bool, maxStackHeight: CGFloat,
+                                           centered: Bool, dual: DualScreenOptions) {
+        let mainSource = dual.swapped ? Self.bottomScreen : Self.topScreen
+        let otherSource = dual.swapped ? Self.topScreen : Self.bottomScreen
+        let first: CGRect
+        let second: CGRect
+        if portrait {
+            var width = area.width
+            var height = width * 0.75
+            if height * 2 > maxStackHeight {
+                height = maxStackHeight / 2
+                width = height / 0.75
+            }
+            let top = centered ? area.midY - height : area.minY
+            first = CGRect(x: area.midX - width / 2, y: top, width: width, height: height)
+            second = first.offsetBy(dx: 0, dy: height)
+        } else {
+            let gap: CGFloat = 8
+            let available = max(0, area.width - gap)
+            var mainWidth = available * (1 - dual.touchSize.fraction)
+            var otherWidth = available * dual.touchSize.fraction
+            if mainWidth * 0.75 > area.height {
+                let shrink = area.height / (mainWidth * 0.75)
+                mainWidth *= shrink
+                otherWidth *= shrink
+            }
+            let left = area.midX - (mainWidth + gap + otherWidth) / 2
+            first = CGRect(x: left, y: area.midY - mainWidth * 0.375, width: mainWidth, height: mainWidth * 0.75)
+            second = CGRect(x: first.maxX + gap, y: area.midY - otherWidth * 0.375,
+                            width: otherWidth, height: otherWidth * 0.75)
+        }
+        screens = [ScreenPlacement(frame: first, source: mainSource, isTouch: mainSource == Self.bottomScreen),
+                   ScreenPlacement(frame: second, source: otherSource, isTouch: otherSource == Self.bottomScreen)]
+        gameRect = first.union(second)
     }
 
     private mutating func addShoulders(scheme: ControlScheme, size: CGSize, top: CGFloat,

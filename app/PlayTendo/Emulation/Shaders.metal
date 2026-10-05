@@ -19,6 +19,8 @@ vertex VertexOut gameVertex(uint vid [[vertex_id]]) {
 struct GameUniforms {
     float2 textureSize;
     float scale;
+    float unused;
+    float4 source;   // partie de l'image à afficher (x, y, largeur, hauteur), de 0 à 1
 };
 
 // « Sharp bilinear » : les pixels restent nets comme en mode « plus proche voisin »,
@@ -27,11 +29,15 @@ fragment float4 gameFragment(VertexOut in [[stage_in]],
                              texture2d<float> frame [[texture(0)]],
                              sampler linearSampler [[sampler(0)]],
                              constant GameUniforms &uniforms [[buffer(0)]]) {
-    float2 texel = in.uv * uniforms.textureSize;
+    float2 full = uniforms.source.xy + in.uv * uniforms.source.zw;
+    float2 texel = full * uniforms.textureSize;
     float2 texelFloor = floor(texel);
     float2 offset = fract(texel) - 0.5;
     float range = 0.5 - 0.5 / uniforms.scale;
     float2 f = (offset - clamp(offset, -range, range)) * uniforms.scale + 0.5;
     float2 uv = (texelFloor + f) / uniforms.textureSize;
-    return float4(frame.sample(linearSampler, uv).rgb, 1.0);
+    // Ne jamais déborder sur la partie voisine (l'autre écran de la DS).
+    float2 low = (uniforms.source.xy * uniforms.textureSize + 0.5) / uniforms.textureSize;
+    float2 high = ((uniforms.source.xy + uniforms.source.zw) * uniforms.textureSize - 0.5) / uniforms.textureSize;
+    return float4(frame.sample(linearSampler, clamp(uv, low, high)).rgb, 1.0);
 }

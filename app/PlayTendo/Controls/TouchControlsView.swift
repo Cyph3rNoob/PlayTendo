@@ -45,7 +45,7 @@ final class TouchControlsView: UIView {
                 self.touches[id] = .menu
                 menuHighlighted = true
                 setNeedsDisplay()
-            } else if scheme.usesTouchScreen, layout.touchScreenRect.contains(point),
+            } else if let touchScreen = layout.touchScreen, touchScreen.frame.contains(point),
                       !self.touches.values.contains(where: { if case .pointer = $0 { true } else { false } }) {
                 self.touches[id] = .pointer
                 sendPointer(point, pressed: true)
@@ -110,15 +110,15 @@ final class TouchControlsView: UIView {
         onPointer?(.zero, false)
     }
 
-    /// Le doigt reste « dans » l'écran tactile même s'il en sort en glissant ; la position est
-    /// envoyée relativement à toute l'image du jeu (le moteur la replace lui-même sur l'écran tactile).
+    /// Le doigt reste « dans » l'écran tactile même s'il en sort en glissant. La position est
+    /// convertie dans l'image complète du jeu (les deux écrans empilés), que le moteur attend.
     private func sendPointer(_ point: CGPoint, pressed: Bool) {
-        let game = layout.gameRect
-        let touch = layout.touchScreenRect
-        guard game.width > 0, game.height > 0, touch.width > 0, touch.height > 0 else { return }
-        let clamped = CGPoint(x: min(max(point.x, touch.minX), touch.maxX - 0.5),
-                              y: min(max(point.y, touch.minY), touch.maxY - 0.5))
-        onPointer?(CGPoint(x: (clamped.x - game.minX) / game.width, y: (clamped.y - game.minY) / game.height), pressed)
+        guard let touchScreen = layout.touchScreen, touchScreen.frame.width > 0, touchScreen.frame.height > 0 else { return }
+        let frame = touchScreen.frame
+        let u = min(max((point.x - frame.minX) / frame.width, 0), 0.999)
+        let v = min(max((point.y - frame.minY) / frame.height, 0), 0.999)
+        let source = touchScreen.source
+        onPointer?(CGPoint(x: source.minX + u * source.width, y: source.minY + v * source.height), pressed)
     }
 
     private func update() {

@@ -124,35 +124,15 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "melonds_touch_mode": "touch",
                 "melonds_show_cursor": "disabled",
                 "melonds_number_of_screen_layouts": "1",
+                // Écrans toujours rendus empilés ; l'app découpe et place ensuite chacun d'eux.
+                "melonds_screen_layout1": "top-bottom",
                 "melonds_screen_gap": "0",
-                "melonds_hybrid_ratio": "3",
             ]
         case .psx:
             ["pcsx_rearmed_drc": "disabled"]
         default:
             [:]
         }
-    }
-
-    /// DS : disposition des deux écrans. En portrait ils sont empilés ; en paysage, l'écran
-    /// principal est en grand à gauche et l'autre, trois fois plus petit, à droite.
-    func screenOptions(landscape: Bool, swapped: Bool) -> [String: String] {
-        guard self == .nds else { return [:] }
-        let layout = landscape
-            ? (swapped ? "largescreen-bottom" : "largescreen-top")
-            : (swapped ? "bottom-top" : "top-bottom")
-        return ["melonds_screen_layout1": layout]
-    }
-
-    /// Zone de l'écran tactile dans l'image du jeu (de 0 à 1), nil si la console n'en a pas.
-    func touchScreenRect(landscape: Bool, swapped: Bool) -> CGRect? {
-        guard self == .nds else { return nil }
-        if landscape {
-            return swapped
-                ? CGRect(x: 0, y: 0, width: 0.75, height: 1)
-                : CGRect(x: 0.75, y: 1.0 / 3.0, width: 0.25, height: 1.0 / 3.0)
-        }
-        return swapped ? CGRect(x: 0, y: 0, width: 1, height: 0.5) : CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
     }
 
     var colors: [Color] {

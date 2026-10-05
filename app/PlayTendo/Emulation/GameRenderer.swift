@@ -1,9 +1,12 @@
 import MetalKit
 import SwiftUI
 
-/// Affiche l'image du jeu avec Metal. La vue occupe exactement la zone du jeu.
+/// Affiche l'image du jeu avec Metal. La vue occupe exactement la zone de l'écran affiché.
+/// `source` choisit la partie de l'image à dessiner (de 0 à 1) : la DS en utilise deux,
+/// une par écran, pour pouvoir les placer et les dimensionner librement.
 struct GameScreen: UIViewRepresentable {
     let frameBuffer: FrameBuffer
+    var source = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     func makeCoordinator() -> GameRenderer {
         GameRenderer(frameBuffer: frameBuffer)
@@ -21,7 +24,9 @@ struct GameScreen: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: MTKView, context: Context) {}
+    func updateUIView(_ view: MTKView, context: Context) {
+        context.coordinator.source = source
+    }
 }
 
 final class GameRenderer: NSObject, MTKViewDelegate {
@@ -32,6 +37,7 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     private var sampler: MTLSamplerState?
     private var texture: MTLTexture?
     private var lastSequence: UInt64 = 0
+    var source = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     init(frameBuffer: FrameBuffer) {
         self.frameBuffer = frameBuffer
@@ -66,13 +72,15 @@ final class GameRenderer: NSObject, MTKViewDelegate {
 
         if let texture {
             let size = SIMD2<Float>(Float(texture.width), Float(texture.height))
+            let shown = SIMD2<Float>(size.x * Float(source.width), size.y * Float(source.height))
             let drawableSize = view.drawableSize
-            let scale = max(1, floor(min(Float(drawableSize.width) / size.x, Float(drawableSize.height) / size.y)))
-            var uniforms = SIMD4<Float>(size.x, size.y, scale, 0)
+            let scale = max(1, floor(min(Float(drawableSize.width) / shown.x, Float(drawableSize.height) / shown.y)))
+            var uniforms = [SIMD4<Float>(size.x, size.y, scale, 0),
+                            SIMD4<Float>(Float(source.minX), Float(source.minY), Float(source.width), Float(source.height))]
             encoder.setRenderPipelineState(pipeline)
             encoder.setFragmentTexture(texture, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.size, index: 0)
+            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride * 2, index: 0)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         }
         encoder.endEncoding()

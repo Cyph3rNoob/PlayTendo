@@ -9,14 +9,18 @@ struct EmulatorView: View {
     @State private var showingMenu = false
     @State private var confirmingReset = false
     @State private var quitting = false
-    @State private var isLandscape = false
     @State private var screensSwapped: Bool
+    @State private var touchSize: DSTouchSize
 
     init(game: Game) {
         self.game = game
         _session = StateObject(wrappedValue: EmulatorSession(game: game))
         _screensSwapped = State(initialValue: UserDefaults.standard.bool(forKey: Self.swapKey(for: game)))
+        let savedSize = UserDefaults.standard.string(forKey: Self.touchSizeKey) ?? ""
+        _touchSize = State(initialValue: DSTouchSize(rawValue: savedSize) ?? .medium)
     }
+
+    private static let touchSizeKey = "tailleEcranTactileDS"
 
     private static func swapKey(for game: Game) -> String { "ecransInverses.\(game.id)" }
 
@@ -27,14 +31,15 @@ struct EmulatorView: View {
             let layout = ControlLayout.make(scheme: game.system.controls, aspect: session.aspectRatio,
                                             bounds: bounds, safe: Self.safeAreaInsets(),
                                             gamepad: gamepad.isActive,
-                                            touchRect: game.system.touchScreenRect(landscape: landscape,
-                                                                                   swapped: screensSwapped))
+                                            dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize))
             ZStack {
                 Color.black
 
-                GameScreen(frameBuffer: session.frameBuffer)
-                    .frame(width: layout.gameRect.width, height: layout.gameRect.height)
-                    .position(x: layout.gameRect.midX, y: layout.gameRect.midY)
+                ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
+                    GameScreen(frameBuffer: session.frameBuffer, source: screen.source)
+                        .frame(width: screen.frame.width, height: screen.frame.height)
+                        .position(x: screen.frame.midX, y: screen.frame.midY)
+                }
 
                 TouchControls(layout: layout, scheme: game.system.controls, session: session, onMenu: openMenu,
                               onTouchDown: { gamepad.deactivate() })
@@ -51,6 +56,8 @@ struct EmulatorView: View {
                               onResume: closeMenu,
                               onReset: { confirmingReset = true },
                               onSwapScreens: game.system.controls.usesTouchScreen ? swapScreens : nil,
+                              touchSizeLabel: game.system.controls.usesTouchScreen && landscape ? touchSize.label : nil,
+                              onTouchSize: nextTouchSize,
                               onQuit: quit)
                     .transition(.opacity)
                 }
@@ -62,10 +69,6 @@ struct EmulatorView: View {
             }
             .animation(.easeInOut(duration: 0.2), value: showingMenu)
             .animation(.easeInOut(duration: 0.2), value: session.toast)
-            .onChange(of: landscape, initial: true) { _, value in
-                isLandscape = value
-                applyScreenLayout()
-            }
         }
         .ignoresSafeArea()
         .statusBarHidden()
@@ -103,15 +106,17 @@ struct EmulatorView: View {
         if case .failed(let message) = session.state { message } else { nil }
     }
 
-    /// DS : applique la disposition des écrans selon l'orientation et le choix « écrans inversés ».
-    private func applyScreenLayout() {
-        session.applyOptions(game.system.screenOptions(landscape: isLandscape, swapped: screensSwapped))
-    }
-
+    /// DS : échange l'écran principal et l'écran tactile (choix retenu pour ce jeu).
     private func swapScreens() {
         screensSwapped.toggle()
         UserDefaults.standard.set(screensSwapped, forKey: Self.swapKey(for: game))
-        applyScreenLayout()
+        closeMenu()
+    }
+
+    /// DS en paysage : écran tactile petit → moyen → grand (choix retenu pour tous les jeux).
+    private func nextTouchSize() {
+        touchSize = touchSize.next
+        UserDefaults.standard.set(touchSize.rawValue, forKey: Self.touchSizeKey)
         closeMenu()
     }
 
@@ -150,6 +155,9 @@ private struct PauseMenu: View {
     let onResume: () -> Void
     let onReset: () -> Void
     let onSwapScreens: (() -> Void)?
+    /// DS en paysage : taille actuelle de l'écran tactile (nil = réglage masqué).
+    let touchSizeLabel: String?
+    let onTouchSize: () -> Void
     let onQuit: () -> Void
 
     private struct Item: Identifiable {
@@ -185,6 +193,9 @@ private struct PauseMenu: View {
         }
         if let onSwapScreens {
             items.append(Item(title: "Inverser les écrans", icon: "rectangle.2.swap", action: onSwapScreens))
+        }
+        if let touchSizeLabel {
+            items.append(Item(title: "Écran tactile : \(touchSizeLabel)", icon: "hand.tap", action: onTouchSize))
         }
         items.append(Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset))
         items.append(Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit))
