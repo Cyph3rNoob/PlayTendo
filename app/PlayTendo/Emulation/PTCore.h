@@ -57,6 +57,8 @@ typedef void (^PTAudioHandler)(const int16_t *samples, size_t frames);
                options:(NSDictionary<NSString *, NSString *> *)options
                  error:(NSError **)error;
 - (void)runFrame;
+/// Change des réglages du moteur en cours de partie (le moteur les relit à l'image suivante).
+- (void)updateOptions:(NSDictionary<NSString *, NSString *> *)options;
 - (void)reset;
 - (void)unloadGame;
 

@@ -19,13 +19,30 @@ struct ControlLayout: Equatable {
     var gameRect: CGRect = .zero
     var controls: [PlacedControl] = []
     var faceRadius: CGFloat = 30
+    /// Zone de l'écran tactile (DS) en coordonnées de l'écran, vide pour les autres consoles.
+    var touchScreenRect: CGRect = .zero
 
     static func == (lhs: ControlLayout, rhs: ControlLayout) -> Bool {
-        lhs.gameRect == rhs.gameRect && lhs.controls.map(\.frame) == rhs.controls.map(\.frame)
+        lhs.gameRect == rhs.gameRect && lhs.touchScreenRect == rhs.touchScreenRect
+            && lhs.controls.map(\.frame) == rhs.controls.map(\.frame)
     }
 
+    /// `touchRect` : position de l'écran tactile dans l'image du jeu (de 0 à 1).
     static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect,
-                     safe: UIEdgeInsets, gamepad: Bool) -> ControlLayout {
+                     safe: UIEdgeInsets, gamepad: Bool, touchRect: CGRect? = nil) -> ControlLayout {
+        var layout = makeControls(scheme: scheme, aspect: aspect, bounds: bounds, safe: safe, gamepad: gamepad)
+        if let touchRect {
+            let game = layout.gameRect
+            layout.touchScreenRect = CGRect(x: game.minX + touchRect.minX * game.width,
+                                            y: game.minY + touchRect.minY * game.height,
+                                            width: touchRect.width * game.width,
+                                            height: touchRect.height * game.height)
+        }
+        return layout
+    }
+
+    private static func makeControls(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect,
+                                     safe: UIEdgeInsets, gamepad: Bool) -> ControlLayout {
         let usable = bounds.inset(by: safe)
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
@@ -89,20 +106,24 @@ struct ControlLayout: Equatable {
                                                                width: smallSize.width, height: smallSize.height),
                                                  label: "START"))
         } else {
+            // Avec un écran tactile (DS), les boutons ne doivent jamais le recouvrir :
+            // on garde de chaque côté la place d'un bloc de boutons entier.
+            let touch = scheme.usesTouchScreen
+            cluster = max(110, min(touch ? 150 : 168, usable.height * 0.42))
             var height = usable.height
             var width = height * aspect
-            let maxWidth = bounds.width - 2 * 150
+            let maxWidth = touch ? usable.width - 2 * (cluster + 16) : bounds.width - 2 * 150
             if width > maxWidth {
                 width = maxWidth
                 height = width / aspect
             }
-            layout.gameRect = CGRect(x: bounds.midX - width / 2, y: usable.midY - height / 2, width: width, height: height)
+            let centerX = touch ? usable.midX : bounds.midX
+            layout.gameRect = CGRect(x: centerX - width / 2, y: usable.midY - height / 2, width: width, height: height)
 
             let leftPanel = CGRect(x: usable.minX, y: usable.minY, width: max(0, layout.gameRect.minX - usable.minX),
                                    height: usable.height)
             let rightPanel = CGRect(x: layout.gameRect.maxX, y: usable.minY,
                                     width: max(0, usable.maxX - layout.gameRect.maxX), height: usable.height)
-            cluster = max(110, min(168, usable.height * 0.42))
             let centerY = usable.minY + usable.height * 0.6
             dpadCenter = CGPoint(x: max(leftPanel.midX, usable.minX + cluster / 2 + 6), y: centerY)
             faceCenter = CGPoint(x: min(rightPanel.midX, usable.maxX - cluster / 2 - 6), y: centerY)

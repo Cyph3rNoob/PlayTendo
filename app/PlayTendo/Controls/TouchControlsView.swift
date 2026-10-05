@@ -45,7 +45,7 @@ final class TouchControlsView: UIView {
                 self.touches[id] = .menu
                 menuHighlighted = true
                 setNeedsDisplay()
-            } else if scheme.usesTouchScreen, layout.gameRect.contains(point),
+            } else if scheme.usesTouchScreen, layout.touchScreenRect.contains(point),
                       !self.touches.values.contains(where: { if case .pointer = $0 { true } else { false } }) {
                 self.touches[id] = .pointer
                 sendPointer(point, pressed: true)
@@ -110,12 +110,15 @@ final class TouchControlsView: UIView {
         onPointer?(.zero, false)
     }
 
+    /// Le doigt reste « dans » l'écran tactile même s'il en sort en glissant ; la position est
+    /// envoyée relativement à toute l'image du jeu (le moteur la replace lui-même sur l'écran tactile).
     private func sendPointer(_ point: CGPoint, pressed: Bool) {
-        let rect = layout.gameRect
-        guard rect.width > 0, rect.height > 0 else { return }
-        let x = min(max((point.x - rect.minX) / rect.width, 0), 1)
-        let y = min(max((point.y - rect.minY) / rect.height, 0), 1)
-        onPointer?(CGPoint(x: x, y: y), pressed)
+        let game = layout.gameRect
+        let touch = layout.touchScreenRect
+        guard game.width > 0, game.height > 0, touch.width > 0, touch.height > 0 else { return }
+        let clamped = CGPoint(x: min(max(point.x, touch.minX), touch.maxX - 0.5),
+                              y: min(max(point.y, touch.minY), touch.maxY - 0.5))
+        onPointer?(CGPoint(x: (clamped.x - game.minX) / game.width, y: (clamped.y - game.minY) / game.height), pressed)
     }
 
     private func update() {

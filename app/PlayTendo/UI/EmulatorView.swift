@@ -9,18 +9,26 @@ struct EmulatorView: View {
     @State private var showingMenu = false
     @State private var confirmingReset = false
     @State private var quitting = false
+    @State private var isLandscape = false
+    @State private var screensSwapped: Bool
 
     init(game: Game) {
         self.game = game
         _session = StateObject(wrappedValue: EmulatorSession(game: game))
+        _screensSwapped = State(initialValue: UserDefaults.standard.bool(forKey: Self.swapKey(for: game)))
     }
+
+    private static func swapKey(for game: Game) -> String { "ecransInverses.\(game.id)" }
 
     var body: some View {
         GeometryReader { geometry in
             let bounds = CGRect(origin: .zero, size: geometry.size)
+            let landscape = geometry.size.width > geometry.size.height
             let layout = ControlLayout.make(scheme: game.system.controls, aspect: session.aspectRatio,
                                             bounds: bounds, safe: Self.safeAreaInsets(),
-                                            gamepad: gamepad.isActive)
+                                            gamepad: gamepad.isActive,
+                                            touchRect: game.system.touchScreenRect(landscape: landscape,
+                                                                                   swapped: screensSwapped))
             ZStack {
                 Color.black
 
@@ -39,8 +47,10 @@ struct EmulatorView: View {
 
                 if showingMenu {
                     PauseMenu(session: session,
+                              compact: landscape,
                               onResume: closeMenu,
                               onReset: { confirmingReset = true },
+                              onSwapScreens: game.system.controls.usesTouchScreen ? swapScreens : nil,
                               onQuit: quit)
                     .transition(.opacity)
                 }
@@ -52,6 +62,10 @@ struct EmulatorView: View {
             }
             .animation(.easeInOut(duration: 0.2), value: showingMenu)
             .animation(.easeInOut(duration: 0.2), value: session.toast)
+            .onChange(of: landscape, initial: true) { _, value in
+                isLandscape = value
+                applyScreenLayout()
+            }
         }
         .ignoresSafeArea()
         .statusBarHidden()
@@ -89,6 +103,18 @@ struct EmulatorView: View {
         if case .failed(let message) = session.state { message } else { nil }
     }
 
+    /// DS : applique la disposition des écrans selon l'orientation et le choix « écrans inversés ».
+    private func applyScreenLayout() {
+        session.applyOptions(game.system.screenOptions(landscape: isLandscape, swapped: screensSwapped))
+    }
+
+    private func swapScreens() {
+        screensSwapped.toggle()
+        UserDefaults.standard.set(screensSwapped, forKey: Self.swapKey(for: game))
+        applyScreenLayout()
+        closeMenu()
+    }
+
     private func openMenu() {
         guard !showingMenu, session.state == .running else { return }
         session.clearInput()
@@ -119,9 +145,51 @@ struct EmulatorView: View {
 
 private struct PauseMenu: View {
     @ObservedObject var session: EmulatorSession
+    /// Paysage : boutons sur deux colonnes pour tenir dans la hauteur de l'écran.
+    let compact: Bool
     let onResume: () -> Void
     let onReset: () -> Void
+    let onSwapScreens: (() -> Void)?
     let onQuit: () -> Void
+
+    private struct Item: Identifiable {
+        let title: String
+        let icon: String
+        var destructive = false
+        var enabled = true
+        let action: () -> Void
+        var id: String { title }
+    }
+
+    private var items: [Item] {
+        var items = [
+            Item(title: "Sauvegarder", icon: "square.and.arrow.down") {
+                session.saveState()
+                onResume()
+            },
+            Item(title: "Charger", icon: "clock.arrow.circlepath", enabled: session.hasSaveState) {
+                session.loadState()
+                onResume()
+            },
+            Item(title: session.isFastForwarding ? "Vitesse normale" : "Avance rapide ×3",
+                 icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill") {
+                session.toggleFastForward()
+                onResume()
+            },
+        ]
+        if let disk = session.diskInfo {
+            items.append(Item(title: "Changer de disque (\(disk.current)/\(disk.count))", icon: "opticaldisc") {
+                session.nextDisk()
+                onResume()
+            })
+        }
+        if let onSwapScreens {
+            items.append(Item(title: "Inverser les écrans", icon: "rectangle.2.swap", action: onSwapScreens))
+        }
+        items.append(Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset))
+        items.append(Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit))
+        return items
+    }
 
     var body: some View {
         ZStack {
@@ -129,49 +197,53 @@ private struct PauseMenu: View {
                 .ignoresSafeArea()
                 .onTapGesture(perform: onResume)
 
-            VStack(spacing: 10) {
-                VStack(spacing: 4) {
-                    SystemBadge(system: session.game.system)
-                    Text(session.game.title)
-                        .font(.headline)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.bottom, 6)
-
+            VStack(spacing: compact ? 8 : 10) {
+                header
+                    .padding(.bottom, compact ? 2 : 6)
                 MenuButton(title: "Reprendre", icon: "play.fill", prominent: true, action: onResume)
-                HStack(spacing: 10) {
-                    MenuButton(title: "Sauvegarder", icon: "square.and.arrow.down") {
-                        session.saveState()
-                        onResume()
+                if compact {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(items) { button($0) }
                     }
-                    MenuButton(title: "Charger", icon: "clock.arrow.circlepath") {
-                        session.loadState()
-                        onResume()
+                } else {
+                    HStack(spacing: 10) {
+                        button(items[0])
+                        button(items[1])
                     }
-                    .disabled(!session.hasSaveState)
-                    .opacity(session.hasSaveState ? 1 : 0.4)
+                    ForEach(items.dropFirst(2)) { button($0) }
                 }
-                MenuButton(title: session.isFastForwarding ? "Vitesse normale" : "Avance rapide ×3",
-                           icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill") {
-                    session.toggleFastForward()
-                    onResume()
-                }
-                if let disk = session.diskInfo {
-                    MenuButton(title: "Changer de disque (\(disk.current)/\(disk.count))", icon: "opticaldisc") {
-                        session.nextDisk()
-                        onResume()
-                    }
-                }
-                MenuButton(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset)
-                MenuButton(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit)
             }
-            .padding(20)
-            .frame(maxWidth: 340)
+            .padding(compact ? 16 : 20)
+            .frame(maxWidth: compact ? 540 : 340)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(.white.opacity(0.1)))
-            .padding(24)
+            .padding(compact ? 12 : 24)
         }
+    }
+
+    @ViewBuilder private var header: some View {
+        if compact {
+            HStack(spacing: 8) {
+                SystemBadge(system: session.game.system)
+                Text(session.game.title)
+                    .font(.headline)
+                    .lineLimit(1)
+            }
+        } else {
+            VStack(spacing: 4) {
+                SystemBadge(system: session.game.system)
+                Text(session.game.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func button(_ item: Item) -> some View {
+        MenuButton(title: item.title, icon: item.icon, destructive: item.destructive, action: item.action)
+            .disabled(!item.enabled)
+            .opacity(item.enabled ? 1 : 0.4)
     }
 }
 

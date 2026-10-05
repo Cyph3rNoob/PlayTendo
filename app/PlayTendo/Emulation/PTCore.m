@@ -159,7 +159,8 @@ static PTCore *gCore;
 
     NSMutableDictionary<NSString *, NSString *> *_optionDefaults;
     NSMutableDictionary<NSString *, NSArray<NSString *> *> *_optionValues;
-    NSDictionary<NSString *, NSString *> *_optionOverrides;
+    NSMutableDictionary<NSString *, NSString *> *_optionOverrides;
+    BOOL _optionsDirty;
     NSMutableDictionary<NSString *, NSData *> *_optionCStrings;
 
     struct retro_disk_control_ext_callback _disk;
@@ -352,7 +353,8 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
     _optionDefaults = [NSMutableDictionary dictionary];
     _optionValues = [NSMutableDictionary dictionary];
     _optionCStrings = [NSMutableDictionary dictionary];
-    _optionOverrides = [options copy];
+    _optionOverrides = [options mutableCopy];
+    _optionsDirty = NO;
     _hasDiskControl = NO;
     _shutdownRequested = NO;
     _pixelFormat = RETRO_PIXEL_FORMAT_0RGB1555;
@@ -428,6 +430,12 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
 - (void)applyTiming:(const struct retro_system_timing *)timing {
     if (timing->fps > 0) _framesPerSecond = timing->fps;
     if (timing->sample_rate > 0) _sampleRate = timing->sample_rate;
+}
+
+- (void)updateOptions:(NSDictionary<NSString *, NSString *> *)options {
+    if (options.count == 0) return;
+    [_optionOverrides addEntriesFromDictionary:options];
+    _optionsDirty = YES;
 }
 
 - (void)runFrame {
@@ -626,7 +634,8 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
             [self registerLegacyVariables:data];
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE):
-            *(bool *)data = false;
+            *(bool *)data = _optionsDirty;
+            _optionsDirty = NO;
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION):
             *(unsigned *)data = 2;

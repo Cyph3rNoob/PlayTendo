@@ -37,6 +37,8 @@ final class EmulatorSession: ObservableObject {
     private var pauseRequested = false
     private var stopRequested = false
     private var stopHandlers: [() -> Void] = []
+    /// Réglages du moteur demandés par l'interface (disposition des écrans DS…).
+    private var optionOverrides: [String: String] = [:]
 
     // Uniquement manipulés sur le thread d'émulation.
     private var fastForward = false
@@ -102,6 +104,15 @@ final class EmulatorSession: ObservableObject {
 
     func reset() {
         perform { [self] in core?.reset() }
+    }
+
+    /// Change des réglages du moteur, avant ou pendant la partie.
+    func applyOptions(_ options: [String: String]) {
+        guard !options.isEmpty else { return }
+        condition.lock()
+        optionOverrides.merge(options) { $1 }
+        condition.unlock()
+        perform { [self] in core?.updateOptions(options) }
     }
 
     func saveState() {
@@ -229,11 +240,14 @@ final class EmulatorSession: ObservableObject {
             if !self.fastForward { PTAudioRingWrite(ring, samples, frames) }
         }
 
+        condition.lock()
+        let options = system.coreOptions.merging(optionOverrides) { $1 }
+        condition.unlock()
         do {
             try core.loadGame(atPath: game.url.path,
                               systemDirectory: Paths.bios.path,
                               saveDirectory: Paths.saveDirectory(for: system).path,
-                              options: system.coreOptions)
+                              options: options)
         } catch {
             fail(error.localizedDescription)
             return

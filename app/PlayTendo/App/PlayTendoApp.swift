@@ -26,9 +26,11 @@ struct PlayTendoApp: App {
 }
 
 #if DEBUG
-/// Tests dans le simulateur : lancer l'app avec « -PTLandscape » la bascule en paysage.
+/// Tests dans le simulateur : l'argument « -PTLandscape » ou un fichier Documents/PTLandscape
+/// bascule l'app en paysage.
 private func forceLandscapeForTesting() {
-    guard ProcessInfo.processInfo.arguments.contains("-PTLandscape"),
+    let flag = FileManager.default.fileExists(atPath: Paths.documents.appendingPathComponent("PTLandscape").path)
+    guard ProcessInfo.processInfo.arguments.contains("-PTLandscape") || flag,
           let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
     scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { error in
         PTLogLine("Rotation de test impossible : \(error.localizedDescription)")

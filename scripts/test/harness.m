@@ -75,6 +75,7 @@ int main(int argc, const char *argv[]) {
         NSMutableDictionary<NSString *, NSString *> *options = [NSMutableDictionary dictionary];
         NSArray<NSString *> *sequence = @[];
         NSMutableArray<NSNumber *> *peeks = [NSMutableArray array];
+        NSMutableDictionary<NSNumber *, NSMutableDictionary *> *updates = [NSMutableDictionary dictionary];
         int sequenceStart = 120;
         for (int i = 5; i + 1 < argc; i += 2) {
             NSString *flag = @(argv[i]), *value = @(argv[i + 1]);
@@ -92,6 +93,11 @@ int main(int argc, const char *argv[]) {
                 [probes addObject:@([value intValue])];
             } else if ([flag isEqualToString:@"--sequence"]) {
                 sequence = [value componentsSeparatedByString:@","];
+            } else if ([flag isEqualToString:@"--update"]) {
+                NSArray *kv = [parts[1] componentsSeparatedByString:@"="];
+                NSNumber *frame = @([parts[0] intValue]);
+                if (!updates[frame]) updates[frame] = [NSMutableDictionary dictionary];
+                updates[frame][kv[0]] = kv[1];
             } else if ([flag isEqualToString:@"--peek"]) {
                 [peeks addObject:@(strtoul(value.UTF8String, NULL, 0))];
             } else if ([flag isEqualToString:@"--start"]) {
@@ -157,7 +163,9 @@ int main(int argc, const char *argv[]) {
                 if (i == t.from) [core setPointerX:(int16_t)((t.x * 2 - 1) * 32767) y:(int16_t)((t.y * 2 - 1) * 32767) pressed:YES];
                 if (i == t.to) [core setPointerX:0 y:0 pressed:NO];
             }
+            if (updates[@(i)]) [core updateOptions:updates[@(i)]];
             [core runFrame];
+            if (updates[@(i - 1)]) printf("réglages changés à l'image %d → image %u×%u, format %.3f\n", i - 1, fw, fh, core.aspectRatio);
             if ([probes containsObject:@(i)] && fw > 0) {
                 uint8_t top[3], center[3];
                 PixelAt(frame, fw, fh, fpitch, fformat, 0.5, 0.5, center);
