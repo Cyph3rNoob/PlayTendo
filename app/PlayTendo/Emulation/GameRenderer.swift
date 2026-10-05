@@ -82,11 +82,9 @@ final class GameRenderer: NSObject, MTKViewDelegate {
 
     private func uploadLatestFrame() {
         frameBuffer.withFrame(newerThan: lastSequence) { frame in
-            let pixelFormat: MTLPixelFormat = frame.format == .xrgb8888 ? .bgra8Unorm : .b5g6r5Unorm
-            if texture == nil || texture!.width != frame.width || texture!.height != frame.height
-                || texture!.pixelFormat != pixelFormat {
+            if texture == nil || texture!.width != frame.width || texture!.height != frame.height {
                 let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                    pixelFormat: pixelFormat, width: frame.width, height: frame.height, mipmapped: false)
+                    pixelFormat: .bgra8Unorm, width: frame.width, height: frame.height, mipmapped: false)
                 descriptor.usage = .shaderRead
                 texture = device?.makeTexture(descriptor: descriptor)
             }

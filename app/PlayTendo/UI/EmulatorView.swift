@@ -20,7 +20,7 @@ struct EmulatorView: View {
             let bounds = CGRect(origin: .zero, size: geometry.size)
             let layout = ControlLayout.make(scheme: game.system.controls, aspect: session.aspectRatio,
                                             bounds: bounds, safe: Self.safeAreaInsets(),
-                                            gamepad: gamepad.isConnected)
+                                            gamepad: gamepad.isActive)
             ZStack {
                 Color.black
 
@@ -28,7 +28,8 @@ struct EmulatorView: View {
                     .frame(width: layout.gameRect.width, height: layout.gameRect.height)
                     .position(x: layout.gameRect.midX, y: layout.gameRect.midY)
 
-                TouchControls(layout: layout, scheme: game.system.controls, session: session, onMenu: openMenu)
+                TouchControls(layout: layout, scheme: game.system.controls, session: session, onMenu: openMenu,
+                              onTouchDown: { gamepad.deactivate() })
 
                 if session.state == .loading {
                     ProgressView()

@@ -4,6 +4,8 @@ import GameController
 /// boutons : celui du bas = B, celui de droite = A, comme sur une manette Nintendo.
 final class GamepadManager: ObservableObject {
     @Published private(set) var isConnected = false
+    /// Vrai dès qu'on se sert de la manette ; les boutons tactiles se cachent alors.
+    @Published private(set) var isActive = false
 
     var onButton: ((PTButton, Bool) -> Void)?
     var onAnalog: ((UInt32, Float, Float) -> Void)?
@@ -29,15 +31,31 @@ final class GamepadManager: ObservableObject {
         observers.forEach(NotificationCenter.default.removeObserver)
     }
 
+    /// L'écran a été touché : on réaffiche les boutons tactiles.
+    func deactivate() {
+        if isActive { isActive = false }
+    }
+
+    private func markActive() {
+        if !isActive { isActive = true }
+    }
+
     private func refresh() {
         let controller = GCController.controllers().first { $0.extendedGamepad != nil }
         isConnected = controller != nil
-        if let pad = controller?.extendedGamepad { bind(pad) }
+        if !isConnected { isActive = false }
+        if let controller, let pad = controller.extendedGamepad {
+            PTLogLine("Manette détectée : \(controller.vendorName ?? "sans nom")")
+            bind(pad)
+        }
     }
 
     private func bind(_ pad: GCExtendedGamepad) {
         func map(_ input: GCControllerButtonInput?, _ button: PTButton) {
-            input?.pressedChangedHandler = { [weak self] _, _, pressed in self?.onButton?(button, pressed) }
+            input?.pressedChangedHandler = { [weak self] _, _, pressed in
+                if pressed { self?.markActive() }
+                self?.onButton?(button, pressed)
+            }
         }
         map(pad.buttonA, .b)
         map(pad.buttonB, .a)
@@ -53,10 +71,12 @@ final class GamepadManager: ObservableObject {
         map(pad.buttonOptions, .select)
 
         pad.dpad.valueChangedHandler = { [weak self] _, x, y in
+            if x != 0 || y != 0 { self?.markActive() }
             self?.dpadState = Self.directions(x: x, y: y, threshold: 0.5)
             self?.updateDirections()
         }
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
+            if abs(x) > 0.5 || abs(y) > 0.5 { self?.markActive() }
             self?.onAnalog?(0, x, -y)
             self?.stickState = Self.directions(x: x, y: y, threshold: 0.5)
             self?.updateDirections()

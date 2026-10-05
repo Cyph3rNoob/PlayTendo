@@ -9,6 +9,8 @@ final class TouchControlsView: UIView {
     var onButton: ((PTButton, Bool) -> Void)?
     var onPointer: ((CGPoint, Bool) -> Void)?
     var onMenu: (() -> Void)?
+    /// Appelé quand on touche l'écran ailleurs que sur le bouton menu.
+    var onTouchDown: (() -> Void)?
 
     private enum TouchRole {
         case buttons(Set<PTButton>)
@@ -49,6 +51,7 @@ final class TouchControlsView: UIView {
                 sendPointer(point, pressed: true)
             } else {
                 self.touches[id] = .buttons(buttons(at: point))
+                onTouchDown?()
             }
         }
         update()
@@ -332,6 +335,7 @@ struct TouchControls: UIViewRepresentable {
     let scheme: ControlScheme
     let session: EmulatorSession
     let onMenu: () -> Void
+    var onTouchDown: () -> Void = {}
 
     func makeUIView(context: Context) -> TouchControlsView {
         let view = TouchControlsView()
@@ -344,5 +348,6 @@ struct TouchControls: UIViewRepresentable {
         view.scheme = scheme
         view.layout = layout
         view.onMenu = onMenu
+        view.onTouchDown = onTouchDown
     }
 }
