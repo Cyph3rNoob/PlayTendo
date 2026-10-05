@@ -208,8 +208,8 @@ static void PTVideoRefresh(const void *data, unsigned width, unsigned height, si
     if (data == RETRO_HW_FRAME_BUFFER_VALID) {
         PTHardwareVideoHandler handler = core->_hardwareVideoHandler;
         if (core->_gl && handler && width > 0 && height > 0) {
-            handler([core->_gl finishFrame], MIN(width, core->_gl.width), MIN(height, core->_gl.height),
-                    core->_hw.bottom_left_origin);
+            unsigned w = MIN(width, core->_gl.width), h = MIN(height, core->_gl.height);
+            handler([core->_gl finishFrameWithWidth:w height:h], w, h, core->_hw.bottom_left_origin);
         }
         return;
     }
@@ -444,17 +444,20 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     [self applyGeometry:&av.geometry];
     [self applyTiming:&av.timing];
 
-    if (_hwRequested) {
-        // Le moteur dessine en 3D : on lui prépare son contexte OpenGL ES puis on le prévient.
+    if (_hwRequested && _gl) {
+        // Le moteur dessine en 3D : son contexte OpenGL ES (créé quand il l'a demandé) prend la
+        // taille maximale de l'image, puis on le prévient qu'il peut dessiner.
         unsigned width = MAX(MAX(av.geometry.max_width, av.geometry.base_width), 64);
         unsigned height = MAX(MAX(av.geometry.max_height, av.geometry.base_height), 64);
-        _gl = [[PTGLContext alloc] initWithWidth:width height:height];
-        if (!_gl) {
-            [self unloadGame];
-            return [self failWithMessage:@"Affichage 3D (OpenGL ES) indisponible pour ce moteur." error:error] != nil;
-        }
         [_gl makeCurrent];
-        PTLogLine([NSString stringWithFormat:@"Rendu 3D OpenGL ES prêt (%u×%u)", width, height]);
+        if (![_gl ensureWidth:width height:height]) {
+            PTLogLine([NSString stringWithFormat:@"Agrandissement de l'image 3D à %u×%u impossible", width, height]);
+        }
+        _pendingGLWidth = 0;
+        _pendingGLHeight = 0;
+        PTLogLine([NSString stringWithFormat:@"Rendu 3D OpenGL ES prêt (%u×%u)", _gl.width, _gl.height]);
+        // Indispensable même en cas de souci : certains moteurs (N64) plantent à la fermeture
+        // s'ils n'ont jamais été prévenus que leur contexte existe.
         if (_hw.context_reset) _hw.context_reset();
     }
     _api.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
@@ -493,6 +496,8 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
 
 - (void)runFrame {
     if (!_gameLoaded) return;
+    // Le contexte OpenGL ES appartient au fil qui l'a rendu actif : on le réaffirme à chaque image.
+    if (_gl) [_gl makeCurrent];
     _api.run();
     if (_gl && (_pendingGLWidth || _pendingGLHeight)) {
         [_gl ensureWidth:_pendingGLWidth height:_pendingGLHeight];
@@ -732,6 +737,7 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         case PT_ENV(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS):
         case PT_ENV(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME):
         case PT_ENV(RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL):
+        // Même numéro (44) que SET_HW_SHARED_CONTEXT une fois le bit expérimental retiré : accepté aussi.
         case PT_ENV(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS):
         case PT_ENV(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS):
         case PT_ENV(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO):
@@ -811,12 +817,20 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             struct retro_hw_render_callback *callback = data;
             BOOL supported = callback->context_type == RETRO_HW_CONTEXT_OPENGLES2
                 || callback->context_type == RETRO_HW_CONTEXT_OPENGLES3
-                || (callback->context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION && callback->version_major <= 3);
+                || (callback->context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION
+                    && (callback->version_major < 3 || (callback->version_major == 3 && callback->version_minor == 0)));
 #if !TARGET_OS_IOS
             supported = NO;
 #endif
             if (!supported) {
                 PTLogLine([NSString stringWithFormat:@"[%@] type d'affichage 3D refusé (%d)", _libraryName, callback->context_type]);
+                return false;
+            }
+            // Le contexte est créé tout de suite : s'il est impossible, le moteur l'apprend ici et
+            // abandonne proprement le chargement (le N64 plante sinon à la fermeture).
+            if (!_gl) _gl = [[PTGLContext alloc] initWithWidth:640 height:480];
+            if (!_gl) {
+                PTLogLine([NSString stringWithFormat:@"[%@] affichage 3D (OpenGL ES) impossible à créer", _libraryName]);
                 return false;
             }
             callback->get_current_framebuffer = PTHardwareFramebuffer;
@@ -827,8 +841,6 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         }
         case PT_ENV(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER):
             *(unsigned *)data = RETRO_HW_CONTEXT_OPENGLES3;
-            return true;
-        case PT_ENV(RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT):
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_SHUTDOWN):
             _shutdownRequested = YES;

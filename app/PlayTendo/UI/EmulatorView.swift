@@ -78,6 +78,7 @@ struct EmulatorView: View {
             gamepad.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
             gamepad.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: x, y: y) }
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
+            gamepad.stickMovesDPad = !game.system.controls.hasAnalogStick
             UIApplication.shared.isIdleTimerDisabled = true
             session.start()
         }

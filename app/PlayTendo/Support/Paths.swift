@@ -17,8 +17,38 @@ enum Paths {
         for folder in [games, bios, saves, states] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        if !FileManager.default.fileExists(atPath: readme.path) {
+        if (try? String(contentsOf: readme, encoding: .utf8)) != readmeText {
             try? readmeText.write(to: readme, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Dossier « système » donné au moteur : les BIOS de l'utilisateur, sauf pour la PSP dont le
+    /// moteur range ses propres fichiers (embarqués dans l'app) dans un dossier interne.
+    static func systemDirectory(for system: GameSystem) -> URL {
+        guard system == .psp else { return bios }
+        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Systeme", isDirectory: true)
+        installBundledFiles(named: "PPSSPP", into: folder)
+        return folder
+    }
+
+    /// Recopie un dossier embarqué dans l'app quand il manque ou que l'app a changé.
+    private static func installBundledFiles(named name: String, into folder: URL) {
+        let fileManager = FileManager.default
+        guard let source = Bundle.main.url(forResource: name, withExtension: nil) else { return }
+        let destination = folder.appendingPathComponent(name, isDirectory: true)
+        let marker = destination.appendingPathComponent(".version")
+        let executableDate = Bundle.main.executableURL
+            .flatMap { try? fileManager.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date }
+        let version = "\(executableDate?.timeIntervalSince1970 ?? 0)"
+        if (try? String(contentsOf: marker, encoding: .utf8)) == version { return }
+        do {
+            try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? fileManager.removeItem(at: destination)
+            try fileManager.copyItem(at: source, to: destination)
+            try version.write(to: marker, atomically: true, encoding: .utf8)
+        } catch {
+            PTLogLine("Copie des fichiers \(name) impossible : \(error.localizedDescription)")
         }
     }
 
@@ -52,9 +82,10 @@ enum Paths {
 
     Jeux
       Mets tes jeux ici (tu peux créer des sous-dossiers) :
-      NES .nes · Super Nintendo .sfc .smc · Game Boy .gb · Game Boy Color .gbc
-      Game Boy Advance .gba · Nintendo DS .nds
+      NES .nes · Super Nintendo .sfc .smc · Nintendo 64 .z64 .n64 .v64
+      Game Boy .gb · Game Boy Color .gbc · Game Boy Advance .gba · Nintendo DS .nds
       PlayStation .chd .pbp .m3u, ou .cue avec ses fichiers .bin
+      PlayStation Portable .iso .cso .pbp
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)

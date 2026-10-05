@@ -14,9 +14,11 @@ struct AboutView: View {
     private let engines = [
         Engine(name: "Mesen", version: "0.9.9", consoles: "NES", license: "GPL-3.0"),
         Engine(name: "bsnes", version: "v115", consoles: "Super Nintendo", license: "GPL-3.0"),
+        Engine(name: "Mupen64Plus-Next", version: "3.0 (12edd2c)", consoles: "Nintendo 64", license: "GPL-2.0"),
         Engine(name: "mGBA", version: "0.10.5", consoles: "Game Boy, Game Boy Color, Game Boy Advance", license: "MPL-2.0"),
         Engine(name: "melonDS DS", version: "1.4.0", consoles: "Nintendo DS", license: "GPL-3.0"),
         Engine(name: "PCSX-ReARMed", version: "r26", consoles: "PlayStation", license: "GPL-2.0"),
+        Engine(name: "PPSSPP", version: "1.20.4", consoles: "PlayStation Portable", license: "GPL-2.0+"),
     ]
 
     private var appVersion: String {

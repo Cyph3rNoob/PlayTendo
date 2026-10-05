@@ -124,6 +124,9 @@ build_mupen64plus_next() {
   # La vieille libpng incluse croit être sur un Mac « classique » (années 90) et cherche <fp.h>.
   sed -i '' 's/defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)$/defined(THINK_C) || defined(__SC__) || (defined(TARGET_OS_MAC) \&\& !defined(__APPLE__))/' \
     custom/dependencies/libpng/pngpriv.h
+  # Même chose pour la vieille zlib, qui remplacerait fdopen() par NULL.
+  sed -i '' 's/^#if defined(MACOS) || defined(TARGET_OS_MAC)$/#if defined(MACOS) || (defined(TARGET_OS_MAC) \&\& !defined(__APPLE__))/' \
+    custom/dependencies/libzlib/zutil.h
   run mupen64plus_next-ios make -j$JOBS platform=ios-arm64 IOSSDK="$SDK" \
     CC="$CC_IOS" CXX="$CXX_IOS" CC_AS="$CC_IOS"
   wrap mupen64plus_next "$(ls "$SRC"/mupen64plus-nx/mupen64plus_next_libretro*.dylib | head -1)"
@@ -136,6 +139,15 @@ build_ppsspp() {
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
   run ppsspp-ios cmake --build "$b" --target ppsspp_libretro
   wrap ppsspp "$(find "$b" -name 'ppsspp_libretro*.dylib' | head -1)"
+  # Fichiers dont le moteur a besoin (polices de la PSP, tables de calcul, réglages par jeu…),
+  # embarqués dans l'app puis copiés dans <dossier système>/PPSSPP.
+  local assets="$ROOT/cores/assets/PPSSPP"
+  rm -rf "$assets"; mkdir -p "$assets"
+  for f in compat.ini compatvr.ini langregion.ini knownfuncs.ini redump.csv \
+           ppge_atlas.zim ppge_atlas.meta flash0 vfpu; do
+    cp -R "$SRC/ppsspp/assets/$f" "$assets/"
+  done
+  echo "       fichiers PPSSPP : $(du -sh "$assets" | cut -f1 | tr -d ' ')"
 }
 
 i=0

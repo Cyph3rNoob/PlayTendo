@@ -1,25 +1,37 @@
 import SwiftUI
 import UIKit
 
+/// Ce qu'un doigt peut enfoncer : un bouton de la manette, ou un bouton C (N64).
+enum TouchInput: Hashable {
+    case button(PTButton)
+    case c(CDirection)
+}
+
 /// Calque des boutons tactiles. Gère le multi-touch (plusieurs boutons à la fois),
-/// le glissement d'un bouton à l'autre et, pour la DS, l'écran tactile.
+/// le glissement d'un bouton à l'autre, le stick analogique et, pour la DS, l'écran tactile.
 final class TouchControlsView: UIView {
     var layout = ControlLayout() { didSet { if layout != oldValue { setNeedsDisplay() } } }
     var scheme: ControlScheme = .nes { didSet { setNeedsDisplay() } }
     var onButton: ((PTButton, Bool) -> Void)?
+    /// Stick analogique (0 = gauche, 1 = droit) ; x et y de -1 à 1, y vers le bas.
+    var onAnalog: ((UInt32, CGFloat, CGFloat) -> Void)?
     var onPointer: ((CGPoint, Bool) -> Void)?
     var onMenu: (() -> Void)?
     /// Appelé quand on touche l'écran ailleurs que sur le bouton menu.
     var onTouchDown: (() -> Void)?
 
     private enum TouchRole {
-        case buttons(Set<PTButton>)
+        case inputs(Set<TouchInput>)
+        case stick
         case pointer
         case menu
     }
 
     private var touches: [ObjectIdentifier: TouchRole] = [:]
-    private var pressed: Set<PTButton> = []
+    private var pressed: Set<TouchInput> = []
+    /// Position du stick, de -1 à 1 sur chaque axe.
+    private var stickOffset = CGPoint.zero
+    private var cStick = CGPoint.zero
     private var menuHighlighted = false
     private let haptics = UIImpactFeedbackGenerator(style: .light)
 
@@ -45,16 +57,22 @@ final class TouchControlsView: UIView {
                 self.touches[id] = .menu
                 menuHighlighted = true
                 setNeedsDisplay()
-            } else if case let hit = buttons(at: point), !hit.isEmpty {
+            } else if let stick = layout.controls.first(where: { $0.element == .stick }),
+                      stick.frame.insetBy(dx: -20, dy: -20).contains(point), priorityInputs(at: point).isEmpty,
+                      !self.touches.values.contains(where: { if case .stick = $0 { true } else { false } }) {
+                self.touches[id] = .stick
+                moveStick(to: point)
+                onTouchDown?()
+            } else if case let hit = inputs(at: point), !hit.isEmpty {
                 // Un bouton visible passe avant l'écran tactile qu'il recouvre (manette branchée).
-                self.touches[id] = .buttons(hit)
+                self.touches[id] = .inputs(hit)
                 onTouchDown?()
             } else if let touchScreen = layout.touchScreen, touchScreen.frame.contains(point),
                       !self.touches.values.contains(where: { if case .pointer = $0 { true } else { false } }) {
                 self.touches[id] = .pointer
                 sendPointer(point, pressed: true)
             } else {
-                self.touches[id] = .buttons([])
+                self.touches[id] = .inputs([])
                 onTouchDown?()
             }
         }
@@ -66,8 +84,10 @@ final class TouchControlsView: UIView {
             let point = touch.location(in: self)
             let id = ObjectIdentifier(touch)
             switch self.touches[id] {
-            case .buttons:
-                self.touches[id] = .buttons(buttons(at: point))
+            case .inputs:
+                self.touches[id] = .inputs(inputs(at: point))
+            case .stick:
+                moveStick(to: point)
             case .pointer:
                 sendPointer(point, pressed: true)
             default:
@@ -99,6 +119,8 @@ final class TouchControlsView: UIView {
                 }
             case .pointer:
                 sendPointer(touch.location(in: self), pressed: false)
+            case .stick:
+                setStick(.zero)
             default:
                 break
             }
@@ -112,7 +134,32 @@ final class TouchControlsView: UIView {
         touches.removeAll()
         update()
         onPointer?(.zero, false)
+        if stickOffset != .zero { setStick(.zero) }
     }
+
+    /// Le doigt garde le stick même s'il sort du cercle ; la course est limitée au bord.
+    private func moveStick(to point: CGPoint) {
+        guard let stick = layout.controls.first(where: { $0.element == .stick }) else { return }
+        let travel = stick.frame.width * Self.stickTravel
+        var x = (point.x - stick.frame.midX) / travel
+        var y = (point.y - stick.frame.midY) / travel
+        let length = hypot(x, y)
+        if length > 1 {
+            x /= length
+            y /= length
+        }
+        setStick(CGPoint(x: x, y: y))
+    }
+
+    private func setStick(_ offset: CGPoint) {
+        guard offset != stickOffset else { return }
+        stickOffset = offset
+        onAnalog?(0, offset.x, offset.y)
+        setNeedsDisplay()
+    }
+
+    /// Distance (en part de la largeur du stick) entre le centre et la position extrême.
+    private static let stickTravel: CGFloat = 0.32
 
     /// Le doigt reste « dans » l'écran tactile même s'il en sort en glissant. La position est
     /// convertie dans l'image complète du jeu (les deux écrans empilés), que le moteur attend.
@@ -126,32 +173,46 @@ final class TouchControlsView: UIView {
     }
 
     private func update() {
-        var now = Set<PTButton>()
+        var now = Set<TouchInput>()
         for role in touches.values {
-            if case .buttons(let set) = role { now.formUnion(set) }
+            if case .inputs(let set) = role { now.formUnion(set) }
         }
         guard now != pressed else { return }
         let added = now.subtracting(pressed)
-        for button in pressed.subtracting(now) { onButton?(button, false) }
-        for button in added { onButton?(button, true) }
+        for case .button(let button) in pressed.subtracting(now) { onButton?(button, false) }
+        for case .button(let button) in added { onButton?(button, true) }
         if !added.isEmpty { haptics.impactOccurred(intensity: 0.6) }
         pressed = now
+
+        // Boutons C : le moteur N64 les lit sur le stick analogique droit.
+        let c = CGPoint(x: (now.contains(.c(.right)) ? 1 : 0) - (now.contains(.c(.left)) ? 1 : 0),
+                        y: (now.contains(.c(.down)) ? 1 : 0) - (now.contains(.c(.up)) ? 1 : 0))
+        if c != cStick {
+            cStick = c
+            onAnalog?(1, c.x, c.y)
+        }
         setNeedsDisplay()
     }
 
-    private func buttons(at point: CGPoint) -> Set<PTButton> {
-        // L, R, Start et Select passent en priorité : la zone élargie de la croix ne doit
-        // pas les recouvrir (c'était le cas sur la disposition compacte de la DS).
+    /// L, R, Start et Select passent en priorité : la zone élargie de la croix ne doit
+    /// pas les recouvrir (c'était le cas sur la disposition compacte de la DS).
+    private func priorityInputs(at point: CGPoint) -> Set<TouchInput> {
         for control in layout.controls {
             switch control.element {
             case .shoulder(let button), .small(let button):
-                if control.frame.insetBy(dx: -8, dy: -4).contains(point) { return [button] }
+                if control.frame.insetBy(dx: -8, dy: -4).contains(point) { return [.button(button)] }
             default:
                 continue
             }
         }
+        return []
+    }
 
-        var result = Set<PTButton>()
+    private func inputs(at point: CGPoint) -> Set<TouchInput> {
+        let priority = priorityInputs(at: point)
+        if !priority.isEmpty { return priority }
+
+        var result = Set<TouchInput>()
         for control in layout.controls {
             switch control.element {
             case .dpad:
@@ -167,27 +228,36 @@ final class TouchControlsView: UIView {
                     [.right], [.right, .down], [.down], [.down, .left],
                     [.left], [.left, .up], [.up], [.up, .right],
                 ]
-                result.formUnion(directions[sector])
-            case .face(let button):
-                let center = CGPoint(x: control.frame.midX, y: control.frame.midY)
-                if hypot(point.x - center.x, point.y - center.y) < layout.faceRadius * 1.15 {
-                    result.insert(button)
+                result.formUnion(directions[sector].map { .button($0) })
+            case .face, .cButton:
+                if let input = Self.roundInput(control.element),
+                   hypot(point.x - control.frame.midX, point.y - control.frame.midY) < control.frame.width / 2 * 1.15 {
+                    result.insert(input)
                 }
-            case .shoulder, .small, .menu:
+            case .shoulder, .small, .stick, .menu:
                 break
             }
         }
         if result.isEmpty {
-            // Tolérance : le bouton de face le plus proche s'il est presque touché.
-            let faces = layout.controls.compactMap { control -> (PTButton, CGFloat)? in
-                guard case .face(let button) = control.element else { return nil }
-                return (button, hypot(point.x - control.frame.midX, point.y - control.frame.midY))
+            // Tolérance : le bouton rond le plus proche s'il est presque touché.
+            let rounds = layout.controls.compactMap { control -> (TouchInput, CGFloat)? in
+                guard let input = Self.roundInput(control.element) else { return nil }
+                // Distance rapportée au rayon du bouton (les boutons C sont plus petits).
+                return (input, hypot(point.x - control.frame.midX, point.y - control.frame.midY) / (control.frame.width / 2))
             }
-            if let nearest = faces.min(by: { $0.1 < $1.1 }), nearest.1 < layout.faceRadius * 1.45 {
+            if let nearest = rounds.min(by: { $0.1 < $1.1 }), nearest.1 < 1.45 {
                 result.insert(nearest.0)
             }
         }
         return result
+    }
+
+    private static func roundInput(_ element: ControlElement) -> TouchInput? {
+        switch element {
+        case .face(let button): .button(button)
+        case .cButton(let direction): .c(direction)
+        default: nil
+        }
     }
 
     // MARK: Dessin
@@ -204,8 +274,10 @@ final class TouchControlsView: UIView {
             switch control.element {
             case .dpad: drawDPad(control.frame)
             case .face(let button): drawFace(control, button: button)
-            case .shoulder(let button): drawPill(control, pressed: pressed.contains(button), radius: 12, fontSize: 15)
-            case .small(let button): drawPill(control, pressed: pressed.contains(button), radius: control.frame.height / 2, fontSize: 11)
+            case .cButton(let direction): drawCButton(control.frame, direction: direction)
+            case .stick: drawStick(control.frame)
+            case .shoulder(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: 12, fontSize: 15)
+            case .small(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: control.frame.height / 2, fontSize: 11)
             case .menu: drawMenu(control.frame)
             }
         }
@@ -244,7 +316,7 @@ final class TouchControlsView: UIView {
             (.right, CGRect(x: c.x + h, y: c.y - h, width: r - h, height: arm), 0),
         ]
         for (button, armRect, angle) in arms {
-            if pressed.contains(button) {
+            if pressed.contains(.button(button)) {
                 fillPressed.setFill()
                 UIBezierPath(rect: armRect).fill()
             }
@@ -264,17 +336,69 @@ final class TouchControlsView: UIView {
     private func drawFace(_ control: PlacedControl, button: PTButton) {
         let frame = control.frame
         let circle = UIBezierPath(ovalIn: frame)
-        (pressed.contains(button) ? fillPressed : fill).setFill()
+        (pressed.contains(.button(button)) ? fillPressed : fill).setFill()
         circle.fill()
         circle.lineWidth = 1.5
         stroke.setStroke()
         circle.stroke()
 
-        if scheme == .playStation {
+        if scheme.usesPlayStationSymbols {
             drawPlayStationSymbol(button, in: frame)
+        } else if scheme.isNintendo64 {
+            // A bleu, B vert, comme sur la manette N64.
+            let color = button == .b ? UIColor(red: 0.45, green: 0.62, blue: 1, alpha: 1)
+                                     : UIColor(red: 0.40, green: 0.85, blue: 0.50, alpha: 1)
+            drawLabel(control.label, in: frame, size: frame.height * 0.42, weight: .bold, color: color)
         } else {
             drawLabel(control.label, in: frame, size: frame.height * 0.42, weight: .bold)
         }
+    }
+
+    /// Bouton C jaune, avec une flèche dans sa direction.
+    private func drawCButton(_ frame: CGRect, direction: CDirection) {
+        let circle = UIBezierPath(ovalIn: frame)
+        (pressed.contains(.c(direction)) ? fillPressed : fill).setFill()
+        circle.fill()
+        circle.lineWidth = 1.5
+        stroke.setStroke()
+        circle.stroke()
+
+        let angle: CGFloat = switch direction {
+        case .right: 0
+        case .down: .pi / 2
+        case .left: .pi
+        case .up: -.pi / 2
+        }
+        let c = CGPoint(x: frame.midX, y: frame.midY)
+        let size = frame.width * 0.26
+        let arrow = UIBezierPath()
+        arrow.move(to: CGPoint(x: c.x + cos(angle) * size, y: c.y + sin(angle) * size))
+        arrow.addLine(to: CGPoint(x: c.x + cos(angle + 2.4) * size, y: c.y + sin(angle + 2.4) * size))
+        arrow.addLine(to: CGPoint(x: c.x + cos(angle - 2.4) * size, y: c.y + sin(angle - 2.4) * size))
+        arrow.close()
+        UIColor(red: 1, green: 0.84, blue: 0.25, alpha: 0.95).setFill()
+        arrow.fill()
+    }
+
+    /// Socle rond et tête du stick, déplacée selon le doigt.
+    private func drawStick(_ frame: CGRect) {
+        let base = UIBezierPath(ovalIn: frame.insetBy(dx: frame.width * 0.04, dy: frame.width * 0.04))
+        fill.setFill()
+        base.fill()
+        base.lineWidth = 1.5
+        stroke.setStroke()
+        base.stroke()
+
+        let travel = frame.width * Self.stickTravel
+        let knobRadius = frame.width * 0.2
+        let center = CGPoint(x: frame.midX + stickOffset.x * travel, y: frame.midY + stickOffset.y * travel)
+        let knob = UIBezierPath(ovalIn: CGRect(x: center.x - knobRadius, y: center.y - knobRadius,
+                                               width: knobRadius * 2, height: knobRadius * 2))
+        (stickOffset == .zero ? UIColor(white: 0.35, alpha: 0.75) : fillPressed).setFill()
+        knob.fill()
+        knob.lineWidth = 1.5
+        stroke.setStroke()
+        knob.stroke()
     }
 
     private func drawPlayStationSymbol(_ button: PTButton, in frame: CGRect) {
@@ -335,12 +459,12 @@ final class TouchControlsView: UIView {
         }
     }
 
-    private func drawLabel(_ label: String, in frame: CGRect, size: CGFloat, weight: UIFont.Weight) {
+    private func drawLabel(_ label: String, in frame: CGRect, size: CGFloat, weight: UIFont.Weight, color: UIColor? = nil) {
         var font = UIFont.systemFont(ofSize: size, weight: weight)
         if let rounded = font.fontDescriptor.withDesign(.rounded) {
             font = UIFont(descriptor: rounded, size: size)
         }
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: text, .kern: size < 13 ? 1.0 : 0]
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color ?? text, .kern: size < 13 ? 1.0 : 0]
         let string = NSAttributedString(string: label, attributes: attributes)
         let bounds = string.size()
         string.draw(at: CGPoint(x: frame.midX - bounds.width / 2, y: frame.midY - bounds.height / 2))
@@ -358,6 +482,7 @@ struct TouchControls: UIViewRepresentable {
     func makeUIView(context: Context) -> TouchControlsView {
         let view = TouchControlsView()
         view.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
+        view.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: Float(x), y: Float(y)) }
         view.onPointer = { [session] point, pressed in session.setPointer(x: point.x, y: point.y, pressed: pressed) }
         return view
     }

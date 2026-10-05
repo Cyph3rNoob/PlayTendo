@@ -43,7 +43,7 @@ final class GameLibrary: ObservableObject {
         }
 
         return files.compactMap { url -> Game? in
-            guard let system = GameSystem.forExtension(url.pathExtension),
+            guard let system = GameSystem.detect(url),
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
             return Game(url: url, system: system)
         }

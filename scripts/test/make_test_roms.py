@@ -8,6 +8,9 @@ de vérifier un par un que chaque bouton arrive bien jusqu'au jeu :
   L/L1 = orange     R/R1 = violet     L2 = rouge foncé  R2 = violet foncé
   Start = blanc     Select = gris     Haut = rose       Bas = marron
   Gauche = vert foncé   Droite = bleu clair   écran tactile (DS) = noir
+
+N64 : Z = rouge foncé, C haut/bas/gauche/droite = jaune/cyan/gris/violet foncé.
+N64 et PSP, stick : haut = olive, bas = bleu marine, gauche = turquoise, droite = saumon.
 """
 import os
 import struct
@@ -22,6 +25,8 @@ COLORS = {
     "rouge foncé": (128, 0, 0), "violet foncé": (64, 0, 64), "blanc": (255, 255, 255),
     "gris": (128, 128, 128), "rose": (255, 128, 192), "marron": (128, 64, 32),
     "vert foncé": (0, 96, 0), "bleu clair": (96, 160, 255), "noir": (0, 0, 0),
+    "olive": (128, 128, 0), "bleu marine": (0, 0, 128), "turquoise": (0, 128, 128),
+    "saumon": (255, 160, 128),
 }
 
 
@@ -387,10 +392,11 @@ def nds():
 
 # --------------------------------------------------------------- PS1 (MIPS)
 class MipsAsm:
-    ZERO, T0, T1, T2, T3, T4, T5, T6, T7 = 0, 8, 9, 10, 11, 12, 13, 14, 15
+    ZERO, A0, A1, A2, A3, T0, T1, T2, T3, T4, T5, T6, T7, RA = 0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 31
 
-    def __init__(self, origin):
+    def __init__(self, origin, endian="<"):
         self.origin = origin
+        self.endian = endian                   # "<" PS1/PSP, ">" N64
         self.words = []
         self.labels = {}
         self.fixups = []
@@ -412,6 +418,30 @@ class MipsAsm:
     def sll(self, rd, rt, sa): self.op(0x00000000 | rt << 16 | rd << 11 | sa << 6)
     def or_(self, rd, rs, rt): self.op(0x00000025 | rs << 21 | rt << 16 | rd << 11)
     def nor(self, rd, rs, rt): self.op(0x00000027 | rs << 21 | rt << 16 | rd << 11)
+    def and_(self, rd, rs, rt): self.op(0x00000024 | rs << 21 | rt << 16 | rd << 11)
+    def sra(self, rd, rt, sa): self.op(0x00000003 | rt << 16 | rd << 11 | sa << 6)
+    def slti(self, rt, rs, imm): self.op(0x28000000 | rs << 21 | rt << 16 | (imm & 0xFFFF))
+    def jr(self, rs): self.op(0x00000008 | rs << 21)
+
+    def load32(self, rt, value):
+        self.lui(rt, value >> 16)
+        if value & 0xFFFF: self.ori(rt, rt, value & 0xFFFF)
+
+    def jal(self, name):
+        self.fixups.append((len(self.words), name, "jal", 0, 0))
+        self.op(0)
+        self.nop()                             # délai de branchement
+
+    def addr(self, name):
+        """Mot de données contenant l'adresse d'une étiquette."""
+        self.fixups.append((len(self.words), name, "addr", 0, 0))
+        self.op(0)
+
+    def data(self, raw):
+        """Octets bruts (complétés à un multiple de 4)."""
+        raw = raw + bytes((-len(raw)) % 4)
+        for i in range(0, len(raw), 4):
+            self.op(struct.unpack_from("<I", raw, i)[0])
 
     def branch(self, opcode, rs, rt, name):
         self.fixups.append((len(self.words), name, opcode, rs, rt))
@@ -429,10 +459,14 @@ class MipsAsm:
             if opcode == "la":
                 self.words[index] = 0x3C000000 | rs << 16 | (target >> 16)
                 self.words[index + 1] = 0x34000000 | rs << 21 | rs << 16 | (target & 0xFFFF)
+            elif opcode == "jal":
+                self.words[index] = 0x0C000000 | (target >> 2) & 0x03FFFFFF
+            elif opcode == "addr":
+                self.words[index] = target
             else:
                 offset = (target - (self.origin + 4 * index + 4)) // 4
                 self.words[index] = opcode << 26 | rs << 21 | rt << 16 | (offset & 0xFFFF)
-        return b"".join(struct.pack("<I", w) for w in self.words)
+        return b"".join(struct.pack(self.endian + "I", w) for w in self.words)
 
 
 def ps1_exe():
@@ -504,8 +538,211 @@ def ps1_exe():
     return bytes(header) + code
 
 
+# --------------------------------------------------------------- N64 (MIPS, gros-boutiste)
+def rgba5551_pair(name):
+    r, g, b = COLORS[name]
+    c = (r >> 3) << 11 | (g >> 3) << 6 | (b >> 3) << 1 | 1
+    return c << 16 | c                         # deux pixels 16 bits
+
+
+# Réponse de la manette (bits 15 → 0) : A, B, Z, Start, croix H/B/G/D, 2 bits inutilisés, L, R, C H/B/G/D.
+N64_COLORS = ["rouge", "vert", "rouge foncé", "blanc", "rose", "marron", "vert foncé", "bleu clair",
+              "bleu", "bleu", "orange", "violet", "jaune", "cyan", "gris", "violet foncé"]
+
+
+def stick_tables(m, color):
+    for label, name in [("stick_haut", "olive"), ("stick_bas", "bleu marine"), ("stick_gauche", "turquoise"),
+                        ("stick_droite", "saumon"), ("repos", "bleu")]:
+        m.label(label)
+        m.op(color(name))
+
+
+def n64():
+    """Cartouche N64 : le démarrage de la console copie le début de la cartouche dans la mémoire
+    du coprocesseur (0xA4000040) et l'exécute ; notre programme tient entièrement là-dedans.
+    Il lit la manette 1 par le PIF et remplit l'écran avec le processeur graphique (RDP)."""
+    m = MipsAsm(0xA4000040, endian=">")
+    T0, T1, T2, T3, T4, T5, T6, T7 = m.T0, m.T1, m.T2, m.T3, m.T4, m.T5, m.T6, m.T7
+    FB = 0x00200000                            # image 320×240 en 16 bits
+    DATA = 0x00100000                          # commande manette, réponse, liste RDP
+
+    def store(base, offset, value):
+        m.load32(T1, value)
+        m.sw(T1, offset, base)
+
+    m.lui(T0, 0xA430); store(T0, 0x0C, 0x0555)          # interruptions masquées
+    # Affichage (VI) : mode NTSC 320×240 standard des jeux (« LAN1 » de la bibliothèque Nintendo),
+    # image commençant une ligne après le début du tampon, comme dans les vrais jeux.
+    m.lui(T0, 0xA440)
+    for i, value in enumerate([0x311E, FB + 640, 320, 2, 0, 0x03E52239, 0x20D, 0xC15, 0x0C150C15,
+                               0x006C02EC, 0x002501FF, 0x000E0204, 0x200, 0x400]):
+        store(T0, 4 * i, value)
+
+    m.lui(T0, 0xA010)                                    # 0xA0100000 = DATA, sans cache
+    for i, value in enumerate([0xFF010401, 0xFFFFFFFF, 0xFE000000] + [0] * 12 + [1]):
+        store(T0, 4 * i, value)                          # « lire la manette 1 »
+    rdp = [0xFF10013F, FB,                               # image de destination : RGBA 16 bits, 320 de large
+           0xED000000, 0x005003C0,                       # zone de dessin 320×240
+           0xEF300000, 0,                                # mode remplissage
+           0xF7000000, 0,                                # couleur (changée à chaque image)
+           0xF64FC3BC, 0,                                # rectangle plein (0,0)-(319,239)
+           0xE9000000, 0]                                # fin
+    for i, value in enumerate(rdp):
+        store(T0, 0x100 + 4 * i, value)
+
+    def wait_si():
+        name = f"si{len(m.words)}"
+        m.label(name)
+        m.lw(T4, 0x18, T2)
+        m.andi(T4, T4, 3)
+        m.branch(5, T4, 0, name)
+
+    m.label("main")
+    m.lui(T2, 0xA480)                                    # liaison série (SI) vers le PIF
+    store(T2, 0x00, DATA); store(T2, 0x10, 0x1FC007C0); wait_si()
+    store(T2, 0x00, DATA + 0x40); store(T2, 0x04, 0x1FC007C0); wait_si()
+    m.lw(T3, 0x44, T0)                                   # boutons (16 bits), stick X, stick Y
+    m.srl(T4, T3, 16)
+    m.ori(T5, 0, 0x8000)
+    m.la(T6, "boutons")
+    m.label("find")
+    m.and_(T7, T4, T5)
+    m.branch(5, T7, 0, "found")
+    m.srl(T5, T5, 1)
+    m.addiu(T6, T6, 4)
+    m.branch(5, T5, 0, "find")
+    m.sll(T7, T3, 16); m.sra(T7, T7, 24)                 # stick X (signé)
+    m.la(T6, "stick_gauche"); m.slti(T1, T7, -40); m.branch(5, T1, 0, "found")
+    m.la(T6, "stick_droite"); m.slti(T1, T7, 41); m.branch(4, T1, 0, "found")
+    m.sll(T7, T3, 24); m.sra(T7, T7, 24)                 # stick Y (signé, haut = positif)
+    m.la(T6, "stick_bas"); m.slti(T1, T7, -40); m.branch(5, T1, 0, "found")
+    m.la(T6, "stick_haut"); m.slti(T1, T7, 41); m.branch(4, T1, 0, "found")
+    m.la(T6, "repos")
+    m.label("found")
+    m.lw(T6, 0, T6)
+    m.sw(T6, 0x11C, T0)                                  # couleur dans la liste RDP
+    m.lui(T2, 0xA410)                                    # le RDP exécute la liste
+    store(T2, 0x00, DATA + 0x100); store(T2, 0x04, DATA + 0x100 + 4 * len(rdp))
+    m.lui(T7, 0x0004)                                    # pause (~1 image)
+    m.label("delay"); m.addiu(T7, T7, -1); m.branch(5, T7, 0, "delay")
+    m.branch(4, 0, 0, "main")
+    m.label("boutons")
+    for name in N64_COLORS:
+        m.op(rgba5551_pair(name))
+    stick_tables(m, rgba5551_pair)
+    code = m.resolve()
+    assert len(code) <= 0x1000 - 0x40, len(code)
+
+    header = bytearray(0x40)
+    struct.pack_into(">IIII", header, 0, 0x80371240, 0x0000000F, 0x80000400, 0x00001444)
+    header[0x20:0x34] = b"PLAYTENDO TEST".ljust(20)
+    header[0x3B:0x3F] = b"NPTE"
+    rom = bytes(header) + code
+    return rom + bytes(0x100000 - len(rom))
+
+
+# --------------------------------------------------------------- PSP (MIPS Allegrex, ELF)
+# Boutons (bits 15 → 0) : carré, croix, rond, triangle, 2 inutilisés, R, L, gauche, bas, droite, haut,
+# Start, 2 inutilisés, Select. Mêmes couleurs que la PS1 (croix = B vert, rond = A rouge…).
+PSP_COLORS = ["cyan", "vert", "rouge", "jaune", "bleu", "bleu", "violet", "orange",
+              "vert foncé", "marron", "bleu clair", "rose", "blanc", "bleu", "bleu", "gris"]
+
+
+def psp_elf():
+    """Programme PSP au format ELF : il appelle l'écran et la manette du système (fonctions
+    désignées par leur « NID »), lit la manette et remplit l'écran d'une couleur."""
+    base = 0x08804000
+    m = MipsAsm(base)
+    A0, A1, A2, A3 = m.A0, m.A1, m.A2, m.A3
+    T0, T1, T2, T3, T4, T5, T6, T7 = m.T0, m.T1, m.T2, m.T3, m.T4, m.T5, m.T6, m.T7
+
+    m.ori(A0, 0, 0); m.ori(A1, 0, 480); m.ori(A2, 0, 272); m.jal("sceDisplaySetMode")
+    m.lui(A0, 0x0400); m.ori(A1, 0, 512); m.ori(A2, 0, 3); m.ori(A3, 0, 1); m.jal("sceDisplaySetFrameBuf")
+    m.ori(A0, 0, 0); m.jal("sceCtrlSetSamplingCycle")
+    m.ori(A0, 0, 1); m.jal("sceCtrlSetSamplingMode")     # avec le stick analogique
+
+    m.label("main")
+    m.la(A0, "pad"); m.ori(A1, 0, 1); m.jal("sceCtrlReadBufferPositive")
+    m.la(T0, "pad")
+    m.lw(T3, 4, T0)                                      # boutons
+    m.ori(T5, 0, 0x8000)
+    m.la(T6, "boutons")
+    m.label("find")
+    m.and_(T7, T3, T5)
+    m.branch(5, T7, 0, "found")
+    m.srl(T5, T5, 1)
+    m.addiu(T6, T6, 4)
+    m.branch(5, T5, 0, "find")
+    m.lbu(T7, 8, T0)                                     # stick X : 0 à gauche, 255 à droite
+    m.la(T6, "stick_gauche"); m.slti(T1, T7, 64); m.branch(5, T1, 0, "found")
+    m.la(T6, "stick_droite"); m.slti(T1, T7, 193); m.branch(4, T1, 0, "found")
+    m.lbu(T7, 9, T0)                                     # stick Y : 0 en haut
+    m.la(T6, "stick_haut"); m.slti(T1, T7, 64); m.branch(5, T1, 0, "found")
+    m.la(T6, "stick_bas"); m.slti(T1, T7, 193); m.branch(4, T1, 0, "found")
+    m.la(T6, "repos")
+    m.label("found")
+    m.lw(T6, 0, T6)
+    m.lui(T0, 0x4400)                                    # mémoire vidéo, sans cache
+    m.load32(T1, 512 * 272)
+    m.label("fill")
+    m.sw(T6, 0, T0)
+    m.addiu(T0, T0, 4)
+    m.addiu(T1, T1, -1)
+    m.branch(5, T1, 0, "fill")
+    m.jal("sceDisplayWaitVblankStart")
+    m.branch(4, 0, 0, "main")
+
+    def color(name): return 0xFF000000 | bgr24(name)    # pixel 8888 : R, G, B, A en mémoire
+    m.label("boutons")
+    for name in PSP_COLORS:
+        m.op(color(name))
+    stick_tables(m, color)
+
+    # Petites fonctions « relais » que le système remplace par ses propres fonctions.
+    imports = [("sceDisplay", [("sceDisplaySetMode", 0x0E20F177), ("sceDisplaySetFrameBuf", 0x289D82FE),
+                               ("sceDisplayWaitVblankStart", 0x984C27E7)]),
+               ("sceCtrl", [("sceCtrlSetSamplingCycle", 0x6A2774F3), ("sceCtrlSetSamplingMode", 0x1F4011E6),
+                            ("sceCtrlReadBufferPositive", 0x1F803938)])]
+    for library, functions in imports:
+        m.label(f"stubs_{library}")
+        for name, _ in functions:
+            m.label(name)
+            m.jr(m.RA); m.nop()
+        m.label(f"nids_{library}")
+        for _, nid in functions:
+            m.op(nid)
+        m.label(f"name_{library}")
+        m.data(library.encode() + b"\0")
+    m.label("libstub")
+    for library, functions in imports:
+        m.addr(f"name_{library}")
+        m.op(0x4001 << 16 | 0x0011)                      # version, attributs
+        m.op(len(functions) << 16 | 0 << 8 | 5)          # taille de l'entrée (5 mots), 0 variable, n fonctions
+        m.addr(f"nids_{library}")
+        m.addr(f"stubs_{library}")
+    m.label("libstub_end")
+    m.label("modinfo")
+    m.op(0x0101 << 16 | 0x0000)                          # attributs, version
+    m.data(b"PlayTendoTest".ljust(28, b"\0"))
+    m.op(0)                                              # gp
+    m.addr("libstub"); m.addr("libstub")                 # aucune fonction exportée
+    m.addr("libstub"); m.addr("libstub_end")
+    m.label("pad")
+    m.data(bytes(16))                                    # état de la manette (SceCtrlData)
+    body = m.resolve()
+
+    offset = 0x100
+    modinfo_offset = offset + m.labels["modinfo"] - base
+    elf = bytearray(offset)
+    elf[0:16] = b"\x7fELF\x01\x01\x01" + bytes(9)
+    struct.pack_into("<HHIIIIIHHHHHH", elf, 16, 2, 8, 1, base, 52, 0, 0x10A23001, 52, 32, 1, 40, 0, 0)
+    struct.pack_into("<IIIIIIII", elf, 52, 1, offset, base, modinfo_offset, len(body), len(body), 7, 16)
+    return bytes(elf) + body
+
+
 for name, data in [("test.nes", nes()), ("test.sfc", snes()), ("test.gb", gameboy()),
-                   ("test.gba", gba()), ("test.nds", nds()), ("test.exe", ps1_exe())]:
+                   ("test.gba", gba()), ("test.nds", nds()), ("test.exe", ps1_exe()),
+                   ("test.z64", n64()), ("test.elf", psp_elf())]:
     with open(os.path.join(OUT, name), "wb") as f:
         f.write(data)
     print(f"{name:10s} {len(data):7d} octets")

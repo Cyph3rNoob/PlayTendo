@@ -122,7 +122,9 @@ final class EmulatorSession: ObservableObject {
                 return
             }
             do {
-                try data.write(to: Paths.stateFile(for: game), options: .atomic)
+                let packed = Self.packState(data)
+                try packed.write(to: Paths.stateFile(for: game), options: .atomic)
+                PTLogLine("Sauvegarde rapide : \(data.count / 1024) Ko, \(packed.count / 1024) Ko une fois compressée")
                 saveThumbnail()
                 DispatchQueue.main.async { self.hasSaveState = true }
                 showToast("Partie sauvegardée")
@@ -134,13 +136,30 @@ final class EmulatorSession: ObservableObject {
 
     func loadState() {
         perform { [self] in
-            guard let data = try? Data(contentsOf: Paths.stateFile(for: game)),
+            guard let file = try? Data(contentsOf: Paths.stateFile(for: game)),
+                  let data = Self.unpackState(file),
                   core?.loadState(data) == true else {
+                PTLogLine("Sauvegarde rapide illisible")
                 showToast("Impossible de charger la sauvegarde")
                 return
             }
+            PTLogLine("Sauvegarde rapide chargée (\(file.starts(with: Self.compressedStateMagic) ? "compressée" : "brute"))")
             showToast("Sauvegarde chargée")
         }
+    }
+
+    /// Les sauvegardes rapides (jusqu'à 75 Mo pour la PSP, presque entièrement vides) sont
+    /// compressées en LZFSE et précédées de « PTZ1 ». Les anciennes, brutes, se lisent toujours.
+    private static let compressedStateMagic = Data("PTZ1".utf8)
+
+    private static func packState(_ state: Data) -> Data {
+        guard let compressed = try? (state as NSData).compressed(using: .lzfse) else { return state }
+        return compressedStateMagic + (compressed as Data)
+    }
+
+    private static func unpackState(_ file: Data) -> Data? {
+        guard file.starts(with: compressedStateMagic) else { return file }
+        return try? (Data(file.dropFirst(compressedStateMagic.count)) as NSData).decompressed(using: .lzfse) as Data
     }
 
     func toggleFastForward() {
@@ -248,7 +267,7 @@ final class EmulatorSession: ObservableObject {
         condition.unlock()
         do {
             try core.loadGame(atPath: game.url.path,
-                              systemDirectory: Paths.bios.path,
+                              systemDirectory: Paths.systemDirectory(for: system).path,
                               saveDirectory: Paths.saveDirectory(for: system).path,
                               options: options)
         } catch {

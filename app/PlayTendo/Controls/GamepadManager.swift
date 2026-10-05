@@ -10,6 +10,8 @@ final class GamepadManager: ObservableObject {
     var onButton: ((PTButton, Bool) -> Void)?
     var onAnalog: ((UInt32, Float, Float) -> Void)?
     var onMenu: (() -> Void)?
+    /// Le stick gauche appuie aussi sur la croix (consoles sans stick analogique).
+    var stickMovesDPad = true
 
     private var observers: [NSObjectProtocol] = []
     private var dpadState: Set<PTButton> = []
@@ -85,10 +87,12 @@ final class GamepadManager: ObservableObject {
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             if abs(x) > 0.5 || abs(y) > 0.5 { self?.markActive() }
             self?.onAnalog?(0, x, -y)
-            self?.stickState = Self.directions(x: x, y: y, threshold: 0.5)
-            self?.updateDirections()
+            guard let self else { return }
+            self.stickState = self.stickMovesDPad ? Self.directions(x: x, y: y, threshold: 0.5) : []
+            self.updateDirections()
         }
         pad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
+            if abs(x) > 0.5 || abs(y) > 0.5 { self?.markActive() }
             self?.onAnalog?(1, x, -y)
         }
         if let home = pad.buttonHome {
