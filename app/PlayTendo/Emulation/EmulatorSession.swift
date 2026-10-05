@@ -298,6 +298,7 @@ final class EmulatorSession: ObservableObject {
         // Démarre avec un peu d'avance pour remplir le tampon audio.
         var deadline = clock.now - 0.05
         var lastAutoSave = clock.now
+        var clockReset = false
         var wasPaused = false
 
         while true {
@@ -342,6 +343,14 @@ final class EmulatorSession: ObservableObject {
             }
             deadline += frameDuration
             let now = clock.now
+            if !deadline.isFinite {
+                // Sécurité : une valeur impossible (registres écrasés par un moteur) recale l'horloge.
+                if !clockReset {
+                    PTLogLine("Horloge recalée : valeur de temps impossible après une image")
+                    clockReset = true
+                }
+                deadline = now
+            }
             if deadline > now {
                 clock.sleep(until: deadline)
             } else if now - deadline > 0.25 {
@@ -414,6 +423,8 @@ struct MachClock {
     }
 
     func sleep(until time: Double) {
-        mach_wait_until(UInt64(time * 1e9 * denom / numer))
+        let ticks = time * 1e9 * denom / numer
+        guard ticks.isFinite, ticks > 0, ticks < Double(UInt64.max) else { return }
+        mach_wait_until(UInt64(ticks))
     }
 }

@@ -80,6 +80,9 @@ build_bsnes() {
   # La version 0.115 lie avec « c++ -marm », une option 32 bits refusée en arm64.
   sed -i '' 's/version-min=11.0/version-min='$MIN_IOS'/g' target-libretro/GNUmakefile
   sed -i '' 's/c++ -arch arm64 -marm -miphoneos-version-min=[0-9.]* -isysroot $(IOSSDK)/$(compiler)/' target-libretro/GNUmakefile
+  # libco ne sauvegardait pas les registres d8-d15 : l'app plantait au retour de retro_run.
+  python3 "$ROOT/scripts/patch_libco.py" "$SRC/bsnes/libco/aarch64.c" words
+  rm -f obj/libco.o
   run bsnes-ios make -j$JOBS target=libretro binary=library platform=ios-arm64 \
     compiler="$CXX_IOS" local=false openmp=false IOSSDK="$SDK"
   wrap bsnes "$SRC/bsnes/bsnes/out/bsnes_libretro_ios.dylib"
@@ -127,6 +130,9 @@ build_mupen64plus_next() {
   # Même chose pour la vieille zlib, qui remplacerait fdopen() par NULL.
   sed -i '' 's/^#if defined(MACOS) || defined(TARGET_OS_MAC)$/#if defined(MACOS) || (defined(TARGET_OS_MAC) \&\& !defined(__APPLE__))/' \
     custom/dependencies/libzlib/zutil.h
+  # libco ne sauvegardait pas les registres d8-d15 : l'app plantait au retour de retro_run.
+  python3 "$ROOT/scripts/patch_libco.py" libretro-common/libco/aarch64.c asm
+  rm -f libretro-common/libco/libco.o
   run mupen64plus_next-ios make -j$JOBS platform=ios-arm64 IOSSDK="$SDK" \
     CC="$CC_IOS" CXX="$CXX_IOS" CC_AS="$CC_IOS"
   wrap mupen64plus_next "$(ls "$SRC"/mupen64plus-nx/mupen64plus_next_libretro*.dylib | head -1)"
