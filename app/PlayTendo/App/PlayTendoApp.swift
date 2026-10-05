@@ -4,6 +4,7 @@ import SwiftUI
 struct PlayTendoApp: App {
     @StateObject private var library = GameLibrary()
     @StateObject private var metadata = GameMetadata()
+    @State private var showBoot = true
 
     init() {
         Paths.prepare()
@@ -14,15 +15,21 @@ struct PlayTendoApp: App {
 
     var body: some Scene {
         WindowGroup {
-            LibraryView()
-                .environmentObject(library)
-                .environmentObject(metadata)
-                .preferredColorScheme(.dark)
-                .tint(.playTendoAccent)
-                .onOpenURL { url in library.importFiles([url]) }
-                #if DEBUG
-                .onAppear(perform: forceLandscapeForTesting)
-                #endif
+            ZStack {
+                LibraryView()
+                if showBoot {
+                    BootView(gameCount: library.games.count) { showBoot = false }
+                        .zIndex(1)
+                }
+            }
+            .environmentObject(library)
+            .environmentObject(metadata)
+            .preferredColorScheme(.dark)
+            .tint(.playTendoAccent)
+            .onOpenURL { url in library.importFiles([url]) }
+            #if DEBUG
+            .onAppear(perform: forceLandscapeForTesting)
+            #endif
         }
     }
 }
