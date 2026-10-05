@@ -28,6 +28,7 @@ final class GamepadManager: ObservableObject {
         #if DEBUG
         // Tests dans le simulateur : un fichier Documents/PTGamepad simule une manette en cours d'utilisation.
         if FileManager.default.fileExists(atPath: Paths.documents.appendingPathComponent("PTGamepad").path) {
+            isConnected = true
             isActive = true
         }
         #endif

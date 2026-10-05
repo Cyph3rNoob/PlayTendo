@@ -45,12 +45,16 @@ final class TouchControlsView: UIView {
                 self.touches[id] = .menu
                 menuHighlighted = true
                 setNeedsDisplay()
+            } else if case let hit = buttons(at: point), !hit.isEmpty {
+                // Un bouton visible passe avant l'écran tactile qu'il recouvre (manette branchée).
+                self.touches[id] = .buttons(hit)
+                onTouchDown?()
             } else if let touchScreen = layout.touchScreen, touchScreen.frame.contains(point),
                       !self.touches.values.contains(where: { if case .pointer = $0 { true } else { false } }) {
                 self.touches[id] = .pointer
                 sendPointer(point, pressed: true)
             } else {
-                self.touches[id] = .buttons(buttons(at: point))
+                self.touches[id] = .buttons([])
                 onTouchDown?()
             }
         }
@@ -188,10 +192,12 @@ final class TouchControlsView: UIView {
 
     // MARK: Dessin
 
-    private let fill = UIColor(white: 1, alpha: 0.13)
-    private let fillPressed = UIColor(white: 1, alpha: 0.38)
-    private let stroke = UIColor(white: 1, alpha: 0.32)
-    private let text = UIColor(white: 1, alpha: 0.88)
+    // Gris foncé translucide + contour clair : lisible sur fond noir comme sur un écran de jeu clair
+    // (quand une manette est branchée, les boutons passent par-dessus les écrans de la DS).
+    private let fill = UIColor(white: 0.15, alpha: 0.6)
+    private let fillPressed = UIColor(white: 0.55, alpha: 0.65)
+    private let stroke = UIColor(white: 1, alpha: 0.38)
+    private let text = UIColor(white: 1, alpha: 0.92)
 
     override func draw(_ rect: CGRect) {
         for control in layout.controls {

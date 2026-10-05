@@ -79,8 +79,12 @@ struct ControlLayout: Equatable {
             && lhs.controls.map(\.frame) == rhs.controls.map(\.frame)
     }
 
+    /// `controllerConnected` : une manette est branchée — la DS garde alors ses grands écrans, et les
+    /// boutons tactiles, s'ils réapparaissent, se superposent aux écrans au lieu de les réduire.
+    /// `hideTouchControls` : la manette est en cours d'utilisation, seuls les boutons disparaissent.
     static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect, safe: UIEdgeInsets,
-                     gamepad: Bool, dual: DualScreenOptions = DualScreenOptions()) -> ControlLayout {
+                     controllerConnected: Bool, hideTouchControls: Bool,
+                     dual: DualScreenOptions = DualScreenOptions()) -> ControlLayout {
         let usable = bounds.inset(by: safe)
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
@@ -96,7 +100,8 @@ struct ControlLayout: Equatable {
 
         if portrait {
             if dualScreen {
-                layout.placeDualScreens(in: usable, portrait: true, maxStackHeight: usable.height * 0.70,
+                layout.placeDualScreens(in: usable, portrait: true,
+                                        maxStackHeight: usable.height * (controllerConnected ? 1 : 0.70),
                                         centered: false, dual: dual)
             } else {
                 var width = usable.width
@@ -136,9 +141,10 @@ struct ControlLayout: Equatable {
         } else {
             cluster = max(110, min(dualScreen ? 150 : 168, usable.height * 0.42))
             if dualScreen {
-                // Les boutons ne doivent jamais recouvrir l'écran tactile : on garde de chaque
-                // côté la place d'un bloc de boutons entier.
-                let panel = cluster + 16
+                // Sans manette, les boutons ne doivent jamais recouvrir l'écran tactile : on garde
+                // de chaque côté la place d'un bloc de boutons entier. Avec une manette branchée,
+                // les écrans prennent toute la largeur et les boutons passent par-dessus.
+                let panel = controllerConnected ? 0 : cluster + 16
                 let middle = CGRect(x: usable.minX + panel, y: usable.minY,
                                     width: max(0, usable.width - 2 * panel), height: usable.height)
                 layout.placeDualScreens(in: middle, portrait: false, maxStackHeight: 0, centered: true, dual: dual)
@@ -185,7 +191,7 @@ struct ControlLayout: Equatable {
                                              frame: CGRect(x: dpadCenter.x - cluster / 2, y: dpadCenter.y - cluster / 2,
                                                            width: cluster, height: cluster), label: ""))
         layout.addFaceButtons(scheme: scheme, center: faceCenter, size: cluster)
-        if gamepad {
+        if hideTouchControls {
             // Manette utilisée : seuls les boutons tactiles disparaissent. L'image du jeu garde
             // exactement la même place, pour ne pas sauter quand les boutons reviennent.
             layout.controls = layout.controls.filter { $0.element == .menu }

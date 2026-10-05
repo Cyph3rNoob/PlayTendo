@@ -30,7 +30,8 @@ struct EmulatorView: View {
             let landscape = geometry.size.width > geometry.size.height
             let layout = ControlLayout.make(scheme: game.system.controls, aspect: session.aspectRatio,
                                             bounds: bounds, safe: Self.safeAreaInsets(),
-                                            gamepad: gamepad.isActive,
+                                            controllerConnected: gamepad.isConnected,
+                                            hideTouchControls: gamepad.isActive,
                                             dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize))
             ZStack {
                 Color.black
