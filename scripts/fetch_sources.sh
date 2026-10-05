@@ -34,6 +34,30 @@ clone ppsspp       https://github.com/hrydgard/ppsspp      v1.20.4
 # Mupen64Plus-Next n'a pas de version numérotée : version figée le 2026-10-05 (accord de l'utilisateur).
 clone_commit mupen64plus-nx https://github.com/libretro/mupen64plus-libretro-nx 12edd2c74a517ff86dfa8cfc71ad75e4c10486d5
 
+# Bibliothèque : base libretro (No-Intro / Redump) pour reconnaître les jeux.
+DB_TAG=v1.22.1
+fetch_database() {
+  local dir="libretro-database"
+  mkdir -p "$dir"
+  for f in "metadat/no-intro/Nintendo - Nintendo Entertainment System.dat" \
+           "metadat/no-intro/Nintendo - Super Nintendo Entertainment System.dat" \
+           "metadat/no-intro/Nintendo - Nintendo 64.dat" \
+           "metadat/no-intro/Nintendo - Game Boy.dat" \
+           "metadat/no-intro/Nintendo - Game Boy Color.dat" \
+           "metadat/no-intro/Nintendo - Game Boy Advance.dat" \
+           "metadat/no-intro/Nintendo - Nintendo DS.dat" \
+           "metadat/redump/Sony - PlayStation.dat" \
+           "metadat/redump/Sony - PlayStation Portable.dat" \
+           "metadat/no-intro/Sony - PlayStation Portable.dat"; do
+    local out="$dir/${f#metadat/}"
+    if [ -s "$out" ]; then continue; fi
+    mkdir -p "$(dirname "$out")"
+    curl -sfL "https://raw.githubusercontent.com/libretro/libretro-database/$DB_TAG/${f// /%20}" -o "$out" \
+      && echo "OK  $out" || { echo "!!! ECHEC $f"; exit 1; }
+  done
+}
+fetch_database
+
 echo ""
 du -sh "$ROOT/sources"/*
 echo "=== SOURCES OK ==="

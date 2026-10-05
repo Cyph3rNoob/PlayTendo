@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct PlayTendoApp: App {
     @StateObject private var library = GameLibrary()
+    @StateObject private var metadata = GameMetadata()
 
     init() {
         Paths.prepare()
@@ -15,6 +16,7 @@ struct PlayTendoApp: App {
         WindowGroup {
             LibraryView()
                 .environmentObject(library)
+                .environmentObject(metadata)
                 .preferredColorScheme(.dark)
                 .tint(.playTendoAccent)
                 .onOpenURL { url in library.importFiles([url]) }

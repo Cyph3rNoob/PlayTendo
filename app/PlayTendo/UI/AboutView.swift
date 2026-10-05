@@ -32,13 +32,17 @@ struct AboutView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "gamecontroller.fill")
                             .font(.system(size: 44))
-                            .foregroundStyle(LinearGradient(colors: [.playTendoAccent, Color(red: 0.25, green: 0.45, blue: 1)],
+                            .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta],
                                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                        Text("PlayTendo")
-                            .font(.title.weight(.heavy))
-                        Text("Version \(appVersion)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .neonGlow(Neon.cyan, radius: 12)
+                        Text("PLAYTENDO")
+                            .font(.orbitron(26, weight: 900))
+                            .tracking(2)
+                            .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
+                        Text("VERSION \(appVersion)")
+                            .font(Neon.mono(12, weight: .semibold))
+                            .tracking(1.5)
+                            .foregroundStyle(Neon.dim)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
@@ -64,6 +68,12 @@ struct AboutView: View {
                         }
                         .padding(.vertical, 2)
                     }
+                }
+
+                Section("Bibliothèque") {
+                    Text("Jeux reconnus grâce à libretro-database (No-Intro et Redump), jaquettes de libretro-thumbnails, police Orbitron (licence OFL).")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Où sont mes fichiers ?") {

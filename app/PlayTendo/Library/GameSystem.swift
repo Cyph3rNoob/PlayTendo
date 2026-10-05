@@ -115,6 +115,21 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Nom de la console chez libretro (dossiers des jaquettes).
+    var libretroName: String {
+        switch self {
+        case .nes: "Nintendo - Nintendo Entertainment System"
+        case .snes: "Nintendo - Super Nintendo Entertainment System"
+        case .n64: "Nintendo - Nintendo 64"
+        case .gb: "Nintendo - Game Boy"
+        case .gbc: "Nintendo - Game Boy Color"
+        case .gba: "Nintendo - Game Boy Advance"
+        case .nds: "Nintendo - Nintendo DS"
+        case .psx: "Sony - PlayStation"
+        case .psp: "Sony - PlayStation Portable"
+        }
+    }
+
     /// Sous-dossier de Documents/Sauvegardes.
     var folderName: String {
         switch self {

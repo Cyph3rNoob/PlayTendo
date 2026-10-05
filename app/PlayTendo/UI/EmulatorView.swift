@@ -166,6 +166,7 @@ struct EmulatorView: View {
 
 private struct PauseMenu: View {
     @ObservedObject var session: EmulatorSession
+    @EnvironmentObject private var metadata: GameMetadata
     /// Paysage : boutons sur deux colonnes pour tenir dans la hauteur de l'écran.
     let compact: Bool
     let onResume: () -> Void
@@ -249,8 +250,11 @@ private struct PauseMenu: View {
             }
             .padding(compact ? 16 : 20)
             .frame(maxWidth: compact ? 540 : 340)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(.white.opacity(0.1)))
+            .background(Chamfer(cut: 22).fill(Neon.panel.opacity(0.94)))
+            .overlay(Chamfer(cut: 22).stroke(LinearGradient(colors: [Neon.cyan, Neon.magenta.opacity(0.6)],
+                                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                                            lineWidth: 1.2))
+            .neonGlow(Neon.cyan, radius: 14)
             .padding(compact ? 12 : 24)
         }
     }
@@ -259,15 +263,17 @@ private struct PauseMenu: View {
         if compact {
             HStack(spacing: 8) {
                 SystemBadge(system: session.game.system)
-                Text(session.game.title)
+                Text(metadata.display(for: session.game).title)
                     .font(.headline)
+                    .foregroundStyle(Neon.text)
                     .lineLimit(1)
             }
         } else {
             VStack(spacing: 4) {
                 SystemBadge(system: session.game.system)
-                Text(session.game.title)
+                Text(metadata.display(for: session.game).title)
                     .font(.headline)
+                    .foregroundStyle(Neon.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
             }
@@ -289,14 +295,16 @@ private struct MenuButton: View {
     let action: () -> Void
 
     var body: some View {
+        let color = prominent ? Neon.cyan : (destructive ? Neon.magenta : Neon.text)
         Button(action: action) {
             Label(title, systemImage: icon)
-                .font(.body.weight(.semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .foregroundStyle(prominent ? .white : (destructive ? Color.playTendoAccent : .primary))
-                .background(prominent ? Color.playTendoAccent : Color.white.opacity(0.1),
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .foregroundStyle(prominent ? Color.black : color)
+                .background(Chamfer(cut: 10).fill(prominent ? Neon.cyan : color.opacity(destructive ? 0.1 : 0.07)))
+                .overlay(Chamfer(cut: 10).stroke(prominent ? .clear : color.opacity(destructive ? 0.6 : 0.25), lineWidth: 1))
+                .shadow(color: prominent ? Neon.cyan.opacity(0.6) : .clear, radius: 10)
         }
         .buttonStyle(.plain)
     }
