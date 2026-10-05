@@ -22,7 +22,7 @@ CC_IOS="$CLANG -arch arm64 -isysroot $SDK -miphoneos-version-min=$MIN_IOS"
 CXX_IOS="$CLANGXX -arch arm64 -isysroot $SDK -miphoneos-version-min=$MIN_IOS -stdlib=libc++"
 JOBS=$(sysctl -n hw.ncpu)
 
-ALL=(mesen bsnes mgba melondsds pcsx_rearmed)
+ALL=(mesen bsnes mgba melondsds pcsx_rearmed mupen64plus_next ppsspp)
 if (( $# )); then CORES=("$@"); else CORES=($ALL); fi
 
 # Affiche un point toutes les 20 lignes de compilation, pour montrer que ça avance.
@@ -116,6 +116,26 @@ build_pcsx_rearmed() {
   run pcsx_rearmed-ios make -f Makefile.libretro -j$JOBS platform=ios-arm64 IOSSDK="$SDK" \
     MINVERSION=-miphoneos-version-min=$MIN_IOS CC="$CC_IOS" CXX="$CXX_IOS"
   wrap pcsx_rearmed "$SRC/pcsx_rearmed/pcsx_rearmed_libretro_ios.dylib"
+}
+
+build_mupen64plus_next() {
+  cd "$SRC/mupen64plus-nx"
+  sed -i '' 's/version-min=[0-9.]*/version-min='$MIN_IOS'/g' Makefile
+  # La vieille libpng incluse croit être sur un Mac « classique » (années 90) et cherche <fp.h>.
+  sed -i '' 's/defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)$/defined(THINK_C) || defined(__SC__) || (defined(TARGET_OS_MAC) \&\& !defined(__APPLE__))/' \
+    custom/dependencies/libpng/pngpriv.h
+  run mupen64plus_next-ios make -j$JOBS platform=ios-arm64 IOSSDK="$SDK" \
+    CC="$CC_IOS" CXX="$CXX_IOS" CC_AS="$CC_IOS"
+  wrap mupen64plus_next "$(ls "$SRC"/mupen64plus-nx/mupen64plus_next_libretro*.dylib | head -1)"
+}
+
+build_ppsspp() {
+  local b="$WORK/ppsspp"
+  run ppsspp-ios cmake -S "$SRC/ppsspp" -B "$b" -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE="$SRC/ppsspp/cmake/Toolchains/ios.cmake" -DLIBRETRO=ON \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  run ppsspp-ios cmake --build "$b" --target ppsspp_libretro
+  wrap ppsspp "$(find "$b" -name 'ppsspp_libretro*.dylib' | head -1)"
 }
 
 i=0

@@ -236,6 +236,9 @@ final class EmulatorSession: ObservableObject {
         core.videoHandler = { pixels, width, height, pitch, format in
             frameBuffer.store(pixels, width: Int(width), height: Int(height), pitch: pitch, format: format)
         }
+        core.hardwareVideoHandler = { buffer, width, height, flipped in
+            frameBuffer.storeHardware(buffer, width: Int(width), height: Int(height), flipped: flipped)
+        }
         core.audioHandler = { [unowned self] samples, frames in
             if !self.fastForward { PTAudioRingWrite(ring, samples, frames) }
         }

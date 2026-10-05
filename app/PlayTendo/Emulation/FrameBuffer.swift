@@ -1,22 +1,32 @@
 import Accelerate
+import CoreVideo
 import Foundation
 import os
 
 /// Dernière image produite par le moteur, partagée entre le thread d'émulation
-/// (qui écrit) et l'affichage Metal (qui lit). Toutes les images sont converties en
-/// BGRA 8 bits : c'est le seul format accepté par toutes les puces graphiques Apple.
+/// (qui écrit) et l'affichage Metal (qui lit).
+/// - Images « logicielles » (consoles 2D) : converties en BGRA 8 bits, le seul format accepté
+///   par toutes les puces graphiques Apple.
+/// - Images 3D (OpenGL ES) : on garde le tampon partagé tel quel, sans aucune copie.
 final class FrameBuffer: @unchecked Sendable {
+    enum Content {
+        case software(pixels: UnsafeRawPointer, pitch: Int)
+        /// `width`×`height` en haut à gauche du tampon, à l'envers verticalement si `flipped`.
+        case hardware(buffer: CVPixelBuffer, flipped: Bool)
+    }
+
     struct Frame {
-        let pixels: UnsafeRawPointer
+        let content: Content
         let width: Int
         let height: Int
-        let pitch: Int
         let sequence: UInt64
     }
 
     private let lock = OSAllocatedUnfairLock()
     private var storage: UnsafeMutableRawPointer?
     private var capacity = 0
+    private var hardwareBuffer: CVPixelBuffer?
+    private var hardwareFlipped = false
     private var width = 0
     private var height = 0
     private var sequence: UInt64 = 0
@@ -62,6 +72,17 @@ final class FrameBuffer: @unchecked Sendable {
             return
         }
 
+        hardwareBuffer = nil
+        self.width = width
+        self.height = height
+        sequence &+= 1
+    }
+
+    func storeHardware(_ buffer: CVPixelBuffer, width: Int, height: Int, flipped: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        hardwareBuffer = buffer
+        hardwareFlipped = flipped
         self.width = width
         self.height = height
         sequence &+= 1
@@ -71,25 +92,52 @@ final class FrameBuffer: @unchecked Sendable {
     func withFrame(newerThan lastSequence: UInt64, _ body: (Frame) -> Void) {
         lock.lock()
         defer { lock.unlock() }
-        guard let storage, sequence != lastSequence, width > 0, height > 0 else { return }
-        body(Frame(pixels: UnsafeRawPointer(storage), width: width, height: height, pitch: width * 4,
-                   sequence: sequence))
+        guard sequence != lastSequence, width > 0, height > 0 else { return }
+        if let hardwareBuffer {
+            body(Frame(content: .hardware(buffer: hardwareBuffer, flipped: hardwareFlipped),
+                       width: width, height: height, sequence: sequence))
+        } else if let storage {
+            body(Frame(content: .software(pixels: UnsafeRawPointer(storage), pitch: width * 4),
+                       width: width, height: height, sequence: sequence))
+        }
     }
 
     /// Copie de la dernière image en RGBA 8 bits (pour les vignettes).
     func snapshotRGBA() -> (data: Data, width: Int, height: Int)? {
         lock.lock()
         defer { lock.unlock() }
-        guard let storage, width > 0, height > 0 else { return nil }
+        guard width > 0, height > 0 else { return nil }
+        let base: UnsafeRawPointer
+        var pitch = width * 4
+        var flipped = false
+        if let hardwareBuffer {
+            CVPixelBufferLockBaseAddress(hardwareBuffer, .readOnly)
+            guard let address = CVPixelBufferGetBaseAddress(hardwareBuffer) else {
+                CVPixelBufferUnlockBaseAddress(hardwareBuffer, .readOnly)
+                return nil
+            }
+            base = UnsafeRawPointer(address)
+            pitch = CVPixelBufferGetBytesPerRow(hardwareBuffer)
+            flipped = hardwareFlipped
+        } else if let storage {
+            base = UnsafeRawPointer(storage)
+        } else {
+            return nil
+        }
+        defer { if let hardwareBuffer { CVPixelBufferUnlockBaseAddress(hardwareBuffer, .readOnly) } }
+
         var data = Data(count: width * height * 4)
         data.withUnsafeMutableBytes { raw in
-            let input = storage.assumingMemoryBound(to: UInt8.self)
             let output = raw.bindMemory(to: UInt8.self)
-            for i in 0..<(width * height) {
-                output[i * 4] = input[i * 4 + 2]
-                output[i * 4 + 1] = input[i * 4 + 1]
-                output[i * 4 + 2] = input[i * 4]
-                output[i * 4 + 3] = 255
+            for y in 0..<height {
+                let row = base.advanced(by: (flipped ? height - 1 - y : y) * pitch).assumingMemoryBound(to: UInt8.self)
+                for x in 0..<width {
+                    let o = (y * width + x) * 4
+                    output[o] = row[x * 4 + 2]
+                    output[o + 1] = row[x * 4 + 1]
+                    output[o + 2] = row[x * 4]
+                    output[o + 3] = 255
+                }
             }
         }
         return (data, width, height)

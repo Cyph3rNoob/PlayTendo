@@ -1,3 +1,4 @@
+import CoreVideo
 import MetalKit
 import SwiftUI
 
@@ -37,6 +38,12 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     private var sampler: MTLSamplerState?
     private var texture: MTLTexture?
     private var lastSequence: UInt64 = 0
+    /// Images 3D : tampon partagé avec OpenGL ES, lu directement par Metal.
+    private var textureCache: CVMetalTextureCache?
+    private var hardwareTexture: CVMetalTexture?
+    /// Partie du tampon occupée par l'image (de 0 à 1) et sens vertical.
+    private var region = CGRect(x: 0, y: 0, width: 1, height: 1)
+    private var flipped = false
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     init(frameBuffer: FrameBuffer) {
@@ -58,6 +65,7 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         samplerDescriptor.sAddressMode = .clampToEdge
         samplerDescriptor.tAddressMode = .clampToEdge
         sampler = device.makeSamplerState(descriptor: samplerDescriptor)
+        CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &textureCache)
     }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
@@ -72,11 +80,16 @@ final class GameRenderer: NSObject, MTKViewDelegate {
 
         if let texture {
             let size = SIMD2<Float>(Float(texture.width), Float(texture.height))
-            let shown = SIMD2<Float>(size.x * Float(source.width), size.y * Float(source.height))
+            // Zone affichée = la partie demandée (un écran de DS…) de la zone occupée par l'image.
+            let shownRect = CGRect(x: region.minX + source.minX * region.width,
+                                   y: region.minY + source.minY * region.height,
+                                   width: source.width * region.width, height: source.height * region.height)
+            let shown = SIMD2<Float>(size.x * Float(shownRect.width), size.y * Float(shownRect.height))
             let drawableSize = view.drawableSize
             let scale = max(1, floor(min(Float(drawableSize.width) / shown.x, Float(drawableSize.height) / shown.y)))
-            var uniforms = [SIMD4<Float>(size.x, size.y, scale, 0),
-                            SIMD4<Float>(Float(source.minX), Float(source.minY), Float(source.width), Float(source.height))]
+            var uniforms = [SIMD4<Float>(size.x, size.y, scale, flipped ? 1 : 0),
+                            SIMD4<Float>(Float(shownRect.minX), Float(shownRect.minY),
+                                         Float(shownRect.width), Float(shownRect.height))]
             encoder.setRenderPipelineState(pipeline)
             encoder.setFragmentTexture(texture, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
@@ -90,15 +103,40 @@ final class GameRenderer: NSObject, MTKViewDelegate {
 
     private func uploadLatestFrame() {
         frameBuffer.withFrame(newerThan: lastSequence) { frame in
-            if texture == nil || texture!.width != frame.width || texture!.height != frame.height {
-                let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                    pixelFormat: .bgra8Unorm, width: frame.width, height: frame.height, mipmapped: false)
-                descriptor.usage = .shaderRead
-                texture = device?.makeTexture(descriptor: descriptor)
+            switch frame.content {
+            case .software(let pixels, let pitch):
+                hardwareTexture = nil
+                // Nouvelle texture si la taille change, ou si l'on sort d'une image 3D (tampon partagé).
+                if texture == nil || texture!.width != frame.width || texture!.height != frame.height
+                    || texture!.iosurface != nil {
+                    makeTexture(width: frame.width, height: frame.height)
+                }
+                texture?.replace(region: MTLRegionMake2D(0, 0, frame.width, frame.height),
+                                 mipmapLevel: 0, withBytes: pixels, bytesPerRow: pitch)
+                region = CGRect(x: 0, y: 0, width: 1, height: 1)
+                flipped = false
+            case .hardware(let buffer, let isFlipped):
+                guard let textureCache else { return }
+                let bufferWidth = CVPixelBufferGetWidth(buffer)
+                let bufferHeight = CVPixelBufferGetHeight(buffer)
+                var metalTexture: CVMetalTexture?
+                CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, buffer, nil,
+                                                          .bgra8Unorm, bufferWidth, bufferHeight, 0, &metalTexture)
+                guard let metalTexture, let shared = CVMetalTextureGetTexture(metalTexture) else { return }
+                hardwareTexture = metalTexture
+                texture = shared
+                region = CGRect(x: 0, y: 0, width: CGFloat(frame.width) / CGFloat(bufferWidth),
+                                height: CGFloat(frame.height) / CGFloat(bufferHeight))
+                flipped = isFlipped
             }
-            texture?.replace(region: MTLRegionMake2D(0, 0, frame.width, frame.height),
-                             mipmapLevel: 0, withBytes: frame.pixels, bytesPerRow: frame.pitch)
             lastSequence = frame.sequence
         }
+    }
+
+    private func makeTexture(width: Int, height: Int) {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = .shaderRead
+        texture = device?.makeTexture(descriptor: descriptor)
     }
 }

@@ -2,6 +2,7 @@
 // Un seul moteur peut tourner à la fois. Toutes les méthodes, sauf celles des
 // entrées (boutons, sticks, pointeur), doivent être appelées depuis le même thread.
 
+#import <CoreVideo/CoreVideo.h>
 #import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -34,6 +35,9 @@ typedef NS_ENUM(NSInteger, PTButton) {
 
 typedef void (^PTVideoHandler)(const void *pixels, unsigned width, unsigned height, size_t pitch, PTPixelFormat format);
 typedef void (^PTAudioHandler)(const int16_t *samples, size_t frames);
+/// Image dessinée en 3D (OpenGL ES) : `width`×`height` en haut à gauche du tampon,
+/// à l'envers verticalement si `flipped`.
+typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, unsigned height, BOOL flipped);
 
 @interface PTCore : NSObject
 
@@ -44,6 +48,9 @@ typedef void (^PTAudioHandler)(const int16_t *samples, size_t frames);
 
 @property (nonatomic, copy, nullable) PTVideoHandler videoHandler;
 @property (nonatomic, copy, nullable) PTAudioHandler audioHandler;
+@property (nonatomic, copy, nullable) PTHardwareVideoHandler hardwareVideoHandler;
+/// Vrai si le moteur dessine en 3D avec OpenGL ES.
+@property (nonatomic, readonly) BOOL usesHardwareRendering;
 
 /// Renseignés après le chargement du jeu (et mis à jour si le moteur les change).
 @property (nonatomic, readonly) double framesPerSecond;

@@ -19,7 +19,7 @@ vertex VertexOut gameVertex(uint vid [[vertex_id]]) {
 struct GameUniforms {
     float2 textureSize;
     float scale;
-    float unused;
+    float flip;      // 1 = image à l'envers verticalement (rendu OpenGL)
     float4 source;   // partie de l'image à afficher (x, y, largeur, hauteur), de 0 à 1
 };
 
@@ -29,7 +29,9 @@ fragment float4 gameFragment(VertexOut in [[stage_in]],
                              texture2d<float> frame [[texture(0)]],
                              sampler linearSampler [[sampler(0)]],
                              constant GameUniforms &uniforms [[buffer(0)]]) {
-    float2 full = uniforms.source.xy + in.uv * uniforms.source.zw;
+    float2 uvIn = in.uv;
+    if (uniforms.flip > 0.5) uvIn.y = 1.0 - uvIn.y;
+    float2 full = uniforms.source.xy + uvIn * uniforms.source.zw;
     float2 texel = full * uniforms.textureSize;
     float2 texelFloor = floor(texel);
     float2 offset = fract(texel) - 0.5;

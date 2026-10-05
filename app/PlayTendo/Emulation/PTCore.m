@@ -1,4 +1,5 @@
 #import "PTCore.h"
+#import "PTGLContext.h"
 #import "libretro.h"
 
 #import <dlfcn.h>
@@ -166,6 +167,13 @@ static PTCore *gCore;
     struct retro_disk_control_ext_callback _disk;
     BOOL _hasDiskControl;
 
+    // Rendu 3D (OpenGL ES) demandé par le moteur.
+    struct retro_hw_render_callback _hw;
+    BOOL _hwRequested;
+    PTGLContext *_gl;
+    unsigned _pendingGLWidth;
+    unsigned _pendingGLHeight;
+
     _Atomic uint32_t _buttons[2];
     _Atomic int32_t _analog[2][2][2];
     _Atomic int32_t _pointerX;
@@ -196,7 +204,15 @@ static bool PTEnvironment(unsigned cmd, void *data) {
 
 static void PTVideoRefresh(const void *data, unsigned width, unsigned height, size_t pitch) {
     PTCore *core = gCore;
-    if (!core || !data || data == RETRO_HW_FRAME_BUFFER_VALID) return;
+    if (!core || !data) return;
+    if (data == RETRO_HW_FRAME_BUFFER_VALID) {
+        PTHardwareVideoHandler handler = core->_hardwareVideoHandler;
+        if (core->_gl && handler && width > 0 && height > 0) {
+            handler([core->_gl finishFrame], MIN(width, core->_gl.width), MIN(height, core->_gl.height),
+                    core->_hw.bottom_left_origin);
+        }
+        return;
+    }
     PTVideoHandler handler = core->_videoHandler;
     if (handler) handler(data, width, height, pitch, (PTPixelFormat)core->_pixelFormat);
 }
@@ -257,6 +273,15 @@ static void PTPerfStart(struct retro_perf_counter *counter) {}
 static void PTPerfStop(struct retro_perf_counter *counter) {}
 static void PTPerfLog(void) {}
 static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t strength) { return false; }
+
+static uintptr_t PTHardwareFramebuffer(void) {
+    PTCore *core = gCore;
+    return (core && core->_gl) ? core->_gl.framebuffer : 0;
+}
+
+static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
+    return (retro_proc_address_t)dlsym(RTLD_DEFAULT, symbol);
+}
 
 #pragma mark Chargement du moteur
 
@@ -356,6 +381,11 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
     _optionOverrides = [options mutableCopy];
     _optionsDirty = NO;
     _hasDiskControl = NO;
+    _hwRequested = NO;
+    _gl = nil;
+    _pendingGLWidth = 0;
+    _pendingGLHeight = 0;
+    memset(&_hw, 0, sizeof _hw);
     _shutdownRequested = NO;
     _pixelFormat = RETRO_PIXEL_FORMAT_0RGB1555;
     [self clearInput];
@@ -413,13 +443,36 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
     _api.get_system_av_info(&av);
     [self applyGeometry:&av.geometry];
     [self applyTiming:&av.timing];
+
+    if (_hwRequested) {
+        // Le moteur dessine en 3D : on lui prépare son contexte OpenGL ES puis on le prévient.
+        unsigned width = MAX(MAX(av.geometry.max_width, av.geometry.base_width), 64);
+        unsigned height = MAX(MAX(av.geometry.max_height, av.geometry.base_height), 64);
+        _gl = [[PTGLContext alloc] initWithWidth:width height:height];
+        if (!_gl) {
+            [self unloadGame];
+            return [self failWithMessage:@"Affichage 3D (OpenGL ES) indisponible pour ce moteur." error:error] != nil;
+        }
+        [_gl makeCurrent];
+        PTLogLine([NSString stringWithFormat:@"Rendu 3D OpenGL ES prêt (%u×%u)", width, height]);
+        if (_hw.context_reset) _hw.context_reset();
+    }
     _api.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
     PTLogLine([NSString stringWithFormat:@"Jeu chargé : %u×%u, %.3f images/s, son %.0f Hz",
                av.geometry.base_width, av.geometry.base_height, _framesPerSecond, _sampleRate]);
     return YES;
 }
 
+- (BOOL)usesHardwareRendering {
+    return _gl != nil;
+}
+
 - (void)applyGeometry:(const struct retro_game_geometry *)geometry {
+    if (_gl && (geometry->max_width > _gl.width || geometry->max_height > _gl.height)) {
+        // Agrandi après l'image en cours (on ne touche pas aux tampons pendant que le moteur dessine).
+        _pendingGLWidth = MAX(geometry->max_width, _pendingGLWidth);
+        _pendingGLHeight = MAX(geometry->max_height, _pendingGLHeight);
+    }
     if (geometry->aspect_ratio > 0) {
         _aspectRatio = geometry->aspect_ratio;
     } else if (geometry->base_height > 0) {
@@ -439,7 +492,13 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
 }
 
 - (void)runFrame {
-    if (_gameLoaded) _api.run();
+    if (!_gameLoaded) return;
+    _api.run();
+    if (_gl && (_pendingGLWidth || _pendingGLHeight)) {
+        [_gl ensureWidth:_pendingGLWidth height:_pendingGLHeight];
+        _pendingGLWidth = 0;
+        _pendingGLHeight = 0;
+    }
 }
 
 - (void)reset {
@@ -447,11 +506,17 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
 }
 
 - (void)unloadGame {
+    if (_gl) {
+        [_gl makeCurrent];
+        if (_hw.context_destroy) _hw.context_destroy();
+    }
     if (_gameLoaded) _api.unload_game();
     _gameLoaded = NO;
     if (_initialized) _api.deinit();
     _initialized = NO;
     _gameData = nil;
+    _gl = nil;
+    _hwRequested = NO;
     if (gCore == self) gCore = nil;
 }
 
@@ -741,6 +806,29 @@ static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_GET_JIT_CAPABLE):
             *(bool *)data = false;
+            return true;
+        case PT_ENV(RETRO_ENVIRONMENT_SET_HW_RENDER): {
+            struct retro_hw_render_callback *callback = data;
+            BOOL supported = callback->context_type == RETRO_HW_CONTEXT_OPENGLES2
+                || callback->context_type == RETRO_HW_CONTEXT_OPENGLES3
+                || (callback->context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION && callback->version_major <= 3);
+#if !TARGET_OS_IOS
+            supported = NO;
+#endif
+            if (!supported) {
+                PTLogLine([NSString stringWithFormat:@"[%@] type d'affichage 3D refusé (%d)", _libraryName, callback->context_type]);
+                return false;
+            }
+            callback->get_current_framebuffer = PTHardwareFramebuffer;
+            callback->get_proc_address = PTHardwareProcAddress;
+            _hw = *callback;
+            _hwRequested = YES;
+            return true;
+        }
+        case PT_ENV(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER):
+            *(unsigned *)data = RETRO_HW_CONTEXT_OPENGLES3;
+            return true;
+        case PT_ENV(RETRO_ENVIRONMENT_SET_HW_SHARED_CONTEXT):
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_SHUTDOWN):
             _shutdownRequested = YES;
