@@ -88,29 +88,6 @@ struct ControlLayout: Equatable {
         let menuSize: CGFloat = 38
         let dualScreen = scheme.usesTouchScreen
 
-        if gamepad {
-            // Manette branchée : les écrans prennent toute la place, seul le bouton menu reste.
-            if dualScreen {
-                layout.placeDualScreens(in: usable, portrait: portrait, maxStackHeight: usable.height,
-                                        centered: true, dual: dual)
-            } else {
-                var width = usable.width
-                var height = width / aspect
-                if height > usable.height {
-                    height = usable.height
-                    width = height * aspect
-                }
-                layout.gameRect = CGRect(x: usable.midX - width / 2, y: usable.midY - height / 2,
-                                         width: width, height: height)
-                layout.screens = [ScreenPlacement(frame: layout.gameRect, source: fullImage, isTouch: false)]
-            }
-            layout.controls = [PlacedControl(element: .menu,
-                                             frame: CGRect(x: usable.maxX - menuSize - 8, y: usable.minY + 8,
-                                                           width: menuSize, height: menuSize),
-                                             label: "")]
-            return layout
-        }
-
         let shoulderSize = CGSize(width: scheme.hasSecondShoulders ? 70 : 92, height: 38)
         let smallSize = CGSize(width: 78, height: 30)
         var cluster: CGFloat
@@ -208,6 +185,11 @@ struct ControlLayout: Equatable {
                                              frame: CGRect(x: dpadCenter.x - cluster / 2, y: dpadCenter.y - cluster / 2,
                                                            width: cluster, height: cluster), label: ""))
         layout.addFaceButtons(scheme: scheme, center: faceCenter, size: cluster)
+        if gamepad {
+            // Manette utilisée : seuls les boutons tactiles disparaissent. L'image du jeu garde
+            // exactement la même place, pour ne pas sauter quand les boutons reviennent.
+            layout.controls = layout.controls.filter { $0.element == .menu }
+        }
         return layout
     }
 
