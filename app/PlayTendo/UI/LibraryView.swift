@@ -125,7 +125,8 @@ struct LibraryView: View {
             } catch {
                 if waitingForJIT == game {
                     waitingForJIT = nil
-                    jitFailure = JITFailure(game: game, message: error.localizedDescription)
+                    let slow = game.system == .ps2 ? "\n\nSans turbo, la PS2 est très lente (injouable)." : ""
+                    jitFailure = JITFailure(game: game, message: error.localizedDescription + slow)
                 }
             }
         }

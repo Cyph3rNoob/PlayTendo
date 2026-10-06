@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Réglages de l'app : pour l'instant le mode turbo (JIT) de la PSP.
+/// Réglages de l'app : pour l'instant le mode turbo (JIT) de la PSP et de la PS2.
 struct SettingsView: View {
     @EnvironmentObject private var jit: JITManager
     @Environment(\.dismiss) private var dismiss
@@ -44,7 +44,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Mode turbo (JIT)")
                 } footer: {
-                    Text("Accélère la PSP : son code est traduit pour l'iPhone au lieu d'être interprété. Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un jeu PSP, et reste actif jusqu'à la fermeture de l'app.")
+                    Text("Accélère la PSP et la PS2 : leur code est traduit pour l'iPhone au lieu d'être interprété (sans lui, la PS2 est injouable). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un jeu PSP ou PS2, et reste actif jusqu'à la fermeture de l'app.")
                 }
 
                 if jit.method == .stikDebug {
@@ -58,7 +58,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Ce qu'il faut")
                     } footer: {
-                        Text("Au lancement d'un jeu PSP, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
+                        Text("Au lancement d'un jeu PSP ou PS2, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
                     }
                 }
             }
@@ -104,11 +104,11 @@ struct SettingsView: View {
     }
 
     private var statusDetail: String? {
-        if jit.isActive { return "Les jeux PSP lancés maintenant en profitent." }
+        if jit.isActive { return "Les jeux PSP et PS2 lancés maintenant en profitent." }
         switch jit.status {
         case .activating(let step): return step
         case .failed(let message): return message
-        default: return jit.method == .off ? "Les jeux PSP utilisent l'interpréteur." : "S'activera au prochain jeu PSP."
+        default: return jit.method == .off ? "Les jeux PSP et PS2 utilisent l'interpréteur." : "S'activera au prochain jeu PSP ou PS2."
         }
     }
 
@@ -149,7 +149,7 @@ struct JITFailure {
     let message: String
 }
 
-/// Panneau affiché pendant l'activation du JIT, avant le lancement d'un jeu PSP.
+/// Panneau affiché pendant l'activation du JIT, avant le lancement d'un jeu PSP ou PS2.
 struct JITActivationView: View {
     let status: JITManager.Status
     let onSkip: () -> Void

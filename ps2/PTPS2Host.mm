@@ -12,11 +12,13 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
 
 #include "common/Console.h"
+#include "common/Darwin/DarwinMisc.h"
 #include "common/Error.h"
 #include "common/FileSystem.h"
 #include "common/Path.h"
@@ -42,14 +44,18 @@
 
 #define PTPS2_EXPORT extern "C" __attribute__((visibility("default")))
 
-// Méthodes de SceneDelegate.mm (non déclarées dans son en-tête) qui lancent le thread de la console.
+// Méthode de SceneDelegate.mm (non déclarée dans son en-tête) qui lance le thread de la console.
 @interface PCSX2SceneDelegate (PlayTendo)
 - (void)startVMThread;
-- (void)checkJITAndStartVM;
 @end
 
 extern "C" void ARMSX2_PrepareGameRenderViewForCurrentRenderer(const char* reason);
 extern "C" void ARMSX2_PlayTendoReleaseVMThread(void);
+extern "C" void ARMSX2_PlayTendoSetCodeProvider(void* (*alloc)(size_t, void**), void (*release)(void*));
+
+// Réserve JIT de l'app (PTJIT.m), exportée par l'exécutable de PlayTendo et retrouvée par dlsym : le moteur
+// y prend sa zone de code (DarwinMisc.cpp, retouché). Un seul passage de StikDebug sert à toutes les consoles.
+static bool (*s_jitIsActive)(void);
 
 /// Lu par ARMSX2IOSSanitizeFolderSettings (ios_main.mm, retouché par scripts/patch_armsx2.py) : les dossiers
 /// BIOS et cartes mémoire de PlayTendo sont des chemins absolus hors du dossier du moteur, réécrits à chaque
@@ -237,6 +243,14 @@ PTPS2_EXPORT void* PTPS2Setup(const char* dataRoot, const char* biosDir, const c
     si->SetBoolValue("InputSources", "SDL", false);
     // Jamais de reprise automatique d'ARMSX2 : PlayTendo a sa propre sauvegarde rapide.
     si->SetBoolValue("ARMSX2iOS/Boot", "AutomaticLoadLastSaveState", false);
+    // Pas de messages du moteur sur l'image (en anglais, ils renvoient aux réglages d'ARMSX2, absents ici, ex.
+    // « Recommended Blending Accuracy… ») : PlayTendo affiche les siens et les erreurs du moteur.
+    si->SetIntValue("EmuCore/GS", "OsdMessagesPos", static_cast<int>(OsdOverlayPos::None));
+#if TARGET_OS_SIMULATOR
+    // Le Metal du simulateur se dit « GPU Apple » mais refuse la lecture de l'image en cours dans un shader
+    // (framebuffer fetch) : le moteur s'arrêtait au premier effet qui en a besoin. Un vrai iPhone la gère.
+    si->SetBoolValue("EmuCore/GS", "DisableFramebufferFetch", true);
+#endif
     ARMSX2RepairIOSARM64JITSettings(si, "playtendo-setup");
     ARMSX2MigrateJITScriptProtocolForIOS(si, "playtendo-setup");
     ARMSX2MigratePerGameDeinterlaceBlend(si);
@@ -259,6 +273,13 @@ PTPS2_EXPORT void* PTPS2Setup(const char* dataRoot, const char* biosDir, const c
     // Vue Metal de la PS2 : PlayTendo la place dans son écran de jeu.
     ARMSX2_PrepareGameRenderViewForCurrentRenderer("playtendo-setup");
     s_launcher = [PCSX2SceneDelegate new];
+    s_jitIsActive = reinterpret_cast<bool (*)(void)>(dlsym(RTLD_DEFAULT, "PTJITIsActive"));
+    auto jitAlloc = reinterpret_cast<void* (*)(size_t, void**)>(dlsym(RTLD_DEFAULT, "PTJITAlloc"));
+    auto jitFree = reinterpret_cast<void (*)(void*)>(dlsym(RTLD_DEFAULT, "PTJITFree"));
+    if (s_jitIsActive && jitAlloc && jitFree)
+        ARMSX2_PlayTendoSetCodeProvider(jitAlloc, jitFree);
+    else
+        Console.Warning("[PlayTendo] Réserve JIT de l'app introuvable : la PS2 n'aura pas de mode turbo sur iPhone");
 
     // Passage en arrière-plan : réglages de la console (NVRAM) et cartes mémoire écrits tout de suite,
     // comme dans ARMSX2 (iOS peut fermer l'app sans prévenir).
@@ -296,11 +317,13 @@ PTPS2_EXPORT bool PTPS2Boot(const char* path)
     PTPS2ClearError();
     [ARMSX2Bridge bootISO:[NSString stringWithUTF8String:path]];
     ARMSX2ApplyIOSMultitapConfig("playtendo-boot");
-#if TARGET_OS_SIMULATOR
-    [s_launcher startVMThread];
-#else
-    [s_launcher checkJITAndStartVM];
+#if !TARGET_OS_SIMULATOR
+    // Recompilateurs si la réserve JIT de l'app est prête (StikDebug est passé), sinon interpréteur (très lent).
+    // Le simulateur autorise toujours le JIT : réserve de l'app si elle existe, sinon MAP_JIT.
+    DarwinMisc::iPSX2_FORCE_EE_INTERP = (s_jitIsActive && s_jitIsActive()) ? 0 : 1;
+    Console.WriteLn("[PlayTendo] Démarrage PS2 %s", DarwinMisc::iPSX2_FORCE_EE_INTERP ? "sans JIT (interpréteur)" : "avec JIT");
 #endif
+    [s_launcher startVMThread];
     return true;
 }
 

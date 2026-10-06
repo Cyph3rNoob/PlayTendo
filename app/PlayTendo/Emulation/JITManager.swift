@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Mode turbo (JIT) : la PSP traduit son code en instructions de l'iPhone au lieu de l'interpréter.
+/// Mode turbo (JIT) : la PSP et la PS2 traduisent leur code en instructions de l'iPhone au lieu de l'interpréter.
 ///
 /// Sur iOS 26 avec TXM (A15 et suivantes), seul un débogueur peut rendre de la mémoire exécutable.
 /// PlayTendo demande à StikDebug (adresse `stikdebug://enable-jit`) de s'attacher avec son script
@@ -34,8 +34,10 @@ final class JITManager: ObservableObject {
         var errorDescription: String? { message }
     }
 
-    /// Le JIT de PPSSPP prend 16 Mo et son décodeur de sommets 256 Ko : 32 Mo laissent de la marge.
-    nonisolated static let poolSize = 32 << 20
+    /// PSP : le JIT de PPSSPP prend 16 Mo et son décodeur de sommets 256 Ko (32 Mo laissent de la marge).
+    /// PS2 : les recompilateurs d'ARMSX2 prennent 305 Mo d'un seul bloc (320 Mo prévus). La réserve n'occupe
+    /// que des adresses tant que les moteurs n'y écrivent pas.
+    nonisolated static let poolSize = (32 + 320) << 20
     private static let methodKey = "methodeJIT"
     private static let lastSuccessKey = "dernierTurboReussi"
     private static let scriptName = "universal.js"
@@ -78,7 +80,7 @@ final class JITManager: ObservableObject {
     var isActive: Bool { PTJITIsActive() }
 
     /// Consoles dont le moteur sait se servir du JIT.
-    nonisolated static func benefits(_ system: GameSystem) -> Bool { system == .psp }
+    nonisolated static func benefits(_ system: GameSystem) -> Bool { system == .psp || system == .ps2 }
 
     var isStikDebugInstalled: Bool {
         UIApplication.shared.canOpenURL(URL(string: "stikdebug://")!)

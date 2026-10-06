@@ -528,6 +528,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 if engineState == PTPS2StateRunning || engineState == PTPS2StatePaused {
                     started = true
                     PTLogLine(String(format: "PS2 : jeu démarré en %.1f s", clock.now - bootStart))
+                    let jit = PTJITIsActive()
+#if targetEnvironment(simulator)
+                    PTLogLine(jit ? "PS2 : code dans la réserve JIT de l'app" : "PS2 : JIT du simulateur (sans la réserve de l'app)")
+#else
+                    PTLogLine(jit ? "PS2 : mode turbo (JIT) utilisé" : "PS2 : sans JIT, interpréteur (très lent)")
+#endif
+                    if jit { showToast("Mode turbo (JIT) actif") }
                     DispatchQueue.main.async { self.state = .running }
                 } else if engineState == PTPS2StateStopped && (seenActivity || clock.now - bootStart > 20) {
                     failure = engine.lastError() ?? "La console n'a pas pu démarrer le jeu."
