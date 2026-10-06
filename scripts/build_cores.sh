@@ -140,6 +140,8 @@ build_mupen64plus_next() {
 
 build_ppsspp() {
   local b="$WORK/ppsspp"
+  # JIT sur la réserve préparée par PlayTendo (iOS 26 / TXM).
+  python3 "$ROOT/scripts/patch_ppsspp_jit.py" "$SRC/ppsspp"
   run ppsspp-ios cmake -S "$SRC/ppsspp" -B "$b" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$SRC/ppsspp/cmake/Toolchains/ios.cmake" -DLIBRETRO=ON \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5

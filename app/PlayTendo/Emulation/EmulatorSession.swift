@@ -250,6 +250,7 @@ final class EmulatorSession: ObservableObject {
             return
         }
 
+        core.allowsJIT = JITManager.benefits(system)
         let frameBuffer = self.frameBuffer
         let ring = self.ring
         core.videoHandler = { pixels, width, height, pitch, format in
@@ -291,6 +292,11 @@ final class EmulatorSession: ObservableObject {
             self.aspectRatio = CGFloat(currentAspect)
             self.diskInfo = disks
             self.state = .running
+        }
+        if JITManager.benefits(system) {
+            let jit = PTJITIsActive()
+            PTLogLine(jit ? "Mode turbo (JIT) utilisé" : "Sans JIT : interpréteur")
+            if jit { showToast("Mode turbo (JIT) actif") }
         }
 
         let clock = MachClock()

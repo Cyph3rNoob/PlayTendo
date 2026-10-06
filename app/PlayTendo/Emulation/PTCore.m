@@ -1,5 +1,6 @@
 #import "PTCore.h"
 #import "PTGLContext.h"
+#import "PTJIT.h"
 #import "libretro.h"
 
 #import <dlfcn.h>
@@ -23,6 +24,12 @@ void PTLogSetFile(NSString *path) {
         [[NSFileManager defaultManager] createFileAtPath:path contents:nil attributes:nil];
         gLogHandle = [NSFileHandle fileHandleForWritingAtPath:path];
         gLogBytes = 0;
+    });
+}
+
+void PTLogFlush(void) {
+    dispatch_sync(PTLogQueue(), ^{
+        [gLogHandle synchronizeFile];
     });
 }
 
@@ -811,7 +818,9 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             *(int *)data = RETRO_SAVESTATE_CONTEXT_NORMAL;
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_GET_JIT_CAPABLE):
-            *(bool *)data = false;
+            // Réserve JIT préparée par l'app (PTJIT.m), seulement pour les moteurs qui l'utilisent (PSP) ;
+            // sinon le moteur reste sur son interpréteur.
+            *(bool *)data = _allowsJIT && PTJITIsActive();
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_SET_HW_RENDER): {
             struct retro_hw_render_callback *callback = data;

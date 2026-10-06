@@ -76,6 +76,12 @@ struct AboutView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section("Mode turbo") {
+                    Text("JIT de la PSP activé par StikJIT 1.9.0 (MPL-2.0, avec idevice sous licence MIT) dans l'extension PlayTendoJIT, ou par l'app StikDebug, avec le script universal.js. Démarrage de l'extension inspiré de Madeira et LiveContainer.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Où sont mes fichiers ?") {
                     Label("App Fichiers › Sur mon iPhone › PlayTendo", systemImage: "folder")
                     Label("Jeux : tes jeux (sous-dossiers autorisés)", systemImage: "gamecontroller")

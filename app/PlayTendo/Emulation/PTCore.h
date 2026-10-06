@@ -51,6 +51,8 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 @property (nonatomic, copy, nullable) PTHardwareVideoHandler hardwareVideoHandler;
 /// Vrai si le moteur dessine en 3D avec OpenGL ES.
 @property (nonatomic, readonly) BOOL usesHardwareRendering;
+/// Le moteur peut se servir de la réserve JIT de l'app (à régler avant le chargement du jeu).
+@property (nonatomic) BOOL allowsJIT;
 
 /// Renseignés après le chargement du jeu (et mis à jour si le moteur les change).
 @property (nonatomic, readonly) double framesPerSecond;
@@ -96,6 +98,8 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 /// Journal partagé (fichier Documents/Journal.txt).
 void PTLogLine(NSString *line);
 void PTLogSetFile(NSString *path);
+/// Attend que les lignes en attente soient écrites sur le disque (avant une étape qui peut tuer l'app).
+void PTLogFlush(void);
 
 /// Tampon audio circulaire sans verrou (un producteur, un consommateur).
 typedef struct PTAudioRing PTAudioRing;

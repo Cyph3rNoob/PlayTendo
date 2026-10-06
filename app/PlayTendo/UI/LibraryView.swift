@@ -4,8 +4,13 @@ import UniformTypeIdentifiers
 struct LibraryView: View {
     @EnvironmentObject private var library: GameLibrary
     @EnvironmentObject private var metadata: GameMetadata
+    @EnvironmentObject private var jit: JITManager
     @State private var importing = false
     @State private var showingAbout = false
+    @State private var showingSettings = false
+    /// Jeu qui attend l'activation du JIT avant de démarrer.
+    @State private var waitingForJIT: Game?
+    @State private var jitFailure: JITFailure?
     @State private var playing: Game?
     @State private var search = ""
     @State private var filter: GameSystem?
@@ -55,6 +60,28 @@ struct LibraryView: View {
         .sheet(isPresented: $showingAbout) {
             AboutView()
         }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
+        .overlay {
+            if let game = waitingForJIT {
+                JITActivationView(status: jit.status) {
+                    // La préparation continue en arrière-plan : elle servira à la prochaine partie.
+                    waitingForJIT = nil
+                    launch(game)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: waitingForJIT)
+        .alert("Mode turbo non activé", isPresented: Binding(get: { jitFailure != nil }, set: { if !$0 { jitFailure = nil } }),
+               presenting: jitFailure) { failure in
+            Button("Réessayer") { play(failure.game) }
+            Button("Jouer sans JIT") { launch(failure.game) }
+            Button("Annuler", role: .cancel) {}
+        } message: { failure in
+            Text(failure.message)
+        }
         .alert("Supprimer ce jeu ?", isPresented: Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } }),
                presenting: gameToDelete) { game in
             Button("Supprimer", role: .destructive) { library.delete(game) }
@@ -81,6 +108,28 @@ struct LibraryView: View {
     }
 
     private func play(_ game: Game) {
+        guard JITManager.benefits(game.system), jit.method != .off, !jit.isActive else {
+            launch(game)
+            return
+        }
+        waitingForJIT = game
+        Task {
+            do {
+                try await jit.activate()
+                if waitingForJIT == game {
+                    waitingForJIT = nil
+                    launch(game)
+                }
+            } catch {
+                if waitingForJIT == game {
+                    waitingForJIT = nil
+                    jitFailure = JITFailure(game: game, message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func launch(_ game: Game) {
         metadata.markPlayed(game)
         playing = game
     }
@@ -106,6 +155,8 @@ struct LibraryView: View {
             Spacer(minLength: 8)
             NeonIconButton(systemName: "info", color: Neon.violet) { showingAbout = true }
                 .accessibilityLabel("À propos")
+            NeonIconButton(systemName: "gearshape.fill", color: Neon.magenta) { showingSettings = true }
+                .accessibilityLabel("Réglages")
             NeonIconButton(systemName: "plus") { importing = true }
                 .accessibilityLabel("Ajouter des jeux")
         }

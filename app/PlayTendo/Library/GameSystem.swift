@@ -180,9 +180,10 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "mupen64plus-rsp-plugin": "hle",
             ]
         case .psp:
-            // Sans JIT : l'interpréteur « IR », le plus rapide sans recompilation ; rendu 2x.
+            // Avec la réserve JIT de l'app : recompilation (JIT) ; sinon l'interpréteur « IR », le plus
+            // rapide sans recompilation. Rendu 2x.
             [
-                "ppsspp_cpu_core": "IR JIT",
+                "ppsspp_cpu_core": PTJITIsActive() ? "JIT" : "IR JIT",
                 "ppsspp_backend": "opengl",
                 "ppsspp_internal_resolution": "960x544",
                 // Aucun accès réseau (jeu en ligne) : évite toute demande d'autorisation d'iOS.

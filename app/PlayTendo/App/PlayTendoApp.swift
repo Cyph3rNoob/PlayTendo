@@ -4,6 +4,7 @@ import SwiftUI
 struct PlayTendoApp: App {
     @StateObject private var library = GameLibrary()
     @StateObject private var metadata = GameMetadata()
+    @StateObject private var jit = JITManager()
     @State private var showBoot = true
 
     init() {
@@ -24,6 +25,7 @@ struct PlayTendoApp: App {
             }
             .environmentObject(library)
             .environmentObject(metadata)
+            .environmentObject(jit)
             .preferredColorScheme(.dark)
             .tint(.playTendoAccent)
             .onOpenURL { url in library.importFiles([url]) }
