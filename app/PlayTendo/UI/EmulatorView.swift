@@ -180,6 +180,10 @@ private struct PauseMenu: View {
     let onImageSize: () -> Void
     let onQuit: () -> Void
 
+    /// PSP : résolution et lissage des textures, choisis directement (gardés pour tous les jeux PSP).
+    @AppStorage(PSPSettings.resolutionKey) private var resolution = PSPSettings.Resolution.x2.rawValue
+    @AppStorage(PSPSettings.smoothingKey) private var smoothing = PSPSettings.Smoothing.off.rawValue
+
     private struct Item: Identifiable {
         let title: String
         let icon: String
@@ -221,24 +225,14 @@ private struct PauseMenu: View {
             items.append(Item(title: "Image : \(imageSizeLabel)", icon: "arrow.up.left.and.arrow.down.right",
                               action: onImageSize))
         }
-        if session.game.system == .psp {
-            // Appliqués tout de suite (le moteur les change en pleine partie) et gardés pour les autres jeux PSP.
-            items.append(Item(title: "Résolution : \(PSPSettings.resolution.label)", icon: "sparkles.tv") {
-                PSPSettings.resolution = PSPSettings.resolution.next
-                session.applyOptions(PSPSettings.coreOptions)
-                session.showToast("Résolution \(PSPSettings.resolution.label) · \(PSPSettings.resolution.size)")
-                onResume()
-            })
-            items.append(Item(title: "Lissage : \(PSPSettings.smoothing.label)", icon: "wand.and.stars") {
-                PSPSettings.smoothing = PSPSettings.smoothing.next
-                session.applyOptions(PSPSettings.coreOptions)
-                session.showToast("Lissage des textures : \(PSPSettings.smoothing.label)")
-                onResume()
-            })
-        }
-        items.append(Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset))
-        items.append(Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit))
         return items
+    }
+
+    private var endItems: [Item] {
+        [
+            Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset),
+            Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit),
+        ]
     }
 
     var body: some View {
@@ -252,15 +246,17 @@ private struct PauseMenu: View {
                     .padding(.bottom, compact ? 2 : 6)
                 MenuButton(title: "Reprendre", icon: "play.fill", prominent: true, action: onResume)
                 if compact {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                        ForEach(items) { button($0) }
-                    }
+                    grid(items)
+                    if session.game.system == .psp { imageSettings }
+                    grid(endItems)
                 } else {
                     HStack(spacing: 10) {
                         button(items[0])
                         button(items[1])
                     }
                     ForEach(items.dropFirst(2)) { button($0) }
+                    if session.game.system == .psp { imageSettings }
+                    ForEach(endItems) { button($0) }
                 }
             }
             .padding(compact ? 16 : 20)
@@ -295,6 +291,46 @@ private struct PauseMenu: View {
         }
     }
 
+    private func grid(_ items: [Item]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            ForEach(items) { button($0) }
+        }
+    }
+
+    /// Résolution et lissage : tous les choix visibles, un toucher suffit. Appliqués à la reprise du jeu.
+    @ViewBuilder private var imageSettings: some View {
+        let current = PSPSettings.Resolution(rawValue: resolution) ?? .x2
+        let resolutionPicker = NeonSegments(title: "RÉSOLUTION", detail: current.size,
+                                            options: PSPSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                            selection: resolution) { value in
+            choose { resolution = value }
+        }
+        let smoothingPicker = NeonSegments(title: "LISSAGE", detail: nil,
+                                           options: PSPSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                           selection: smoothing) { value in
+            choose { smoothing = value }
+        }
+        if compact {
+            HStack(alignment: .top, spacing: 14) {
+                resolutionPicker
+                smoothingPicker
+            }
+            .padding(.vertical, 2)
+        } else {
+            VStack(spacing: 10) {
+                resolutionPicker
+                smoothingPicker
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func choose(_ change: () -> Void) {
+        change()
+        UISelectionFeedbackGenerator().selectionChanged()
+        session.applyOptions(PSPSettings.coreOptions)
+    }
+
     private func button(_ item: Item) -> some View {
         MenuButton(title: item.title, icon: item.icon, destructive: item.destructive, action: item.action)
             .disabled(!item.enabled)
@@ -322,5 +358,48 @@ private struct MenuButton: View {
                 .shadow(color: prominent ? Neon.cyan.opacity(0.6) : .clear, radius: 10)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Rangée de pastilles néon : tous les choix visibles, celui en cours allumé.
+private struct NeonSegments: View {
+    let title: String
+    let detail: String?
+    let options: [(Int, String)]
+    let selection: Int
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.orbitron(10, weight: 800))
+                    .tracking(1.5)
+                    .foregroundStyle(Neon.dim)
+                if let detail {
+                    Text(detail)
+                        .font(Neon.mono(10, weight: .semibold))
+                        .foregroundStyle(Neon.cyan)
+                }
+            }
+            HStack(spacing: 6) {
+                ForEach(options, id: \.0) { value, label in
+                    let selected = value == selection
+                    Button { onSelect(value) } label: {
+                        Text(label)
+                            .font(.orbitron(13, weight: 800))
+                            .foregroundStyle(selected ? Color.black : Neon.text)
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(Chamfer(cut: 7).fill(selected ? Neon.cyan : Color.white.opacity(0.06)))
+                            .overlay(Chamfer(cut: 7).stroke(Neon.cyan.opacity(selected ? 0 : 0.35), lineWidth: 1))
+                            .shadow(color: selected ? Neon.cyan.opacity(0.6) : .clear, radius: 6)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(title.capitalized) \(label)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

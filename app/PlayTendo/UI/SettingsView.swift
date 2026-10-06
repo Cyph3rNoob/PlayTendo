@@ -7,29 +7,10 @@ struct SettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
     @State private var vpnConnected = false
-    @AppStorage(PSPSettings.resolutionKey) private var resolution = PSPSettings.Resolution.x2.rawValue
-    @AppStorage(PSPSettings.smoothingKey) private var smoothing = PSPSettings.Smoothing.off.rawValue
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Picker("Résolution", selection: $resolution) {
-                        ForEach(PSPSettings.Resolution.allCases) { option in
-                            Text("\(option.label) · \(option.size)").tag(option.rawValue)
-                        }
-                    }
-                    Picker("Lissage des textures", selection: $smoothing) {
-                        ForEach(PSPSettings.Smoothing.allCases) { option in
-                            Text(option.label).tag(option.rawValue)
-                        }
-                    }
-                } header: {
-                    Text("Image PSP")
-                } footer: {
-                    Text("Résolution : plus elle est haute, plus l'image est nette, mais plus la puce graphique travaille (x4 ≈ 1080p). Lissage : rend les décors moins pixelisés, mais demande du calcul au processeur et peut ralentir les jeux lourds. Les deux se changent aussi en pleine partie, depuis le menu pause.")
-                }
-
                 Section {
                     HStack(spacing: 12) {
                         Image(systemName: statusIcon)
