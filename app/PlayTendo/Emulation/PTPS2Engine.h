@@ -38,6 +38,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Sauvegarde et chargement rapides : bloquants, hors du thread principal.
 - (BOOL)saveStateToPath:(NSString *)path;
 - (BOOL)loadStateFromPath:(NSString *)path;
+/// Image : définition (multiple de la PS2, 1 à 4) et lissage des bords. Appliqués tout de suite en partie.
+- (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing;
+/// Image du jeu en cours (640×480), pour la vignette « Continuer ». Bloquant, hors du thread principal.
+- (nullable UIImage *)snapshot;
 - (nullable NSString *)lastError;
 
 @end

@@ -5,7 +5,7 @@
 #define PT_PS2_FUNCTIONS(X) \
     X(PTPS2Setup) X(PTPS2PickBIOS) X(PTPS2Boot) X(PTPS2GetState) X(PTPS2SetPaused) X(PTPS2Stop) \
     X(PTPS2Reset) X(PTPS2ReleaseMemory) X(PTPS2SetTurbo) X(PTPS2SetButton) X(PTPS2SetStick) X(PTPS2SaveState) X(PTPS2LoadState) \
-    X(PTPS2CopyLastError)
+    X(PTPS2SetImageOptions) X(PTPS2CopySnapshot) X(PTPS2CopyLastError)
 
 typedef struct {
 #define PT_FIELD(name) __typeof__(&name) name;
@@ -102,6 +102,28 @@ static PTPS2Engine *loadedEngine;
 
 - (BOOL)loadStateFromPath:(NSString *)path {
     return _fn.PTPS2LoadState(path.fileSystemRepresentation);
+}
+
+- (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing {
+    _fn.PTPS2SetImageOptions((int)upscale, smoothing);
+}
+
+- (UIImage *)snapshot {
+    int width = 0, height = 0;
+    void *pixels = _fn.PTPS2CopySnapshot(&width, &height);
+    if (!pixels) return nil;
+    NSData *data = [NSData dataWithBytesNoCopy:pixels length:(size_t)width * height * 4 freeWhenDone:YES];
+    CGDataProviderRef provider = CGDataProviderCreateWithCFData((__bridge CFDataRef)data);
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGImageRef image = CGImageCreate(width, height, 8, 32, (size_t)width * 4, space,
+                                     (CGBitmapInfo)kCGImageAlphaNoneSkipLast, provider, NULL, false,
+                                     kCGRenderingIntentDefault);
+    CGColorSpaceRelease(space);
+    CGDataProviderRelease(provider);
+    if (!image) return nil;
+    UIImage *result = [UIImage imageWithCGImage:image];
+    CGImageRelease(image);
+    return result;
 }
 
 - (NSString *)lastError {

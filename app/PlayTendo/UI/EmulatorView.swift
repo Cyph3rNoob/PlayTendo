@@ -224,6 +224,11 @@ private struct PauseMenu: View {
     /// PSP : résolution et lissage des textures, choisis directement (gardés pour tous les jeux PSP).
     @AppStorage(PSPSettings.resolutionKey) private var resolution = PSPSettings.Resolution.x2.rawValue
     @AppStorage(PSPSettings.smoothingKey) private var smoothing = PSPSettings.Smoothing.off.rawValue
+    /// PS2 : résolution et lissage des bords (gardés pour tous les jeux PS2).
+    @AppStorage(PS2Settings.resolutionKey) private var ps2Resolution = PS2Settings.Resolution.x1.rawValue
+    @AppStorage(PS2Settings.smoothingKey) private var ps2Smoothing = PS2Settings.Smoothing.off.rawValue
+
+    private var hasImageSettings: Bool { session.game.system == .psp || session.game.system == .ps2 }
 
     private struct Item: Identifiable {
         let title: String
@@ -288,7 +293,7 @@ private struct PauseMenu: View {
                 MenuButton(title: "Reprendre", icon: "play.fill", prominent: true, action: onResume)
                 if compact {
                     grid(items)
-                    if session.game.system == .psp { imageSettings }
+                    if hasImageSettings { imageSettings }
                     grid(endItems)
                 } else {
                     HStack(spacing: 10) {
@@ -296,7 +301,7 @@ private struct PauseMenu: View {
                         button(items[1])
                     }
                     ForEach(items.dropFirst(2)) { button($0) }
-                    if session.game.system == .psp { imageSettings }
+                    if hasImageSettings { imageSettings }
                     ForEach(endItems) { button($0) }
                 }
             }
@@ -340,17 +345,37 @@ private struct PauseMenu: View {
 
     /// Résolution et lissage : tous les choix visibles, un toucher suffit. Appliqués à la reprise du jeu.
     @ViewBuilder private var imageSettings: some View {
-        let current = PSPSettings.Resolution(rawValue: resolution) ?? .x2
-        let resolutionPicker = NeonSegments(title: "RÉSOLUTION", detail: current.size,
-                                            options: PSPSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
-                                            selection: resolution) { value in
-            choose { resolution = value }
+        if session.game.system == .ps2 {
+            imageSettings(
+                resolution: NeonSegments(title: "RÉSOLUTION",
+                                         detail: (PS2Settings.Resolution(rawValue: ps2Resolution) ?? .x1).detail,
+                                         options: PS2Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: ps2Resolution) { value in
+                    choose { ps2Resolution = value }
+                },
+                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                                        options: PS2Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: ps2Smoothing) { value in
+                    choose { ps2Smoothing = value }
+                })
+        } else {
+            imageSettings(
+                resolution: NeonSegments(title: "RÉSOLUTION",
+                                         detail: (PSPSettings.Resolution(rawValue: resolution) ?? .x2).size,
+                                         options: PSPSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: resolution) { value in
+                    choose { resolution = value }
+                },
+                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                                        options: PSPSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: smoothing) { value in
+                    choose { smoothing = value }
+                })
         }
-        let smoothingPicker = NeonSegments(title: "LISSAGE", detail: nil,
-                                           options: PSPSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
-                                           selection: smoothing) { value in
-            choose { smoothing = value }
-        }
+    }
+
+    @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
+                                            smoothing smoothingPicker: NeonSegments) -> some View {
         if compact {
             HStack(alignment: .top, spacing: 14) {
                 resolutionPicker
@@ -369,7 +394,11 @@ private struct PauseMenu: View {
     private func choose(_ change: () -> Void) {
         change()
         UISelectionFeedbackGenerator().selectionChanged()
-        session.applyOptions(PSPSettings.coreOptions)
+        if session.game.system == .ps2 {
+            session.applyPS2Image()
+        } else {
+            session.applyOptions(PSPSettings.coreOptions)
+        }
     }
 
     private func button(_ item: Item) -> some View {

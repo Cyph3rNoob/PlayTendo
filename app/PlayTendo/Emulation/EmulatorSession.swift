@@ -148,11 +148,21 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         perform { [self] in core?.updateOptions(options) }
     }
 
+    /// PS2 : applique la résolution et le lissage choisis dans le menu pause (PS2Settings).
+    func applyPS2Image() {
+        perform { [self] in Self.applyPS2Image(to: ps2) }
+    }
+
+    private static func applyPS2Image(to engine: PTPS2Engine?) {
+        engine?.setImageUpscale(PS2Settings.resolution.rawValue, smoothing: PS2Settings.smoothing == .on)
+    }
+
     func saveState() {
         if let ps2 {
             perform { [self] in
                 if ps2.saveState(toPath: Paths.stateFile(for: game).path) {
                     PTLogLine("PS2 : sauvegarde rapide écrite")
+                    savePS2Thumbnail(ps2)
                     DispatchQueue.main.async { self.hasSaveState = true }
                     showToast("Partie sauvegardée")
                 } else {
@@ -489,6 +499,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             return
         }
         PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
+        Self.applyPS2Image(to: engine)
 
         // La vue Metal doit être à l'écran, à sa taille, avant le démarrage : le moteur y crée son image.
         let clock = MachClock()
@@ -552,6 +563,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
         }
 
+        if started && failure == nil { savePS2Thumbnail(engine) }
         engine.stop()
         let stopDeadline = clock.now + 15
         while engine.state != PTPS2StateStopped && clock.now < stopDeadline {
@@ -588,8 +600,21 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
                                   provider: provider, decode: nil, shouldInterpolate: false,
-                                  intent: .defaultIntent),
-              let png = UIImage(cgImage: image).pngData() else { return }
+                                  intent: .defaultIntent) else { return }
+        writeThumbnail(UIImage(cgImage: image))
+    }
+
+    /// PS2 : le moteur dessine lui-même, l'image vient de sa capture (comme celle des sauvegardes de PCSX2).
+    private func savePS2Thumbnail(_ engine: PTPS2Engine) {
+        guard let image = engine.snapshot() else {
+            PTLogLine("PS2 : vignette impossible à capturer")
+            return
+        }
+        writeThumbnail(image)
+    }
+
+    private func writeThumbnail(_ image: UIImage) {
+        guard let png = image.pngData() else { return }
         try? png.write(to: Paths.thumbnailFile(for: game), options: .atomic)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .thumbnailUpdated, object: self.game.id)

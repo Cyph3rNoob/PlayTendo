@@ -48,6 +48,13 @@ void PTPS2SetStick(int stick, float x, float y);
 bool PTPS2SaveState(const char *path);
 bool PTPS2LoadState(const char *path);
 
+/// Image : définition en multiple de celle de la PS2 (1 à 4) et lissage des bords (FXAA). Gardés dans les
+/// réglages du moteur, appliqués tout de suite pendant une partie (visibles à la reprise).
+void PTPS2SetImageOptions(int upscale, bool smoothing);
+/// Image du jeu en cours, en 640×480 pixels RGBA (copie à libérer par free), ou NULL. Bloquant : hors du
+/// thread principal.
+void *PTPS2CopySnapshot(int *width, int *height);
+
 /// Dernière erreur signalée par le moteur (copie à libérer par free), ou NULL.
 char *PTPS2CopyLastError(void);
 

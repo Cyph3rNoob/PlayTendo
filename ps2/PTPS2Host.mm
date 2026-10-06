@@ -10,9 +10,11 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <vector>
 #include <mutex>
 #include <string>
 #include <sys/stat.h>
@@ -26,6 +28,7 @@
 #include "pcsx2/Config.h"
 #include "pcsx2/Host.h"
 #include "pcsx2/INISettingsInterface.h"
+#include "pcsx2/MTGS.h"
 #include "pcsx2/SIO/Memcard/MemoryCardFile.h"
 #include "pcsx2/SIO/Pad/Pad.h"
 #include "pcsx2/SIO/Pad/PadBase.h"
@@ -450,6 +453,43 @@ PTPS2_EXPORT bool PTPS2SaveState(const char* path)
     if (!error->empty())
         PTPS2RecordError("Sauvegarde rapide", error->c_str());
     return started && error->empty() && FileSystem::FileExists(target.c_str());
+}
+
+PTPS2_EXPORT void PTPS2SetImageOptions(int upscale, bool smoothing)
+{
+    if (!s_settings_interface)
+        return;
+    {
+        auto lock = Host::GetSettingsLock();
+        s_settings_interface->SetFloatValue("EmuCore/GS", "upscale_multiplier", static_cast<float>(std::clamp(upscale, 1, 4)));
+        s_settings_interface->SetBoolValue("EmuCore/GS", "fxaa", smoothing);
+        s_settings_interface->Save();
+    }
+    [ARMSX2Bridge applyGraphicsSettingsNow]; // sans effet hors partie
+}
+
+PTPS2_EXPORT void* PTPS2CopySnapshot(int* width, int* height)
+{
+    if (!width || !height || !VMManager::HasValidVM())
+        return nullptr;
+    u32 w = 0, h = 0;
+    std::vector<u32> pixels;
+    bool captured = false;
+    // Même capture que celle des sauvegardes de PCSX2 (640×480, proportions du jeu), faite par le thread de la console.
+    Host::RunOnCPUThread([&]() {
+        if (VMManager::HasValidVM() && MTGS::IsOpen())
+            captured = MTGS::SaveMemorySnapshot(640, 480, true, false, &w, &h, &pixels);
+    }, true);
+    if (!captured || w == 0 || h == 0 || pixels.size() < static_cast<size_t>(w) * h)
+        return nullptr;
+    const size_t bytes = static_cast<size_t>(w) * h * sizeof(u32);
+    void* copy = malloc(bytes);
+    if (!copy)
+        return nullptr;
+    memcpy(copy, pixels.data(), bytes);
+    *width = static_cast<int>(w);
+    *height = static_cast<int>(h);
+    return copy;
 }
 
 PTPS2_EXPORT bool PTPS2LoadState(const char* path)
