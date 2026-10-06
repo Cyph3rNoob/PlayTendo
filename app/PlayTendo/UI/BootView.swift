@@ -2,10 +2,9 @@ import SwiftUI
 import UIKit
 
 /// Animation de démarrage : un écran cathodique s'allume sur le logo, une étincelle jaillit entre
-/// les deux manettes, puis « PLAYTENDO » s'écrit et quelques lignes de démarrage défilent.
+/// les deux manettes, puis « PLAYTENDO » s'écrit.
 /// Un toucher la passe. Version sobre si « Réduire les animations » est activé.
 struct BootView: View {
-    let gameCount: Int
     let onFinish: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,7 +17,6 @@ struct BootView: View {
     @State private var spark: CGFloat = 0
     @State private var sparkOpacity = 0.0
     @State private var letters = 0
-    @State private var lines = 0
     @State private var leaving = false
     @State private var finished = false
 
@@ -89,13 +87,6 @@ struct BootView: View {
                 .foregroundStyle(LinearGradient(colors: [Self.red, .white, Self.blue], startPoint: .leading, endPoint: .trailing))
                 .shadow(color: Self.blue.opacity(0.6 * glow), radius: 12)
                 .shadow(color: Self.red.opacity(0.4 * glow), radius: 18)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    bootLine("> MOTEURS ............ 7/7 OK", index: 1)
-                    bootLine("> BIBLIOTHÈQUE ....... \(gameCount) JEU\(gameCount > 1 ? "X" : "")", index: 2)
-                    bootLine("> SYSTÈME PRÊT", index: 3, color: Neon.cyan)
-                }
-                .frame(width: 270, alignment: .leading)
             }
         }
         .overlay(BootScanlines().ignoresSafeArea())
@@ -105,14 +96,6 @@ struct BootView: View {
         .onTapGesture { finish() }
         .task { await run() }
         .accessibilityLabel("PlayTendo")
-    }
-
-    private func bootLine(_ text: String, index: Int, color: Color = Neon.dim) -> some View {
-        Text(text)
-            .font(Neon.mono(12, weight: .semibold))
-            .tracking(1)
-            .foregroundStyle(color)
-            .opacity(lines >= index ? 1 : 0)
     }
 
     // MARK: Déroulé
@@ -125,7 +108,6 @@ struct BootView: View {
                 logoOpacity = 1
                 glow = 1
                 letters = Self.title.count
-                lines = 3
             }
             await pause(1.1)
             finish()
@@ -166,11 +148,8 @@ struct BootView: View {
             withAnimation(.easeOut(duration: 0.12)) { letters = count }
             await pause(0.055)
         }
-        for count in 1...3 {
-            await pause(0.16)
-            withAnimation(.easeOut(duration: 0.15)) { lines = count }
-        }
-        await pause(0.45)
+        // Le titre reste un instant avant le fondu.
+        await pause(0.7)
         finish()
     }
 

@@ -19,7 +19,7 @@ struct PlayTendoApp: App {
             ZStack {
                 LibraryView()
                 if showBoot {
-                    BootView(gameCount: library.games.count) { showBoot = false }
+                    BootView { showBoot = false }
                         .zIndex(1)
                 }
             }
