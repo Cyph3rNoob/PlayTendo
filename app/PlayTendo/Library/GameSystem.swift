@@ -181,15 +181,14 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
             ]
         case .psp:
             // Avec la réserve JIT de l'app : recompilation (JIT) ; sinon l'interpréteur « IR », le plus
-            // rapide sans recompilation. Rendu 2x.
+            // rapide sans recompilation. Résolution et lissage des textures : réglages de l'utilisateur.
             [
                 "ppsspp_cpu_core": PTJITIsActive() ? "JIT" : "IR JIT",
                 "ppsspp_backend": "opengl",
-                "ppsspp_internal_resolution": "960x544",
                 // Aucun accès réseau (jeu en ligne) : évite toute demande d'autorisation d'iOS.
                 "ppsspp_enable_wlan": "disabled",
                 "ppsspp_enable_upnp": "disabled",
-            ]
+            ].merging(PSPSettings.coreOptions) { $1 }
         default:
             [:]
         }

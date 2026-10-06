@@ -211,7 +211,8 @@ final class EmulatorSession: ObservableObject {
         condition.unlock()
     }
 
-    private func showToast(_ text: String) {
+    /// Message bref affiché par-dessus le jeu.
+    func showToast(_ text: String) {
         DispatchQueue.main.async {
             self.toast = text
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {

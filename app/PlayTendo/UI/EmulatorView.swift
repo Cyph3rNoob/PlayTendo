@@ -221,6 +221,21 @@ private struct PauseMenu: View {
             items.append(Item(title: "Image : \(imageSizeLabel)", icon: "arrow.up.left.and.arrow.down.right",
                               action: onImageSize))
         }
+        if session.game.system == .psp {
+            // Appliqués tout de suite (le moteur les change en pleine partie) et gardés pour les autres jeux PSP.
+            items.append(Item(title: "Résolution : \(PSPSettings.resolution.label)", icon: "sparkles.tv") {
+                PSPSettings.resolution = PSPSettings.resolution.next
+                session.applyOptions(PSPSettings.coreOptions)
+                session.showToast("Résolution \(PSPSettings.resolution.label) · \(PSPSettings.resolution.size)")
+                onResume()
+            })
+            items.append(Item(title: "Lissage : \(PSPSettings.smoothing.label)", icon: "wand.and.stars") {
+                PSPSettings.smoothing = PSPSettings.smoothing.next
+                session.applyOptions(PSPSettings.coreOptions)
+                session.showToast("Lissage des textures : \(PSPSettings.smoothing.label)")
+                onResume()
+            })
+        }
         items.append(Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset))
         items.append(Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit))
         return items
