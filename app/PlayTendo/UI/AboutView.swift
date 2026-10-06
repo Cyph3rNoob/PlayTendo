@@ -103,7 +103,7 @@ struct AboutView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(LibraryBackground())
+            .background(CyberBackground())
             .navigationTitle("À propos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

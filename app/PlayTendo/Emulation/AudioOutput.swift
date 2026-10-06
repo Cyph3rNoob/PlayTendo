@@ -7,6 +7,7 @@ final class AudioOutput {
     private let engine = AVAudioEngine()
     private var source: AVAudioSourceNode?
     private var interruptionObserver: NSObjectProtocol?
+    private var configurationObserver: NSObjectProtocol?
 
     init(sampleRate: Double, ring: OpaquePointer) {
         self.ring = ring
@@ -30,10 +31,19 @@ final class AudioOutput {
                   AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
             self?.start()
         }
+        // Écouteurs branchés ou débranchés, AirPods connectés… : iOS arrête alors le moteur audio
+        // (nouvelle sortie, nouvelle fréquence) ; on le relance aussitôt.
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            PTLogLine("Sortie audio changée : relance du son")
+            self?.start()
+        }
     }
 
     deinit {
         if let interruptionObserver { NotificationCenter.default.removeObserver(interruptionObserver) }
+        if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
         engine.stop()
     }
 

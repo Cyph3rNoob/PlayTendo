@@ -230,6 +230,3 @@ struct ToastView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
-
-/// Ancien nom du fond, gardé pour les autres écrans.
-typealias LibraryBackground = CyberBackground

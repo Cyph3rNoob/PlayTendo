@@ -24,13 +24,4 @@ struct Game: Identifiable, Hashable {
         let title = name[..<cut].trimmingCharacters(in: .whitespaces)
         return title.isEmpty ? name : title
     }
-
-    /// Première mention entre parenthèses (souvent la région).
-    var detail: String? {
-        let name = baseName
-        guard let open = name.firstIndex(of: "("),
-              let close = name[open...].firstIndex(of: ")") else { return nil }
-        let text = name[name.index(after: open)..<close].trimmingCharacters(in: .whitespaces)
-        return text.isEmpty ? nil : text
-    }
 }

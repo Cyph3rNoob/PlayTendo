@@ -16,7 +16,7 @@ struct EmulatorView: View {
     init(game: Game) {
         self.game = game
         _session = StateObject(wrappedValue: EmulatorSession(game: game))
-        _screensSwapped = State(initialValue: UserDefaults.standard.bool(forKey: Self.swapKey(for: game)))
+        _screensSwapped = State(initialValue: Self.savedSwap(for: game))
         let savedSize = UserDefaults.standard.string(forKey: Self.touchSizeKey) ?? ""
         _touchSize = State(initialValue: DSTouchSize(rawValue: savedSize) ?? .medium)
         _fillScreen = State(initialValue: UserDefaults.standard.object(forKey: Self.fillScreenKey) as? Bool ?? true)
@@ -25,58 +25,25 @@ struct EmulatorView: View {
     private static let touchSizeKey = "tailleEcranTactileDS"
     private static let fillScreenKey = "pleinEcranPSP"
 
-    private static func swapKey(for game: Game) -> String { "ecransInverses.\(game.id)" }
+    /// Clé du choix « Inverser les écrans » : le chemin du jeu dans Jeux, qui ne change pas d'une mise à
+    /// jour à l'autre (contrairement au chemin complet, utilisé avant).
+    private static func swapKey(for game: Game) -> String { "ecransInverses.\(game.key)" }
+
+    private static func savedSwap(for game: Game) -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: swapKey(for: game)) != nil { return defaults.bool(forKey: swapKey(for: game)) }
+        // Ancienne clé (chemin complet) : reprise une fois.
+        let old = "ecransInverses.\(game.id)"
+        guard defaults.object(forKey: old) != nil else { return false }
+        let swapped = defaults.bool(forKey: old)
+        defaults.set(swapped, forKey: swapKey(for: game))
+        defaults.removeObject(forKey: old)
+        return swapped
+    }
 
     var body: some View {
         GeometryReader { geometry in
-            let bounds = CGRect(origin: .zero, size: geometry.size)
-            let landscape = geometry.size.width > geometry.size.height
-            let layout = ControlLayout.make(scheme: game.system.controls, aspect: session.aspectRatio,
-                                            bounds: bounds, safe: Self.safeAreaInsets(),
-                                            controllerConnected: gamepad.isConnected,
-                                            hideTouchControls: gamepad.isActive,
-                                            dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
-                                            fillScreen: game.system.controls.canFillScreen && fillScreen)
-            ZStack {
-                Color.black
-
-                ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
-                    GameScreen(frameBuffer: session.frameBuffer, source: screen.source)
-                        .frame(width: screen.frame.width, height: screen.frame.height)
-                        .position(x: screen.frame.midX, y: screen.frame.midY)
-                }
-
-                TouchControls(layout: layout, scheme: game.system.controls, session: session, onMenu: openMenu,
-                              onTouchDown: { gamepad.deactivate() })
-
-                if session.state == .loading {
-                    ProgressView()
-                        .tint(.white)
-                        .scaleEffect(1.4)
-                }
-
-                if showingMenu {
-                    PauseMenu(session: session,
-                              compact: landscape,
-                              onResume: closeMenu,
-                              onReset: { confirmingReset = true },
-                              onSwapScreens: game.system.controls.usesTouchScreen ? swapScreens : nil,
-                              touchSizeLabel: game.system.controls.usesTouchScreen && landscape ? touchSize.label : nil,
-                              onTouchSize: nextTouchSize,
-                              imageSizeLabel: game.system.controls.canFillScreen && landscape
-                                  ? (fillScreen ? "Plein écran" : "Réduite") : nil,
-                              onImageSize: toggleFillScreen,
-                              onQuit: quit)
-                    .transition(.opacity)
-                }
-
-                if let toast = session.toast {
-                    ToastView(text: toast)
-                        .position(x: bounds.midX, y: max(layout.gameRect.minY, 20) + 34)
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: showingMenu)
-            .animation(.easeInOut(duration: 0.2), value: session.toast)
+            stage(size: geometry.size)
         }
         .ignoresSafeArea()
         .statusBarHidden()
@@ -109,6 +76,70 @@ struct EmulatorView: View {
         } message: {
             Text(failureMessage ?? "")
         }
+    }
+
+    /// L'écran de jeu pour une taille donnée : images du jeu, boutons, menu pause et messages.
+    @ViewBuilder
+    private func stage(size: CGSize) -> some View {
+        let bounds = CGRect(origin: .zero, size: size)
+        let landscape = size.width > size.height
+        let layout = makeLayout(bounds: bounds)
+        ZStack {
+            Color.black
+            screens(layout)
+            TouchControls(layout: layout, scheme: game.system.controls, session: session, onMenu: openMenu,
+                          onTouchDown: { gamepad.deactivate() })
+            if session.state == .loading {
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(1.4)
+            }
+            if showingMenu {
+                pauseMenu(landscape: landscape)
+                    .transition(.opacity)
+            }
+            if let toast = session.toast {
+                ToastView(text: toast)
+                    .position(x: bounds.midX, y: max(layout.gameRect.minY, 20) + 34)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showingMenu)
+        .animation(.easeInOut(duration: 0.2), value: session.toast)
+    }
+
+    /// Place des écrans et des boutons selon l'orientation, la manette et les réglages.
+    private func makeLayout(bounds: CGRect) -> ControlLayout {
+        let controls = game.system.controls
+        return ControlLayout.make(scheme: controls, aspect: session.aspectRatio,
+                                  bounds: bounds, safe: Self.safeAreaInsets(),
+                                  controllerConnected: gamepad.isConnected,
+                                  hideTouchControls: gamepad.isActive,
+                                  dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
+                                  fillScreen: controls.canFillScreen && fillScreen)
+    }
+
+    /// Les images du jeu (deux pour la DS, une pour les autres consoles).
+    private func screens(_ layout: ControlLayout) -> some View {
+        ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
+            GameScreen(frameBuffer: session.frameBuffer, source: screen.source)
+                .frame(width: screen.frame.width, height: screen.frame.height)
+                .position(x: screen.frame.midX, y: screen.frame.midY)
+        }
+    }
+
+    private func pauseMenu(landscape: Bool) -> some View {
+        let controls = game.system.controls
+        let swap: (() -> Void)? = controls.usesTouchScreen ? { swapScreens() } : nil
+        return PauseMenu(session: session,
+                         compact: landscape,
+                         onResume: { closeMenu() },
+                         onReset: { confirmingReset = true },
+                         onSwapScreens: swap,
+                         touchSizeLabel: controls.usesTouchScreen && landscape ? touchSize.label : nil,
+                         onTouchSize: { nextTouchSize() },
+                         imageSizeLabel: controls.canFillScreen && landscape ? (fillScreen ? "Plein écran" : "Réduite") : nil,
+                         onImageSize: { toggleFillScreen() },
+                         onQuit: { quit() })
     }
 
     private var failureMessage: String? {

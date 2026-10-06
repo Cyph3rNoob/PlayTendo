@@ -87,7 +87,9 @@ struct LibraryView: View {
             Button("Supprimer", role: .destructive) { library.delete(game) }
             Button("Annuler", role: .cancel) {}
         } message: { game in
-            Text("« \(metadata.display(for: game).title) » sera supprimé de l'iPhone. Ses sauvegardes sont conservées.")
+            let extra = GameLibrary.files(of: game).count - 1
+            let companions = extra == 1 ? " avec son fichier associé" : extra > 1 ? " avec ses \(extra) fichiers associés" : ""
+            Text("« \(metadata.display(for: game).title) » sera supprimé de l'iPhone\(companions). Ses sauvegardes sont conservées.")
         }
         .overlay(alignment: .bottom) {
             if let message = library.message {
@@ -390,7 +392,7 @@ private struct CoverArt: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .task(id: "\(game.key)#\(metadata.coverRevision)") {
+        .task(id: "\(game.key)#\(metadata.coverRevision(for: game))") {
             guard let url = metadata.coverFile(for: game) else {
                 cover = nil
                 return
@@ -500,7 +502,7 @@ private struct ContinueCard: View {
         .overlay(Chamfer(cut: 14).stroke(LinearGradient(colors: [Neon.magenta, Neon.cyan.opacity(0.4)],
                                                         startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
         .shadow(color: Neon.magenta.opacity(0.3), radius: 12)
-        .task(id: "\(game.key)#\(metadata.coverRevision)") { await load() }
+        .task(id: "\(game.key)#\(metadata.coverRevision(for: game))") { await load() }
         .onReceive(NotificationCenter.default.publisher(for: .thumbnailUpdated)) { note in
             if note.object as? String == game.id {
                 CoverImages.forget(Paths.thumbnailFile(for: game))

@@ -125,7 +125,8 @@ static os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
 static PTJITBlock gBlocks[PT_JIT_MAX_BLOCKS];
 static int gBlockCount;
 
-static void PTJITSetError(char *error, size_t errorSize, NSString *message) {
+static void PTJITSetError(char *error, size_t errorSize, NSString *_Nullable message) {
+    if (!message) message = @"erreur inconnue.";
     PTLogLine([@"JIT : " stringByAppendingString:message]);
     if (error && errorSize) strlcpy(error, message.UTF8String, errorSize);
 }

@@ -50,7 +50,6 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 @property (nonatomic, copy, nullable) PTAudioHandler audioHandler;
 @property (nonatomic, copy, nullable) PTHardwareVideoHandler hardwareVideoHandler;
 /// Vrai si le moteur dessine en 3D avec OpenGL ES.
-@property (nonatomic, readonly) BOOL usesHardwareRendering;
 /// Le moteur peut se servir de la réserve JIT de l'app (à régler avant le chargement du jeu).
 @property (nonatomic) BOOL allowsJIT;
 
@@ -80,6 +79,7 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 - (void)restoreSaveRAM:(NSData *)data;
 
 /// Mémoire vive de la console émulée (débogage, codes de triche).
+/// Mémoire vive de la console (utilisée par le banc d'essai Mac, scripts/test/harness.m).
 - (nullable NSData *)systemRAM;
 
 /// Jeux sur plusieurs disques (PlayStation).
@@ -108,6 +108,5 @@ void PTAudioRingDestroy(PTAudioRing *ring);
 size_t PTAudioRingWrite(PTAudioRing *ring, const int16_t *interleaved, size_t frames);
 size_t PTAudioRingRead(PTAudioRing *ring, float *left, float *right, size_t frames);
 size_t PTAudioRingFill(PTAudioRing *ring);
-size_t PTAudioRingCapacity(PTAudioRing *ring);
 
 NS_ASSUME_NONNULL_END

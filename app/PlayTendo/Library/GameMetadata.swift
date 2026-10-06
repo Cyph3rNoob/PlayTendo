@@ -15,8 +15,8 @@ final class GameMetadata: ObservableObject {
     }
 
     @Published private(set) var infos: [String: Info] = [:]
-    /// Change à chaque nouvelle jaquette, pour redessiner les cartes.
-    @Published private(set) var coverRevision = 0
+    /// Change quand la jaquette d'un jeu arrive (clé du jeu → compteur) : seule sa carte la recharge.
+    @Published private(set) var coverRevisions: [String: Int] = [:]
     @Published private(set) var lastPlayed: [String: Double] = [:]
 
     private var running = false
@@ -37,6 +37,8 @@ final class GameMetadata: ObservableObject {
     // MARK: Lecture
 
     func officialName(for game: Game) -> String? { infos[game.key]?.name }
+
+    func coverRevision(for game: Game) -> Int { coverRevisions[game.key] ?? 0 }
 
     func display(for game: Game) -> GameDisplay { GameDisplay(game: game, officialName: officialName(for: game)) }
 
@@ -72,7 +74,7 @@ final class GameMetadata: ObservableObject {
             CoverImages.forget(file)
         }
         infos[game.key]?.coverMissing = nil
-        coverRevision += 1
+        coverRevisions[game.key, default: 0] += 1
         update([game], force: true)
     }
 
@@ -147,7 +149,12 @@ final class GameMetadata: ObservableObject {
             }
             for (key, result) in results {
                 switch result {
-                case .saved: coverRevision += 1
+                case .saved:
+                    // Tous les fichiers du même jeu (même nom officiel) profitent de la jaquette.
+                    let name = infos[key]?.name
+                    for game in games where infos[game.key]?.name == name {
+                        coverRevisions[game.key, default: 0] += 1
+                    }
                 case .missing: infos[key]?.coverMissing = now
                 case .offline: break                          // on réessaiera au prochain lancement
                 }

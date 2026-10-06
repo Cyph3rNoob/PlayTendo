@@ -194,20 +194,6 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var colors: [Color] {
-        switch self {
-        case .nes: [Color(red: 0.78, green: 0.13, blue: 0.16), Color(red: 0.42, green: 0.06, blue: 0.10)]
-        case .snes: [Color(red: 0.42, green: 0.33, blue: 0.74), Color(red: 0.20, green: 0.14, blue: 0.42)]
-        case .n64: [Color(red: 0.05, green: 0.55, blue: 0.30), Color(red: 0.02, green: 0.22, blue: 0.13)]
-        case .gb: [Color(red: 0.49, green: 0.60, blue: 0.16), Color(red: 0.19, green: 0.29, blue: 0.10)]
-        case .gbc: [Color(red: 0.55, green: 0.27, blue: 0.80), Color(red: 0.86, green: 0.25, blue: 0.47)]
-        case .gba: [Color(red: 0.27, green: 0.31, blue: 0.75), Color(red: 0.11, green: 0.12, blue: 0.40)]
-        case .nds: [Color(red: 0.38, green: 0.45, blue: 0.55), Color(red: 0.15, green: 0.18, blue: 0.24)]
-        case .psx: [Color(red: 0.00, green: 0.22, blue: 0.57), Color(red: 0.05, green: 0.07, blue: 0.20)]
-        case .psp: [Color(red: 0.32, green: 0.34, blue: 0.40), Color(red: 0.07, green: 0.08, blue: 0.10)]
-        }
-    }
-
     /// Ordre d'affichage dans la bibliothèque.
     static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gb, .gbc, .gba, .nds, .psx, .psp]
 

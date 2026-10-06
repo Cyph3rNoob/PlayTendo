@@ -10,7 +10,13 @@ enum TouchInput: Hashable {
 /// Calque des boutons tactiles. Gère le multi-touch (plusieurs boutons à la fois),
 /// le glissement d'un bouton à l'autre, le stick analogique et, pour la DS, l'écran tactile.
 final class TouchControlsView: UIView {
-    var layout = ControlLayout() { didSet { if layout != oldValue { setNeedsDisplay() } } }
+    var layout = ControlLayout() {
+        didSet {
+            guard layout != oldValue else { return }
+            setNeedsDisplay()
+            updateKnob()
+        }
+    }
     var scheme: ControlScheme = .nes { didSet { setNeedsDisplay() } }
     var onButton: ((PTButton, Bool) -> Void)?
     /// Stick analogique (0 = gauche, 1 = droit) ; x et y de -1 à 1, y vers le bas.
@@ -34,6 +40,8 @@ final class TouchControlsView: UIView {
     private var cStick = CGPoint.zero
     private var menuHighlighted = false
     private let haptics = UIImpactFeedbackGenerator(style: .light)
+    /// Tête du stick : un calque à part, déplacé seul quand le doigt bouge (sans redessiner les boutons).
+    private let knobLayer = CAShapeLayer()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -42,6 +50,9 @@ final class TouchControlsView: UIView {
         backgroundColor = .clear
         contentMode = .redraw
         haptics.prepare()
+        knobLayer.lineWidth = 1.5
+        knobLayer.isHidden = true
+        layer.addSublayer(knobLayer)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -129,14 +140,6 @@ final class TouchControlsView: UIView {
         update()
     }
 
-    /// Relâche tout (changement d'orientation, mise en pause…).
-    func releaseAll() {
-        touches.removeAll()
-        update()
-        onPointer?(.zero, false)
-        if stickOffset != .zero { setStick(.zero) }
-    }
-
     /// Le doigt garde le stick même s'il sort du cercle ; la course est limitée au bord.
     private func moveStick(to point: CGPoint) {
         guard let stick = layout.controls.first(where: { $0.element == .stick }) else { return }
@@ -155,7 +158,27 @@ final class TouchControlsView: UIView {
         guard offset != stickOffset else { return }
         stickOffset = offset
         onAnalog?(0, offset.x, offset.y)
-        setNeedsDisplay()
+        updateKnob()
+    }
+
+    /// Place la tête du stick selon la position du doigt (cachée s'il n'y a pas de stick à l'écran).
+    private func updateKnob() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        guard let stick = layout.controls.first(where: { $0.element == .stick }) else {
+            knobLayer.isHidden = true
+            return
+        }
+        let frame = stick.frame
+        let travel = frame.width * Self.stickTravel
+        let radius = frame.width * 0.2
+        knobLayer.isHidden = false
+        knobLayer.bounds = CGRect(x: 0, y: 0, width: radius * 2, height: radius * 2)
+        knobLayer.path = UIBezierPath(ovalIn: knobLayer.bounds).cgPath
+        knobLayer.position = CGPoint(x: frame.midX + stickOffset.x * travel, y: frame.midY + stickOffset.y * travel)
+        knobLayer.fillColor = (stickOffset == .zero ? UIColor(white: 0.35, alpha: 0.75) : fillPressed).cgColor
+        knobLayer.strokeColor = stroke.cgColor
     }
 
     /// Distance (en part de la largeur du stick) entre le centre et la position extrême.
@@ -380,7 +403,7 @@ final class TouchControlsView: UIView {
         arrow.fill()
     }
 
-    /// Socle rond et tête du stick, déplacée selon le doigt.
+    /// Socle rond du stick (la tête est un calque à part, voir `updateKnob`).
     private func drawStick(_ frame: CGRect) {
         let base = UIBezierPath(ovalIn: frame.insetBy(dx: frame.width * 0.04, dy: frame.width * 0.04))
         fill.setFill()
@@ -388,17 +411,6 @@ final class TouchControlsView: UIView {
         base.lineWidth = 1.5
         stroke.setStroke()
         base.stroke()
-
-        let travel = frame.width * Self.stickTravel
-        let knobRadius = frame.width * 0.2
-        let center = CGPoint(x: frame.midX + stickOffset.x * travel, y: frame.midY + stickOffset.y * travel)
-        let knob = UIBezierPath(ovalIn: CGRect(x: center.x - knobRadius, y: center.y - knobRadius,
-                                               width: knobRadius * 2, height: knobRadius * 2))
-        (stickOffset == .zero ? UIColor(white: 0.35, alpha: 0.75) : fillPressed).setFill()
-        knob.fill()
-        knob.lineWidth = 1.5
-        stroke.setStroke()
-        knob.stroke()
     }
 
     private func drawPlayStationSymbol(_ button: PTButton, in frame: CGRect) {

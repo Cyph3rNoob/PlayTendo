@@ -34,12 +34,7 @@ final class GameLibrary: ObservableObject {
         // Les .cue listés dans un .m3u ne sont pas affichés séparément.
         var hidden = Set<String>()
         for playlist in files where playlist.pathExtension.lowercased() == "m3u" {
-            guard let text = try? String(contentsOf: playlist, encoding: .utf8) else { continue }
-            for line in text.components(separatedBy: .newlines) {
-                let entry = line.trimmingCharacters(in: .whitespaces)
-                guard !entry.isEmpty, !entry.hasPrefix("#") else { continue }
-                hidden.insert(playlist.deletingLastPathComponent().appendingPathComponent(entry).standardizedFileURL.path)
-            }
+            for entry in referencedFiles(of: playlist) { hidden.insert(entry.path) }
         }
 
         return files.compactMap { url -> Game? in
@@ -138,8 +133,67 @@ final class GameLibrary: ObservableObject {
 
     // MARK: Suppression
 
+    /// Supprime le jeu avec ses fichiers associés (pistes .bin d'un .cue, disques d'un .m3u).
+    /// Les sauvegardes sont conservées.
     func delete(_ game: Game) {
-        try? FileManager.default.removeItem(at: game.url)
+        for file in Self.files(of: game) {
+            try? FileManager.default.removeItem(at: file)
+        }
         games.removeAll { $0.id == game.id }
+    }
+
+    /// Le fichier du jeu suivi des fichiers qu'il référence, à condition qu'ils soient dans Jeux et
+    /// qu'aucun autre jeu du même dossier ne s'en serve.
+    nonisolated static func files(of game: Game) -> [URL] {
+        let main = game.url.standardizedFileURL
+        var result = [main]
+        var queue = referencedFiles(of: main)
+        while let file = queue.first, result.count < 64 {
+            queue.removeFirst()
+            guard !result.contains(file) else { continue }
+            result.append(file)
+            queue += referencedFiles(of: file)
+        }
+        let root = Paths.games.resolvingSymlinksInPath().path + "/"
+        let manager = FileManager.default
+        let usedElsewhere = otherReferences(near: main, excluding: Set(result))
+        return [main] + result.dropFirst().filter { file in
+            file.resolvingSymlinksInPath().path.hasPrefix(root) && manager.fileExists(atPath: file.path)
+                && !usedElsewhere.contains(file)
+        }
+    }
+
+    /// Fichiers cités par un .cue (« FILE "piste.bin" BINARY ») ou un .m3u (un disque par ligne).
+    nonisolated static func referencedFiles(of url: URL) -> [URL] {
+        let ext = url.pathExtension.lowercased()
+        guard ext == "cue" || ext == "m3u",
+              let text = (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, encoding: .isoLatin1))
+        else { return [] }
+        let folder = url.deletingLastPathComponent()
+        var names: [String] = []
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if ext == "m3u" {
+                if !line.isEmpty && !line.hasPrefix("#") { names.append(line) }
+            } else if line.uppercased().hasPrefix("FILE ") {
+                if let open = line.firstIndex(of: "\""), let close = line.lastIndex(of: "\""), open < close {
+                    names.append(String(line[line.index(after: open)..<close]))
+                } else if let name = line.split(separator: " ").dropFirst().first {
+                    names.append(String(name))
+                }
+            }
+        }
+        return names.map { folder.appendingPathComponent($0).standardizedFileURL }
+    }
+
+    /// Fichiers cités par les autres .cue et .m3u du dossier (à ne pas supprimer).
+    nonisolated private static func otherReferences(near url: URL, excluding: Set<URL>) -> Set<URL> {
+        let folder = url.deletingLastPathComponent()
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return [] }
+        var used = Set<URL>()
+        for entry in entries.map(\.standardizedFileURL) where !excluding.contains(entry) {
+            used.formUnion(referencedFiles(of: entry))
+        }
+        return used
     }
 }

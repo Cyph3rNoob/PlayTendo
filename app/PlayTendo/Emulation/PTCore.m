@@ -114,10 +114,6 @@ size_t PTAudioRingFill(PTAudioRing *ring) {
     return write - read;
 }
 
-size_t PTAudioRingCapacity(PTAudioRing *ring) {
-    return ring->capacity;
-}
-
 #pragma mark - Moteur
 
 typedef struct {
@@ -471,10 +467,6 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     PTLogLine([NSString stringWithFormat:@"Jeu chargé : %u×%u, %.3f images/s, son %.0f Hz",
                av.geometry.base_width, av.geometry.base_height, _framesPerSecond, _sampleRate]);
     return YES;
-}
-
-- (BOOL)usesHardwareRendering {
-    return _gl != nil;
 }
 
 - (void)applyGeometry:(const struct retro_game_geometry *)geometry {

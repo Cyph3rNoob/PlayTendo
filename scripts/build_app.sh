@@ -9,6 +9,11 @@ BUILD="$ROOT/build/xcode"
 LOG="$ROOT/build/logs/app.log"
 mkdir -p "$ROOT/build/logs"
 
+APP="$BUILD/Release-iphoneos/PlayTendo.app"
+# Repart d'une app vide : Xcode ne retire pas les fichiers d'une ancienne compilation (une extension
+# supprimée du projet restait dans PlugIns et se retrouvait dans l'IPA).
+rm -rf "$APP"
+
 echo ">>> Compilation de l'app…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target PlayTendo -configuration Release -sdk iphoneos \
     SYMROOT="$BUILD" OBJROOT="$BUILD/obj" \
@@ -20,7 +25,6 @@ if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target PlayTendo -conf
 fi
 grep -E "warning:" "$LOG" | grep "/app/PlayTendo/" | sort -u | head -20 || true
 
-APP="$BUILD/Release-iphoneos/PlayTendo.app"
 echo ">>> Fabrication du fichier d'installation…"
 rm -rf "$ROOT/build/ipa"
 mkdir -p "$ROOT/build/ipa/Payload"

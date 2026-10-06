@@ -45,6 +45,9 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     private var region = CGRect(x: 0, y: 0, width: 1, height: 1)
     private var flipped = false
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
+    /// Ce qui a été affiché la dernière fois : sans changement, inutile de redessiner.
+    private var drawnSize = CGSize.zero
+    private var drawnSource = CGRect.null
 
     init(frameBuffer: FrameBuffer) {
         self.frameBuffer = frameBuffer
@@ -71,7 +74,10 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        uploadLatestFrame()
+        let updated = uploadLatestFrame()
+        // Rien de nouveau (jeu en pause, même image, jeu à 30 images/s) : l'écran garde l'image déjà
+        // affichée, sans réveiller la puce graphique.
+        guard updated || view.drawableSize != drawnSize || source != drawnSource else { return }
         guard let queue, let pipeline, let sampler,
               let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
@@ -99,9 +105,13 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         encoder.endEncoding()
         commands.present(drawable)
         commands.commit()
+        drawnSize = view.drawableSize
+        drawnSource = source
     }
 
-    private func uploadLatestFrame() {
+    /// Prépare la dernière image du jeu si elle est nouvelle. Renvoie vrai dans ce cas.
+    private func uploadLatestFrame() -> Bool {
+        var updated = false
         frameBuffer.withFrame(newerThan: lastSequence) { frame in
             switch frame.content {
             case .software(let pixels, let pitch):
@@ -130,7 +140,9 @@ final class GameRenderer: NSObject, MTKViewDelegate {
                 flipped = isFlipped
             }
             lastSequence = frame.sequence
+            updated = true
         }
+        return updated
     }
 
     private func makeTexture(width: Int, height: Int) {

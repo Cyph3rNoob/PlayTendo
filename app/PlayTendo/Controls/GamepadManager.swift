@@ -14,6 +14,8 @@ final class GamepadManager: ObservableObject {
     var stickMovesDPad = true
 
     private var observers: [NSObjectProtocol] = []
+    /// Boutons enfoncés en ce moment (hors directions), à relâcher si la manette disparaît.
+    private var heldButtons: Set<PTButton> = []
     private var dpadState: Set<PTButton> = []
     private var stickState: Set<PTButton> = []
     private var directions: Set<PTButton> = []
@@ -24,6 +26,8 @@ final class GamepadManager: ObservableObject {
             self?.refresh()
         })
         observers.append(center.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { [weak self] _ in
+            // Sans cela, un bouton tenu au moment de la déconnexion resterait enfoncé dans le jeu.
+            self?.releaseAll()
             self?.refresh()
         })
         refresh()
@@ -62,8 +66,14 @@ final class GamepadManager: ObservableObject {
     private func bind(_ pad: GCExtendedGamepad) {
         func map(_ input: GCControllerButtonInput?, _ button: PTButton) {
             input?.pressedChangedHandler = { [weak self] _, _, pressed in
-                if pressed { self?.markActive() }
-                self?.onButton?(button, pressed)
+                guard let self else { return }
+                if pressed {
+                    markActive()
+                    heldButtons.insert(button)
+                } else {
+                    heldButtons.remove(button)
+                }
+                onButton?(button, pressed)
             }
         }
         map(pad.buttonA, .b)
@@ -101,6 +111,17 @@ final class GamepadManager: ObservableObject {
                 if pressed { self?.onMenu?() }
             }
         }
+    }
+
+    /// Relâche tout ce que la manette tenait : boutons, directions et sticks.
+    private func releaseAll() {
+        for button in heldButtons { onButton?(button, false) }
+        heldButtons.removeAll()
+        dpadState.removeAll()
+        stickState.removeAll()
+        updateDirections()
+        onAnalog?(0, 0, 0)
+        onAnalog?(1, 0, 0)
     }
 
     private static func directions(x: Float, y: Float, threshold: Float) -> Set<PTButton> {

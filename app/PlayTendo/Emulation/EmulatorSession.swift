@@ -3,7 +3,11 @@ import UIKit
 
 /// Fait tourner un jeu : charge le moteur, cadence les images, le son et gère les sauvegardes.
 /// Le moteur vit sur son propre thread ; l'interface lui envoie des commandes.
-final class EmulatorSession: ObservableObject {
+///
+/// Partage entre threads (d'où `@unchecked Sendable`) : les propriétés publiées ne changent que sur le
+/// thread principal ; commandes, pause et réglages passent par `condition` ; le moteur par `coreLock` ;
+/// le reste (`audio`, `fastForward`, `lastSavedRAM`) n'est touché que par le thread d'émulation.
+final class EmulatorSession: ObservableObject, @unchecked Sendable {
     enum State: Equatable {
         case loading
         case running
@@ -28,7 +32,14 @@ final class EmulatorSession: ObservableObject {
     @Published var toast: String?
 
     private let ring: OpaquePointer
-    private var core: PTCore?
+    /// Moteur en cours : écrit par le thread d'émulation, lu aussi par les entrées (écran, manette)
+    /// depuis le thread principal, d'où le verrou.
+    private let coreLock = NSLock()
+    private var runningCore: PTCore?
+    private var core: PTCore? {
+        get { coreLock.withLock { runningCore } }
+        set { coreLock.withLock { runningCore = newValue } }
+    }
     private var audio: AudioOutput?
     private var thread: Thread?
 
@@ -212,7 +223,7 @@ final class EmulatorSession: ObservableObject {
     }
 
     /// Message bref affiché par-dessus le jeu.
-    func showToast(_ text: String) {
+    private func showToast(_ text: String) {
         DispatchQueue.main.async {
             self.toast = text
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
@@ -288,9 +299,10 @@ final class EmulatorSession: ObservableObject {
         self.audio = audio
 
         var currentAspect = core.aspectRatio
+        let initialAspect = CGFloat(currentAspect)
         let disks = core.diskCount > 1 ? DiskInfo(current: Int(core.currentDiskIndex) + 1, count: Int(core.diskCount)) : nil
         DispatchQueue.main.async {
-            self.aspectRatio = CGFloat(currentAspect)
+            self.aspectRatio = initialAspect
             self.diskInfo = disks
             self.state = .running
         }
