@@ -86,8 +86,8 @@ struct ControlLayout: Equatable {
             && lhs.controls.map(\.frame) == rhs.controls.map(\.frame)
     }
 
-    /// `controllerConnected` : une manette est branchée — la DS garde alors ses grands écrans, et les
-    /// boutons tactiles, s'ils réapparaissent, se superposent aux écrans au lieu de les réduire.
+    /// `controllerConnected` : une manette est branchée — en portrait, la DS garde alors ses grands écrans
+    /// (en paysage, ils sont toujours grands), et les boutons tactiles se superposent aux écrans.
     /// `hideTouchControls` : la manette est en cours d'utilisation, seuls les boutons disparaissent.
     /// `fillScreen` (PSP en paysage) : l'image prend toute la hauteur de l'écran et les boutons
     /// passent par-dessus.
@@ -169,13 +169,10 @@ struct ControlLayout: Equatable {
         } else {
             cluster = max(110, min(dualScreen || scheme == .psp ? 150 : 168, usable.height * 0.42))
             if dualScreen {
-                // Sans manette, les boutons ne doivent jamais recouvrir l'écran tactile : on garde
-                // de chaque côté la place d'un bloc de boutons entier. Avec une manette branchée,
-                // les écrans prennent toute la largeur et les boutons passent par-dessus.
-                let panel = controllerConnected ? 0 : cluster + 16
-                let middle = CGRect(x: usable.minX + panel, y: usable.minY,
-                                    width: max(0, usable.width - 2 * panel), height: usable.height)
-                layout.placeDualScreens(in: middle, portrait: false, maxStackHeight: 0, centered: true, dual: dual)
+                // Grands écrans sur toute la largeur, avec ou sans manette (choix de l'utilisateur,
+                // 2026-10-06) : les boutons tactiles passent par-dessus, en semi-transparent, et un
+                // bouton visible a priorité sur l'écran tactile qu'il recouvre.
+                layout.placeDualScreens(in: usable, portrait: false, maxStackHeight: 0, centered: true, dual: dual)
             } else {
                 var height = fillScreen ? bounds.height : usable.height
                 var width = height * aspect
