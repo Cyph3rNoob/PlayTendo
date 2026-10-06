@@ -54,6 +54,15 @@ final class GamepadManager: ObservableObject {
     }
 
     private func refresh() {
+        #if DEBUG
+        // Tests dans le simulateur : il annonce toujours une manette virtuelle « Gamepad ». Un fichier
+        // Documents/PTSansManette la fait ignorer, pour voir l'app comme sur un iPhone sans manette.
+        if FileManager.default.fileExists(atPath: Paths.documents.appendingPathComponent("PTSansManette").path) {
+            isConnected = false
+            isActive = false
+            return
+        }
+        #endif
         let controller = GCController.controllers().first { $0.extendedGamepad != nil }
         isConnected = controller != nil
         if !isConnected { isActive = false }
