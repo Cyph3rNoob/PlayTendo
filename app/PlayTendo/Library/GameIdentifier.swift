@@ -20,6 +20,7 @@ enum GameIdentifier {
         case .psx: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
         case .psp: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
         case .ps2: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
+        case .gameCube, .wii: return GameKeys(serials: nintendoDiscKeys(url))
         default: return cartridgeKeys(url, system: system)
         }
     }
@@ -181,6 +182,38 @@ enum GameIdentifier {
 
     static func cleanSerial(_ serial: String) -> String {
         String(serial.uppercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) && $0.isASCII })
+    }
+
+    // MARK: Disques GameCube / Wii
+
+    /// Les 32 premiers octets d'un disque GameCube ou Wii (identifiant « GZLP01 », version en octet 7, nombres
+    /// magiques), là où chaque format les range : au début (.iso, .gcm), recopiés dans l'en-tête (.rvz et .wia :
+    /// 0x58 ; .wbfs : 0x200) ou après la table des blocs (.ciso : 0x8000). Nil si ce n'est pas un disque Nintendo
+    /// (les .gcz, compressés dès le début, n'en donnent pas).
+    static func nintendoDiscHeader(_ url: URL) -> Data? {
+        let offset: UInt64
+        switch url.pathExtension.lowercased() {
+        case "rvz", "wia":
+            guard let magic = read(url, offset: 0, count: 4),
+                  magic == Data("RVZ\u{1}".utf8) || magic == Data("WIA\u{1}".utf8) else { return nil }
+            offset = 0x58
+        case "wbfs": offset = 0x200
+        case "ciso": offset = 0x8000
+        default: offset = 0
+        }
+        guard let header = read(url, offset: offset, count: 0x20) else { return nil }
+        return isWiiDisc(header) || header.subdata(in: 0x1C..<0x20) == Data([0xC2, 0x33, 0x9F, 0x3D]) ? header : nil
+    }
+
+    static func isWiiDisc(_ header: Data) -> Bool {
+        header.subdata(in: 0x18..<0x1C) == Data([0x5D, 0x1C, 0x9E, 0xA3])
+    }
+
+    /// Code du jeu (« GZLP ») : celui de la base Redump. Une révision (« (Rev 1) ») est cherchée d'abord.
+    private static func nintendoDiscKeys(_ url: URL) -> [String] {
+        guard let header = nintendoDiscHeader(url), let code = ascii(header.subdata(in: 0..<4)) else { return [] }
+        let version = header[7]
+        return version > 0 ? ["\(code)R\(version)", code] : [code]
     }
 
     private static func ascii(_ data: Data) -> String? {

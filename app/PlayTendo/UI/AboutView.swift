@@ -20,6 +20,7 @@ struct AboutView: View {
         Engine(name: "PCSX-ReARMed", version: "r26", consoles: "PlayStation", license: "GPL-2.0"),
         Engine(name: "PPSSPP", version: "1.20.4", consoles: "PlayStation Portable", license: "GPL-2.0+"),
         Engine(name: "ARMSX2 (PCSX2)", version: "iOS 2.6.0", consoles: "PlayStation 2", license: "GPL-3.0"),
+        Engine(name: "DolphiniOS (Dolphin)", version: "5.0.0 bêta 6", consoles: "GameCube, Wii", license: "GPL-2.0+"),
     ]
 
     private var appVersion: String {

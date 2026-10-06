@@ -16,25 +16,30 @@ enum ControlScheme {
     case playStation
     case psp
     case playStation2
+    case gameCube
 
     var hasShoulders: Bool { ![.nes, .gameBoy].contains(self) }
     var hasSecondShoulders: Bool { self == .playStation || self == .playStation2 }
     var hasFourFaceButtons: Bool { [.snes, .nintendoDS, .playStation, .psp, .playStation2].contains(self) }
     var usesPlayStationSymbols: Bool { [.playStation, .psp, .playStation2].contains(self) }
     var usesTouchScreen: Bool { self == .nintendoDS }
-    /// Stick analogique virtuel (N64, PSP, PS2).
-    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2].contains(self) }
-    /// Second stick (droit) : PS2.
-    var hasRightStick: Bool { self == .playStation2 }
-    var hasSelect: Bool { self != .nintendo64 }
+    /// Stick analogique virtuel (N64, PSP, PS2, GameCube).
+    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube].contains(self) }
+    /// Second stick (droit) : PS2, stick C de la GameCube.
+    var hasRightStick: Bool { self == .playStation2 || self == .gameCube }
+    /// À gauche, le stick en haut et une petite croix dessous (N64, GameCube) ; sinon l'inverse.
+    var stickAboveDPad: Bool { self == .nintendo64 || self == .gameCube }
+    var hasSelect: Bool { self != .nintendo64 && self != .gameCube }
     /// N64 : gâchette Z et boutons C jaunes (envoyés au stick analogique droit).
     var isNintendo64: Bool { self == .nintendo64 }
+    /// GameCube (et Wii, avec la manette GameCube) : gros A vert, B rouge, X et Y, gâchettes L, R et Z.
+    var isGameCube: Bool { self == .gameCube }
     /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
-    var canFillScreen: Bool { self == .psp || self == .playStation2 }
+    var canFillScreen: Bool { [.psp, .playStation2, .gameCube].contains(self) }
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {
-    case nes, snes, n64, gb, gbc, gba, nds, psx, psp, ps2
+    case nes, snes, n64, gb, gbc, gba, nds, psx, psp, ps2, gameCube, wii
 
     var id: String { rawValue }
 
@@ -50,6 +55,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: "PlayStation"
         case .psp: "PlayStation Portable"
         case .ps2: "PlayStation 2"
+        case .gameCube: "GameCube"
+        case .wii: "Wii"
         }
     }
 
@@ -65,13 +72,16 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: "PS1"
         case .psp: "PSP"
         case .ps2: "PS2"
+        case .gameCube: "GC"
+        case .wii: "Wii"
         }
     }
 
     var brand: Brand { [.psx, .psp, .ps2].contains(self) ? .sony : .nintendo }
 
-    /// Extensions affichées dans la bibliothèque. Certaines servent à plusieurs consoles Sony (« .iso » :
-    /// PS1, PSP, PS2 ; « .chd » : PS1, PS2 ; « .cso » : PSP, PS2) : `detect(_:)` tranche en lisant le disque.
+    /// Extensions affichées dans la bibliothèque. Certaines servent à plusieurs consoles (« .iso » : PS1, PSP,
+    /// PS2, GameCube, Wii ; « .chd » : PS1, PS2 ; « .cso » : PSP, PS2 ; « .rvz »… : GameCube, Wii) :
+    /// `detect(_:)` tranche en lisant le disque.
     var extensions: Set<String> {
         switch self {
         case .nes: ["nes", "fds", "unf", "unif"]
@@ -84,6 +94,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: Self.psxExtensions
         case .psp: Self.pspExtensions
         case .ps2: ["iso", "chd", "cso"]
+        case .gameCube: ["iso", "gcm", "rvz", "wia", "ciso", "gcz"]
+        case .wii: ["iso", "wbfs", "rvz", "wia", "ciso", "gcz"]
         }
     }
 
@@ -107,6 +119,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: "pcsx_rearmed"
         case .psp: "ppsspp"
         case .ps2: "PS2Core"
+        case .gameCube, .wii: "DolphinCore"
         }
     }
 
@@ -120,6 +133,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: "PCSX-ReARMed"
         case .psp: "PPSSPP"
         case .ps2: "ARMSX2 (PCSX2)"
+        case .gameCube, .wii: "DolphiniOS (Dolphin)"
         }
     }
 
@@ -136,6 +150,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: "Sony - PlayStation"
         case .psp: "Sony - PlayStation Portable"
         case .ps2: "Sony - PlayStation 2"
+        case .gameCube: "Nintendo - GameCube"
+        case .wii: "Nintendo - Wii"
         }
     }
 
@@ -152,6 +168,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: "PS1"
         case .psp: "PSP"
         case .ps2: "PS2"
+        case .gameCube: "GameCube"
+        case .wii: "Wii"
         }
     }
 
@@ -166,6 +184,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: .playStation
         case .psp: .psp
         case .ps2: .playStation2
+        // Wii : la manette GameCube (port 1), que beaucoup de jeux Wii acceptent (Smash Bros. Brawl…).
+        case .gameCube, .wii: .gameCube
         }
     }
 
@@ -206,7 +226,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
     }
 
     /// Ordre d'affichage dans la bibliothèque.
-    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gb, .gbc, .gba, .nds, .psx, .psp, .ps2]
+    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .psx, .psp, .ps2]
 
     static func forExtension(_ ext: String) -> GameSystem? {
         let ext = ext.lowercased()
@@ -221,7 +241,9 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case "pbp":
             return pbpIsPlayStation1(url) ? .psx : .psp
         case "iso":
-            return isoSystem(url) ?? .psp
+            return isoSystem(url) ?? nintendoDiscSystem(url) ?? .psp
+        case "gcm", "rvz", "wia", "wbfs", "ciso", "gcz":
+            return nintendoDiscSystem(url)
         case "cso":
             return CSOReader(url: url).flatMap { volumeSystem(ISO9660(reader: $0)) } ?? .psp
         case "chd":
@@ -258,6 +280,18 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         guard systemID.hasPrefix("PLAYSTATION") else { return nil }
         guard let config = iso.file("SYSTEM.CNF") else { return .psx }
         return String(decoding: config, as: UTF8.self).uppercased().contains("BOOT2") ? .ps2 : .psx
+    }
+
+    /// Disque GameCube ou Wii, d'après les nombres magiques de son en-tête (ou le type d'un .gcz).
+    private static func nintendoDiscSystem(_ url: URL) -> GameSystem? {
+        if url.pathExtension.lowercased() == "gcz" {
+            // En-tête GCZ : 0xB10BC001 puis le type (0 GameCube, 1 Wii), petit-boutistes.
+            guard let header = GameIdentifier.read(url, offset: 0, count: 8),
+                  GameIdentifier.le32(header, 0) == 0xB10BC001 else { return nil }
+            return GameIdentifier.le32(header, 4) == 1 ? .wii : .gameCube
+        }
+        guard let header = GameIdentifier.nintendoDiscHeader(url) else { return nil }
+        return GameIdentifier.isWiiDisc(header) ? .wii : .gameCube
     }
 
     /// .chd : image de DVD (secteurs de 2048 octets) = PS2 ; image de CD (2352 + 96 octets) = PS1.

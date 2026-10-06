@@ -7,3 +7,5 @@ Captures/
 # Moteur PS2 (≈ 100 Mo) : recompilé par scripts/build_ps2.sh
 cores/ios/PS2Core.framework/
 cores/sim/PS2Core.framework/
+cores/ios/DolphinCore.framework/
+cores/sim/DolphinCore.framework/

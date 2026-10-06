@@ -7,7 +7,7 @@ enum ControlElement: Hashable {
     case small(PTButton)
     /// Stick analogique gauche (N64, PSP, PS2).
     case stick
-    /// Stick analogique droit (PS2), sous les boutons ✕ ○ □ △.
+    /// Stick analogique droit (PS2), sous les boutons ✕ ○ □ △ ; stick C jaune de la GameCube.
     case rightStick
     /// Bouton C jaune de la N64, transmis au moteur par le stick analogique droit.
     case cButton(CDirection)
@@ -103,17 +103,17 @@ struct ControlLayout: Equatable {
         let menuSize: CGFloat = 38
         let dualScreen = scheme.usesTouchScreen
 
-        let narrowShoulders = scheme.hasSecondShoulders || scheme.isNintendo64
+        let narrowShoulders = scheme.hasSecondShoulders || scheme.isNintendo64 || scheme.isGameCube
         let shoulderSize = CGSize(width: narrowShoulders ? 70 : 92, height: 38)
         let smallSize = CGSize(width: 78, height: 30)
         var cluster: CGFloat
         var dpadCenter: CGPoint
         var faceCenter: CGPoint
-        // Consoles à stick : deux commandes l'une sous l'autre à gauche. N64 : le stick, puis une
-        // petite croix ; PSP et PS2 : la croix, puis le stick. PS2 : de même à droite, les boutons puis le
-        // stick droit (comme sur la manette).
+        // Consoles à stick : deux commandes l'une sous l'autre à gauche. N64 et GameCube : le stick, puis une
+        // petite croix ; PSP et PS2 : la croix, puis le stick. PS2 et GameCube : de même à droite, les boutons
+        // puis le stick droit ou le stick C (comme sur la manette).
         let analog = scheme.hasAnalogStick
-        let secondaryRatio: CGFloat = scheme.isNintendo64 ? 0.55 : 0.72
+        let secondaryRatio: CGFloat = scheme.stickAboveDPad ? 0.55 : 0.72
         var secondaryCenter = CGPoint.zero
         var faceSize: CGFloat = 0
         var verticalFace = false
@@ -170,7 +170,7 @@ struct ControlLayout: Equatable {
                                                                y: bottomRow, width: smallSize.width, height: smallSize.height),
                                                  label: "START"))
         } else {
-            cluster = max(110, min(dualScreen || scheme == .psp || scheme == .playStation2 ? 150 : 168, usable.height * 0.42))
+            cluster = max(110, min(dualScreen || scheme.canFillScreen ? 150 : 168, usable.height * 0.42))
             if dualScreen {
                 // Grands écrans sur toute la largeur, avec ou sans manette (choix de l'utilisateur,
                 // 2026-10-06) : les boutons tactiles passent par-dessus, en semi-transparent, et un
@@ -206,7 +206,7 @@ struct ControlLayout: Equatable {
                 }
                 // Sous les gâchettes de gauche (L, et Z pour la N64), au-dessus de SELECT.
                 let gap: CGFloat = 8
-                let leftShoulderRows: CGFloat = narrowShoulders ? 2 : 1
+                let leftShoulderRows: CGFloat = scheme.hasSecondShoulders || scheme.isNintendo64 ? 2 : 1
                 let columnTop = usable.minY + 10 + leftShoulderRows * shoulderSize.height + (leftShoulderRows - 1) * 8 + 8
                 let columnBottom = usable.maxY - 6 - (scheme.hasSelect ? smallSize.height + 6 : 0)
                 cluster = max(90, min(cluster, (columnBottom - columnTop - gap) / (1 + secondaryRatio)))
@@ -254,7 +254,7 @@ struct ControlLayout: Equatable {
         }
         if analog {
             let secondarySize = cluster * secondaryRatio
-            let (primary, secondary): (ControlElement, ControlElement) = scheme.isNintendo64 ? (.stick, .dpad) : (.dpad, .stick)
+            let (primary, secondary): (ControlElement, ControlElement) = scheme.stickAboveDPad ? (.stick, .dpad) : (.dpad, .stick)
             layout.controls.append(PlacedControl(element: primary, frame: square(dpadCenter, cluster), label: ""))
             layout.controls.append(PlacedControl(element: secondary, frame: square(secondaryCenter, secondarySize), label: ""))
             if scheme.hasRightStick {
@@ -315,6 +315,21 @@ struct ControlLayout: Equatable {
     private mutating func addShoulders(scheme: ControlScheme, size: CGSize, top: CGFloat,
                                        left: CGFloat, right: CGFloat, stacked: Bool) {
         guard scheme.hasShoulders else { return }
+        if scheme.isGameCube {
+            // Gâchettes L et R (envoyées sur L2/R2, comme les gâchettes d'une manette), et Z à côté de R
+            // (sous R en paysage), envoyé sur R1.
+            controls.append(PlacedControl(element: .shoulder(.l2),
+                                          frame: CGRect(x: left, y: top, width: size.width, height: size.height),
+                                          label: "L"))
+            controls.append(PlacedControl(element: .shoulder(.r2),
+                                          frame: CGRect(x: right - size.width, y: top, width: size.width, height: size.height),
+                                          label: "R"))
+            let z = stacked
+                ? CGRect(x: right - size.width, y: top + size.height + 8, width: size.width, height: size.height)
+                : CGRect(x: right - 2 * size.width - 8, y: top, width: size.width, height: size.height)
+            controls.append(PlacedControl(element: .shoulder(.r), frame: z, label: "Z"))
+            return
+        }
         let ps = scheme.hasSecondShoulders
         controls.append(PlacedControl(element: .shoulder(.l),
                                       frame: CGRect(x: left, y: top, width: size.width, height: size.height),
@@ -349,7 +364,14 @@ struct ControlLayout: Equatable {
                                                         width: radius * 2, height: radius * 2),
                                           label: label))
         }
-        if scheme.isNintendo64 {
+        if scheme.isGameCube {
+            // Comme sur la manette : le gros A vert au centre, B en bas à gauche, X à droite, Y en haut. Sur le
+            // RetroPad (par position) : A = B (bas), B = Y (gauche), X = A (droite), Y = X (haut).
+            place(.b, 0.02, 0.06, size * 0.19, "A")
+            place(.y, -0.29, 0.27, size * 0.12, "B")
+            place(.a, 0.31, -0.08, size * 0.12, "X")
+            place(.x, -0.06, -0.29, size * 0.12, "Y")
+        } else if scheme.isNintendo64 {
             // Comme sur la manette : A (gros) en bas, B à sa gauche, les quatre boutons C en losange
             // en haut à droite. Sur le RetroPad, A N64 = B et B N64 = Y.
             if vertical {

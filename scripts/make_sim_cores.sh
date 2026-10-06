@@ -4,11 +4,12 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK_VERSION="$(xcrun --sdk iphonesimulator --show-sdk-version)"
-# PS2Core.framework n'est pas concerné : build_ps2.sh le compile directement pour le simulateur.
+# PS2Core et DolphinCore ne sont pas concernés : build_ps2.sh et build_dolphin.sh les compilent directement pour
+# le simulateur (avec des réglages propres au simulateur).
 mkdir -p "$ROOT/cores/sim"
 for fw in "$ROOT"/cores/ios/*.framework; do
   name="$(basename "$fw" .framework)"
-  [ "$name" = PS2Core ] && continue
+  [ "$name" = PS2Core ] || [ "$name" = DolphinCore ] && continue
   out="$ROOT/cores/sim/$name.framework"
   rm -rf "$out"
   mkdir -p "$out"

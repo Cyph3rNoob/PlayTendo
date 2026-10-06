@@ -57,6 +57,12 @@ enum Paths {
     static let ps2Engine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Systeme/PS2", isDirectory: true)
 
+    /// Dossier interne du moteur GameCube/Wii (réglages, journal `Logs/dolphin.log`, caches). Ses sauvegardes
+    /// sont dans Sauvegardes/GameCube (un fichier .gci par sauvegarde, par région) et Sauvegardes/Wii (mémoire
+    /// interne de la console).
+    static let dolphinEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Systeme/Dolphin", isDirectory: true)
+
     /// Dossier « sauvegardes » donné au moteur. Pour la PSP, c'est la carte mémoire entière : la
     /// console y range ses sauvegardes dans PSP/SAVEDATA, comme sur une vraie carte. (Un dossier
     /// nommé « PSP » faisait passer PPSSPP dans un mode de compatibilité qui crée les dossiers de
@@ -114,6 +120,7 @@ enum Paths {
       PlayStation .chd .pbp .m3u, ou .cue avec ses fichiers .bin
       PlayStation Portable .iso .cso .pbp
       PlayStation 2 .iso .chd .cso
+      GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)

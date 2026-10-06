@@ -3,8 +3,8 @@ import UIKit
 
 /// Fait tourner un jeu : charge le moteur, cadence les images, le son et gère les sauvegardes.
 /// Le moteur vit sur son propre thread ; l'interface lui envoie des commandes.
-/// La PS2 a son propre moteur (`PTPS2Engine`) qui cadence, dessine et joue le son lui-même : la session
-/// le pilote seulement (voir `runPS2`).
+/// La PS2 et la GameCube/Wii ont leur propre moteur (`ExternalEngine`) qui cadence, dessine et joue le son
+/// lui-même : la session le pilote seulement (voir `runExternal`).
 ///
 /// Partage entre threads (d'où `@unchecked Sendable`) : les propriétés publiées ne changent que sur le
 /// thread principal ; commandes, pause et réglages passent par `condition` ; le moteur par `coreLock` ;
@@ -32,8 +32,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var diskInfo: DiskInfo?
     @Published private(set) var isFastForwarding = false
     @Published var toast: String?
-    /// PS2 : vue Metal où le moteur dessine, placée par l'écran de jeu.
-    @Published private(set) var ps2View: UIView?
+    /// PS2, GameCube/Wii : vue Metal où le moteur dessine, placée par l'écran de jeu.
+    @Published private(set) var engineView: UIView?
 
     private let ring: OpaquePointer
     /// Moteur en cours : écrit par le thread d'émulation, lu aussi par les entrées (écran, manette)
@@ -46,8 +46,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
     private var audio: AudioOutput?
     private var thread: Thread?
-    /// Moteur PS2 : choisi au démarrage (thread principal), jamais changé ensuite.
-    private var ps2: PTPS2Engine?
+    /// Moteur autonome (PS2, GameCube/Wii) : choisi au démarrage (thread principal), jamais changé ensuite.
+    private var external: ExternalEngine?
 
     private let condition = NSCondition()
     private var pendingCommands: [() -> Void] = []
@@ -75,19 +75,21 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     func start() {
         guard thread == nil else { return }
-        var ps2: PTPS2Engine?
-        if game.system == .ps2 {
-            do {
-                ps2 = try Self.loadPS2Engine()
-            } catch {
-                fail(error.localizedDescription)
-                return
+        var external: ExternalEngine?
+        do {
+            switch game.system {
+            case .ps2: external = try Self.loadPS2Engine()
+            case .gameCube, .wii: external = try Self.loadDolphinEngine()
+            default: break
             }
-            self.ps2 = ps2
-            ps2View = ps2?.renderView
+        } catch {
+            fail(error.localizedDescription)
+            return
         }
+        self.external = external
+        engineView = external?.renderView
         let thread = Thread {
-            if let ps2 { self.runPS2(ps2) } else { self.run() }
+            if let external { self.runExternal(external) } else { self.run() }
         }
         thread.name = "PlayTendo émulation"
         thread.qualityOfService = .userInteractive
@@ -135,7 +137,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     func reset() {
         perform { [self] in
             core?.reset()
-            ps2?.reset()
+            external?.reset()
         }
     }
 
@@ -150,7 +152,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     /// PS2 : applique la résolution et le lissage choisis dans le menu pause (PS2Settings).
     func applyPS2Image() {
-        perform { [self] in Self.applyPS2Image(to: ps2) }
+        perform { [self] in Self.applyPS2Image(to: external as? PTPS2Engine) }
     }
 
     private static func applyPS2Image(to engine: PTPS2Engine?) {
@@ -158,15 +160,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     func saveState() {
-        if let ps2 {
+        if let external {
             perform { [self] in
-                if ps2.saveState(toPath: Paths.stateFile(for: game).path) {
-                    PTLogLine("PS2 : sauvegarde rapide écrite")
-                    savePS2Thumbnail(ps2)
+                if external.saveState(toPath: Paths.stateFile(for: game).path) {
+                    PTLogLine("\(game.system.shortName) : sauvegarde rapide écrite")
+                    saveEngineThumbnail(external)
                     DispatchQueue.main.async { self.hasSaveState = true }
                     showToast("Partie sauvegardée")
                 } else {
-                    PTLogLine("PS2 : sauvegarde rapide impossible (\(ps2.lastError() ?? "raison inconnue"))")
+                    PTLogLine("\(game.system.shortName) : sauvegarde rapide impossible (\(external.lastError() ?? "raison inconnue"))")
                     showToast("Échec de la sauvegarde")
                 }
             }
@@ -191,13 +193,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     func loadState() {
-        if let ps2 {
+        if let external {
             perform { [self] in
-                if ps2.loadState(fromPath: Paths.stateFile(for: game).path) {
-                    PTLogLine("PS2 : sauvegarde rapide chargée")
+                if external.loadState(fromPath: Paths.stateFile(for: game).path) {
+                    PTLogLine("\(game.system.shortName) : sauvegarde rapide chargée")
                     showToast("Sauvegarde chargée")
                 } else {
-                    PTLogLine("PS2 : chargement impossible (\(ps2.lastError() ?? "raison inconnue"))")
+                    PTLogLine("\(game.system.shortName) : chargement impossible (\(external.lastError() ?? "raison inconnue"))")
                     showToast("Impossible de charger la sauvegarde")
                 }
             }
@@ -235,7 +237,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         let enabled = isFastForwarding
         perform { [self] in
             fastForward = enabled
-            ps2?.setTurbo(enabled)
+            external?.setTurbo(enabled)
         }
     }
 
@@ -251,16 +253,16 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     // MARK: Entrées (n'importe quel thread)
 
     func setButton(_ button: PTButton, pressed: Bool, port: UInt32 = 0) {
-        if let ps2 {
-            ps2.setButton(button.rawValue, pressed: pressed)
+        if let external {
+            external.setButton(button.rawValue, pressed: pressed)
             return
         }
         core?.setButton(button, pressed: pressed, port: port)
     }
 
     func setAnalog(stick: UInt32, x: Float, y: Float, port: UInt32 = 0) {
-        if let ps2 {
-            ps2.setStick(Int32(stick), x: max(-1, min(1, x)), y: max(-1, min(1, y)))
+        if let external {
+            external.setStick(Int32(stick), x: max(-1, min(1, x)), y: max(-1, min(1, y)))
             return
         }
         core?.setAnalogStick(stick, x: Self.axis(x), y: Self.axis(y), port: port)
@@ -274,10 +276,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     func clearInput() {
-        if let ps2 {
-            for button in 0..<16 { ps2.setButton(button, pressed: false) }
-            ps2.setStick(0, x: 0, y: 0)
-            ps2.setStick(1, x: 0, y: 0)
+        if let external {
+            for button in 0..<16 { external.setButton(button, pressed: false) }
+            external.setStick(0, x: 0, y: 0)
+            external.setStick(1, x: 0, y: 0)
             return
         }
         core?.clearInput()
@@ -320,14 +322,18 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         handlers.forEach { $0() }
     }
 
-    private func run() {
-        let system = game.system
-        // Après une partie PS2, sa console en veille garde des Go d'adresses réservées, dont celles que la
-        // PSP veut pour sa mémoire (« Memory init failed ») : on l'arrête avant de lancer une autre console.
+    /// Après une partie PS2, sa console en veille garde des Go d'adresses réservées (dont celles que la PSP veut
+    /// pour sa mémoire : « Memory init failed ») et sa part de la réserve JIT : on l'arrête avant une autre console.
+    private func releasePS2Memory() {
         if let ps2 = PTPS2Engine.loaded, ps2.state == PTPS2StateStopped {
             ps2.releaseMemory()
-            PTLogLine("PS2 : console en veille arrêtée (mémoire rendue pour \(system.shortName))")
+            PTLogLine("PS2 : console en veille arrêtée (mémoire rendue pour \(game.system.shortName))")
         }
+    }
+
+    private func run() {
+        let system = game.system
+        releasePS2Memory()
         guard let frameworks = Bundle.main.privateFrameworksPath else {
             fail("Moteurs introuvables dans l'app.")
             return
@@ -474,7 +480,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
-    // MARK: PS2
+    // MARK: Moteurs autonomes (PS2, GameCube/Wii)
 
     /// Charge le moteur PS2 à la première partie PS2 (thread principal), puis le garde.
     private static func loadPS2Engine() throws -> PTPS2Engine {
@@ -490,16 +496,36 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         return engine
     }
 
-    /// Pilote une partie PS2 : démarrage, pause, commandes du menu et arrêt. Le moteur a son propre thread
-    /// de console ; celui-ci se contente de suivre son état et de lui passer les commandes.
-    private func runPS2(_ engine: PTPS2Engine) {
-        guard let bios = engine.pickBIOS() else {
-            fail("Aucun BIOS PS2 trouvé. Copie le BIOS de ta PS2 (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier "
-                 + "BIOS de PlayTendo, avec l'app Fichiers.")
-            return
+    /// Charge le moteur GameCube/Wii à la première partie (thread principal), puis le garde.
+    private static func loadDolphinEngine() throws -> PTDolphinEngine {
+        if let engine = PTDolphinEngine.loaded { return engine }
+        guard let frameworks = Bundle.main.privateFrameworksPath else {
+            throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey: "Moteurs introuvables dans l'app."])
         }
-        PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
-        Self.applyPS2Image(to: engine)
+        let engine = try PTDolphinEngine.load(withFrameworkPath: "\(frameworks)/DolphinCore.framework/DolphinCore",
+                                              userDirectory: Paths.dolphinEngine.path,
+                                              gameCubeSaveDirectory: Paths.saveDirectory(for: .gameCube).path,
+                                              wiiSaveDirectory: Paths.saveDirectory(for: .wii).path)
+        PTLogLine("GameCube/Wii : moteur chargé (journal du moteur : Application Support/Systeme/Dolphin/Logs/dolphin.log)")
+        return engine
+    }
+
+    /// Pilote une partie PS2 ou GameCube/Wii : démarrage, pause, commandes du menu et arrêt. Le moteur a ses
+    /// propres threads ; celui-ci se contente de suivre son état et de lui passer les commandes.
+    private func runExternal(_ engine: ExternalEngine) {
+        let name = game.system.shortName
+        if let ps2 = engine as? PTPS2Engine {
+            guard let bios = ps2.pickBIOS() else {
+                fail("Aucun BIOS PS2 trouvé. Copie le BIOS de ta PS2 (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier "
+                     + "BIOS de PlayTendo, avec l'app Fichiers.")
+                return
+            }
+            PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
+            Self.applyPS2Image(to: ps2)
+        } else {
+            releasePS2Memory()
+            PTLogLine("\(name) : lancement de \(game.url.lastPathComponent)")
+        }
 
         // La vue Metal doit être à l'écran, à sa taille, avant le démarrage : le moteur y crée son image.
         let clock = MachClock()
@@ -508,8 +534,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
               !DispatchQueue.main.sync(execute: { engine.renderView.window != nil && engine.renderView.bounds.width > 0 }) {
             Thread.sleep(forTimeInterval: 0.02)
         }
-        guard engine.bootGame(atPath: game.url.path) else {
-            fail("Le jeu PS2 n'a pas pu démarrer.")
+        guard engine.boot(path: game.url.path, jit: PTJITIsActive()) else {
+            fail(engine.lastError() ?? "Le jeu n'a pas pu démarrer.")
             return
         }
 
@@ -533,27 +559,27 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             for command in commands { command() }
             if stop { break }
 
-            let engineState = engine.state
-            if engineState != PTPS2StateStopped { seenActivity = true }
+            let engineState = engine.engineState
+            if engineState != .stopped { seenActivity = true }
             if !started {
-                if engineState == PTPS2StateRunning || engineState == PTPS2StatePaused {
+                if engineState == .running || engineState == .paused {
                     started = true
-                    PTLogLine(String(format: "PS2 : jeu démarré en %.1f s", clock.now - bootStart))
+                    PTLogLine(String(format: "%@ : jeu démarré en %.1f s", name, clock.now - bootStart))
                     let jit = PTJITIsActive()
 #if targetEnvironment(simulator)
-                    PTLogLine(jit ? "PS2 : code dans la réserve JIT de l'app" : "PS2 : JIT du simulateur (sans la réserve de l'app)")
+                    PTLogLine(jit ? "\(name) : code dans la réserve JIT de l'app" : "\(name) : sans la réserve JIT de l'app")
 #else
-                    PTLogLine(jit ? "PS2 : mode turbo (JIT) utilisé" : "PS2 : sans JIT, interpréteur (très lent)")
+                    PTLogLine(jit ? "\(name) : mode turbo (JIT) utilisé" : "\(name) : sans JIT, interpréteur (très lent)")
 #endif
                     if jit { showToast("Mode turbo (JIT) actif") }
                     DispatchQueue.main.async { self.state = .running }
-                } else if engineState == PTPS2StateStopped && (seenActivity || clock.now - bootStart > 20) {
+                } else if engineState == .stopped && (seenActivity || clock.now - bootStart > 20) {
                     failure = engine.lastError() ?? "La console n'a pas pu démarrer le jeu."
                     break
                 }
                 continue
             }
-            if engineState == PTPS2StateStopped {
+            if engineState == .stopped {
                 failure = engine.lastError() ?? "La console s'est arrêtée."
                 break
             }
@@ -563,19 +589,19 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
         }
 
-        if started && failure == nil { savePS2Thumbnail(engine) }
+        if started && failure == nil { saveEngineThumbnail(engine) }
         engine.stop()
         let stopDeadline = clock.now + 15
-        while engine.state != PTPS2StateStopped && clock.now < stopDeadline {
+        while engine.engineState != .stopped && clock.now < stopDeadline {
             Thread.sleep(forTimeInterval: 0.02)
         }
-        if engine.state != PTPS2StateStopped { PTLogLine("PS2 : la console ne s'est pas arrêtée à temps") }
+        if engine.engineState != .stopped { PTLogLine("\(name) : la console ne s'est pas arrêtée à temps") }
         if let failure {
-            PTLogLine("PS2 : \(failure)")
-            fail("La PS2 s'est arrêtée : \(failure)")
+            PTLogLine("\(name) : \(failure)")
+            fail("La \(game.system.name) s'est arrêtée : \(failure)")
             return
         }
-        PTLogLine("PS2 : jeu fermé")
+        PTLogLine("\(name) : jeu fermé")
         DispatchQueue.main.async {
             self.state = .stopped
             self.finishStop()
@@ -604,10 +630,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         writeThumbnail(UIImage(cgImage: image))
     }
 
-    /// PS2 : le moteur dessine lui-même, l'image vient de sa capture (comme celle des sauvegardes de PCSX2).
-    private func savePS2Thumbnail(_ engine: PTPS2Engine) {
+    /// PS2, GameCube/Wii : le moteur dessine lui-même, l'image vient de sa capture.
+    private func saveEngineThumbnail(_ engine: ExternalEngine) {
         guard let image = engine.snapshot() else {
-            PTLogLine("PS2 : vignette impossible à capturer")
+            PTLogLine("\(game.system.shortName) : vignette impossible à capturer")
             return
         }
         writeThumbnail(image)

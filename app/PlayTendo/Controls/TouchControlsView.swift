@@ -328,7 +328,8 @@ final class TouchControlsView: UIView {
             case .dpad: drawDPad(control.frame)
             case .face(let button): drawFace(control, button: button)
             case .cButton(let direction): drawCButton(control.frame, direction: direction)
-            case .stick, .rightStick: drawStick(control.frame)
+            case .stick: drawStick(control.frame)
+            case .rightStick: drawStick(control.frame, tint: scheme.isGameCube ? Self.cStickYellow : nil)
             case .shoulder(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: 12, fontSize: 15)
             case .small(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: control.frame.height / 2, fontSize: 11)
             case .menu: drawMenu(control.frame)
@@ -397,6 +398,14 @@ final class TouchControlsView: UIView {
 
         if scheme.usesPlayStationSymbols {
             drawPlayStationSymbol(button, in: frame)
+        } else if scheme.isGameCube {
+            // A vert, B rouge, X et Y gris clair, comme sur la manette GameCube.
+            let color: UIColor? = switch button {
+            case .b: UIColor(red: 0.30, green: 0.85, blue: 0.55, alpha: 1)
+            case .y: UIColor(red: 1.0, green: 0.38, blue: 0.40, alpha: 1)
+            default: nil
+            }
+            drawLabel(control.label, in: frame, size: frame.height * 0.42, weight: .bold, color: color)
         } else if scheme.isNintendo64 {
             // A bleu, B vert, comme sur la manette N64.
             let color = button == .b ? UIColor(red: 0.45, green: 0.62, blue: 1, alpha: 1)
@@ -434,12 +443,15 @@ final class TouchControlsView: UIView {
     }
 
     /// Socle rond d'un stick (la tête est un calque à part, voir `updateKnob`).
-    private func drawStick(_ frame: CGRect) {
+    /// Jaune du stick C de la GameCube.
+    private static let cStickYellow = UIColor(red: 1.0, green: 0.84, blue: 0.25, alpha: 0.9)
+
+    private func drawStick(_ frame: CGRect, tint: UIColor? = nil) {
         let base = UIBezierPath(ovalIn: frame.insetBy(dx: frame.width * 0.04, dy: frame.width * 0.04))
         fill.setFill()
         base.fill()
-        base.lineWidth = 1.5
-        stroke.setStroke()
+        base.lineWidth = tint == nil ? 1.5 : 2.5
+        (tint ?? stroke).setStroke()
         base.stroke()
     }
 

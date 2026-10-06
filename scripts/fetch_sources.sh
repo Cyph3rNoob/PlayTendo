@@ -33,6 +33,17 @@ clone pcsx_rearmed https://github.com/libretro/pcsx_rearmed r26l
 clone ppsspp       https://github.com/hrydgard/ppsspp      v1.20.4
 # Mupen64Plus-Next n'a pas de version numérotée : version figée le 2026-10-05 (accord de l'utilisateur).
 clone_commit mupen64plus-nx https://github.com/libretro/mupen64plus-libretro-nx 12edd2c74a517ff86dfa8cfc71ad75e4c10486d5
+# Phase 3 : GameCube/Wii. DolphiniOS n'existe qu'en bêta (exception acceptée par l'utilisateur). Sans les
+# compléments Windows (Qt, FFmpeg précompilés : plusieurs centaines de Mo inutiles ici).
+if [ ! -d dolphin-ios ]; then
+  echo ""
+  echo ">>> dolphin-ios (version v5.0.0b6)"
+  git clone --depth 1 --branch v5.0.0b6 --progress https://github.com/OatmealDome/dolphin-ios dolphin-ios
+  git -C dolphin-ios -c submodule."Externals/Qt".update=none -c submodule."Externals/FFmpeg-bin".update=none \
+    submodule update --init --recursive --depth 1 --progress
+else
+  echo "OK  dolphin-ios deja present"
+fi
 
 # Bibliothèque : base libretro (No-Intro / Redump) pour reconnaître les jeux.
 DB_TAG=v1.22.1
@@ -49,6 +60,8 @@ fetch_database() {
            "metadat/redump/Sony - PlayStation.dat" \
            "metadat/redump/Sony - PlayStation Portable.dat" \
            "metadat/redump/Sony - PlayStation 2.dat" \
+           "metadat/redump/Nintendo - GameCube.dat" \
+           "metadat/redump/Nintendo - Wii.dat" \
            "metadat/no-intro/Sony - PlayStation Portable.dat"; do
     local out="$dir/${f#metadat/}"
     if [ -s "$out" ]; then continue; fi

@@ -27,7 +27,8 @@
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 
 #define PT_JIT_GRANULE ((size_t)16 * 1024)
-#define PT_JIT_MAX_BLOCKS 256
+// Dolphin prend un petit bloc par format de sommets (décodeurs recompilés) : plusieurs centaines par jeu.
+#define PT_JIT_MAX_BLOCKS 4096
 /// Encodage de `brk #0xf00d`.
 #define PT_JIT_BRK 0xD43E01A0u
 

@@ -118,12 +118,13 @@ struct EmulatorView: View {
                                   fillScreen: controls.canFillScreen && fillScreen)
     }
 
-    /// Les images du jeu (deux pour la DS, une pour les autres consoles ; la PS2 dessine elle-même dans sa vue).
+    /// Les images du jeu (deux pour la DS, une pour les autres consoles ; la PS2 et la GameCube/Wii dessinent
+    /// elles-mêmes dans leur vue).
     @ViewBuilder
     private func screens(_ layout: ControlLayout) -> some View {
-        if let ps2View = session.ps2View {
+        if let engineView = session.engineView {
             if let screen = layout.screens.first {
-                PS2Screen(renderView: ps2View)
+                EngineScreen(renderView: engineView)
                     .frame(width: screen.frame.width, height: screen.frame.height)
                     .position(x: screen.frame.midX, y: screen.frame.midY)
             }
