@@ -8,7 +8,7 @@ enum TouchInput: Hashable {
 }
 
 /// Calque des boutons tactiles. Gère le multi-touch (plusieurs boutons à la fois),
-/// le glissement d'un bouton à l'autre, le stick analogique et, pour la DS, l'écran tactile.
+/// le glissement d'un bouton à l'autre, les sticks analogiques et, pour la DS, l'écran tactile.
 final class TouchControlsView: UIView {
     var layout = ControlLayout() {
         didSet {
@@ -28,20 +28,21 @@ final class TouchControlsView: UIView {
 
     private enum TouchRole {
         case inputs(Set<TouchInput>)
-        case stick
+        /// Stick 0 (gauche) ou 1 (droit, PS2).
+        case stick(Int)
         case pointer
         case menu
     }
 
     private var touches: [ObjectIdentifier: TouchRole] = [:]
     private var pressed: Set<TouchInput> = []
-    /// Position du stick, de -1 à 1 sur chaque axe.
-    private var stickOffset = CGPoint.zero
+    /// Position des sticks (gauche, droit), de -1 à 1 sur chaque axe.
+    private var stickOffsets: [CGPoint] = [.zero, .zero]
     private var cStick = CGPoint.zero
     private var menuHighlighted = false
     private let haptics = UIImpactFeedbackGenerator(style: .light)
-    /// Tête du stick : un calque à part, déplacé seul quand le doigt bouge (sans redessiner les boutons).
-    private let knobLayer = CAShapeLayer()
+    /// Têtes des sticks : des calques à part, déplacés seuls quand le doigt bouge (sans redessiner les boutons).
+    private let knobLayers = [CAShapeLayer(), CAShapeLayer()]
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -50,9 +51,11 @@ final class TouchControlsView: UIView {
         backgroundColor = .clear
         contentMode = .redraw
         haptics.prepare()
-        knobLayer.lineWidth = 1.5
-        knobLayer.isHidden = true
-        layer.addSublayer(knobLayer)
+        for knob in knobLayers {
+            knob.lineWidth = 1.5
+            knob.isHidden = true
+            layer.addSublayer(knob)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -68,11 +71,9 @@ final class TouchControlsView: UIView {
                 self.touches[id] = .menu
                 menuHighlighted = true
                 setNeedsDisplay()
-            } else if let stick = layout.controls.first(where: { $0.element == .stick }),
-                      stick.frame.insetBy(dx: -20, dy: -20).contains(point), priorityInputs(at: point).isEmpty,
-                      !self.touches.values.contains(where: { if case .stick = $0 { true } else { false } }) {
-                self.touches[id] = .stick
-                moveStick(to: point)
+            } else if let index = stickIndex(at: point) {
+                self.touches[id] = .stick(index)
+                moveStick(index, to: point)
                 onTouchDown?()
             } else if case let hit = inputs(at: point), !hit.isEmpty {
                 // Un bouton visible passe avant l'écran tactile qu'il recouvre (manette branchée).
@@ -97,8 +98,8 @@ final class TouchControlsView: UIView {
             switch self.touches[id] {
             case .inputs:
                 self.touches[id] = .inputs(inputs(at: point))
-            case .stick:
-                moveStick(to: point)
+            case .stick(let index):
+                moveStick(index, to: point)
             case .pointer:
                 sendPointer(point, pressed: true)
             default:
@@ -130,8 +131,8 @@ final class TouchControlsView: UIView {
                 }
             case .pointer:
                 sendPointer(touch.location(in: self), pressed: false)
-            case .stick:
-                setStick(.zero)
+            case .stick(let index):
+                setStick(index, .zero)
             default:
                 break
             }
@@ -140,9 +141,35 @@ final class TouchControlsView: UIView {
         update()
     }
 
+    private func stickControl(_ index: Int) -> PlacedControl? {
+        layout.controls.first { $0.element == (index == 0 ? .stick : .rightStick) }
+    }
+
+    /// Stick saisi par un doigt posé à cet endroit (zone élargie autour du socle), s'il est libre. Un doigt
+    /// posé en plein sur un bouton, sur la croix, ou sur L, R, Start, Select, garde ce bouton.
+    private func stickIndex(at point: CGPoint) -> Int? {
+        guard priorityInputs(at: point).isEmpty, !isDirectlyOnButton(point) else { return nil }
+        for index in 0..<2 {
+            guard let stick = stickControl(index), stick.frame.insetBy(dx: -20, dy: -20).contains(point),
+                  !touches.values.contains(where: { if case .stick(index) = $0 { true } else { false } }) else { continue }
+            return index
+        }
+        return nil
+    }
+
+    private func isDirectlyOnButton(_ point: CGPoint) -> Bool {
+        layout.controls.contains { control in
+            switch control.element {
+            case .dpad: control.frame.contains(point)
+            case .face, .cButton: hypot(point.x - control.frame.midX, point.y - control.frame.midY) < control.frame.width / 2
+            default: false
+            }
+        }
+    }
+
     /// Le doigt garde le stick même s'il sort du cercle ; la course est limitée au bord.
-    private func moveStick(to point: CGPoint) {
-        guard let stick = layout.controls.first(where: { $0.element == .stick }) else { return }
+    private func moveStick(_ index: Int, to point: CGPoint) {
+        guard let stick = stickControl(index) else { return }
         let travel = stick.frame.width * Self.stickTravel
         var x = (point.x - stick.frame.midX) / travel
         var y = (point.y - stick.frame.midY) / travel
@@ -151,34 +178,37 @@ final class TouchControlsView: UIView {
             x /= length
             y /= length
         }
-        setStick(CGPoint(x: x, y: y))
+        setStick(index, CGPoint(x: x, y: y))
     }
 
-    private func setStick(_ offset: CGPoint) {
-        guard offset != stickOffset else { return }
-        stickOffset = offset
-        onAnalog?(0, offset.x, offset.y)
+    private func setStick(_ index: Int, _ offset: CGPoint) {
+        guard offset != stickOffsets[index] else { return }
+        stickOffsets[index] = offset
+        onAnalog?(UInt32(index), offset.x, offset.y)
         updateKnob()
     }
 
-    /// Place la tête du stick selon la position du doigt (cachée s'il n'y a pas de stick à l'écran).
+    /// Place la tête de chaque stick selon la position du doigt (cachée s'il n'y a pas ce stick à l'écran).
     private func updateKnob() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-        guard let stick = layout.controls.first(where: { $0.element == .stick }) else {
-            knobLayer.isHidden = true
-            return
+        for (index, knob) in knobLayers.enumerated() {
+            guard let stick = stickControl(index) else {
+                knob.isHidden = true
+                continue
+            }
+            let frame = stick.frame
+            let offset = stickOffsets[index]
+            let travel = frame.width * Self.stickTravel
+            let radius = frame.width * 0.2
+            knob.isHidden = false
+            knob.bounds = CGRect(x: 0, y: 0, width: radius * 2, height: radius * 2)
+            knob.path = UIBezierPath(ovalIn: knob.bounds).cgPath
+            knob.position = CGPoint(x: frame.midX + offset.x * travel, y: frame.midY + offset.y * travel)
+            knob.fillColor = (offset == .zero ? UIColor(white: 0.35, alpha: 0.75) : fillPressed).cgColor
+            knob.strokeColor = stroke.cgColor
         }
-        let frame = stick.frame
-        let travel = frame.width * Self.stickTravel
-        let radius = frame.width * 0.2
-        knobLayer.isHidden = false
-        knobLayer.bounds = CGRect(x: 0, y: 0, width: radius * 2, height: radius * 2)
-        knobLayer.path = UIBezierPath(ovalIn: knobLayer.bounds).cgPath
-        knobLayer.position = CGPoint(x: frame.midX + stickOffset.x * travel, y: frame.midY + stickOffset.y * travel)
-        knobLayer.fillColor = (stickOffset == .zero ? UIColor(white: 0.35, alpha: 0.75) : fillPressed).cgColor
-        knobLayer.strokeColor = stroke.cgColor
     }
 
     /// Distance (en part de la largeur du stick) entre le centre et la position extrême.
@@ -257,7 +287,7 @@ final class TouchControlsView: UIView {
                    hypot(point.x - control.frame.midX, point.y - control.frame.midY) < control.frame.width / 2 * 1.15 {
                     result.insert(input)
                 }
-            case .shoulder, .small, .stick, .menu:
+            case .shoulder, .small, .stick, .rightStick, .menu:
                 break
             }
         }
@@ -298,7 +328,7 @@ final class TouchControlsView: UIView {
             case .dpad: drawDPad(control.frame)
             case .face(let button): drawFace(control, button: button)
             case .cButton(let direction): drawCButton(control.frame, direction: direction)
-            case .stick: drawStick(control.frame)
+            case .stick, .rightStick: drawStick(control.frame)
             case .shoulder(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: 12, fontSize: 15)
             case .small(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: control.frame.height / 2, fontSize: 11)
             case .menu: drawMenu(control.frame)
@@ -403,7 +433,7 @@ final class TouchControlsView: UIView {
         arrow.fill()
     }
 
-    /// Socle rond du stick (la tête est un calque à part, voir `updateKnob`).
+    /// Socle rond d'un stick (la tête est un calque à part, voir `updateKnob`).
     private func drawStick(_ frame: CGRect) {
         let base = UIBezierPath(ovalIn: frame.insetBy(dx: frame.width * 0.04, dy: frame.width * 0.04))
         fill.setFill()

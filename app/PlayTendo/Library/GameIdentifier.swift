@@ -9,7 +9,7 @@ struct GameKeys {
     var serials: [String] = []
 }
 
-/// Lit les clés d'identification d'un jeu. Ne lit que quelques octets pour les disques (PS1, PSP) et
+/// Lit les clés d'identification d'un jeu. Ne lit que quelques octets pour les disques (PS1, PSP, PS2) et
 /// la DS ; les autres cartouches, petites, sont relues en entier pour calculer leur empreinte.
 enum GameIdentifier {
     /// Au-delà, on ne calcule pas d'empreinte (trop long à relire sur l'iPhone).
@@ -19,6 +19,7 @@ enum GameIdentifier {
         switch system {
         case .psx: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
         case .psp: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
+        case .ps2: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
         default: return cartridgeKeys(url, system: system)
         }
     }
@@ -95,9 +96,9 @@ enum GameIdentifier {
         return UInt32(truncatingIfNeeded: crc)
     }
 
-    // MARK: Disques (PS1, PSP)
+    // MARK: Disques (PS1, PSP, PS2)
 
-    /// Identifiant du disque, sans tiret : « UCES01401 », « SCES02380 ».
+    /// Identifiant du disque, sans tiret : « UCES01401 », « SCES02380 », « SCES54206 ».
     private static func discSerial(_ url: URL, system: GameSystem) -> String? {
         switch url.pathExtension.lowercased() {
         case "m3u":
@@ -116,7 +117,8 @@ enum GameIdentifier {
             return system == .psp ? pspSerial(iso) : ps1Serial(iso)
         case "cso":
             guard let reader = CSOReader(url: url) else { return nil }
-            return pspSerial(ISO9660(reader: reader))
+            let iso = ISO9660(reader: reader)
+            return system == .ps2 ? ps1Serial(iso) : pspSerial(iso)
         case "pbp":
             return pbpSerial(url)
         default:
@@ -124,7 +126,7 @@ enum GameIdentifier {
         }
     }
 
-    /// PS1 : SYSTEM.CNF contient « BOOT = cdrom:\SLES_123.45;1 ».
+    /// PS1 : SYSTEM.CNF contient « BOOT = cdrom:\SLES_123.45;1 » (PS2 : « BOOT2 = cdrom0:\SLES_542.06;1 »).
     private static func ps1Serial(_ iso: ISO9660) -> String? {
         guard let data = iso.file("SYSTEM.CNF"), let text = String(data: data, encoding: .ascii),
               let match = text.range(of: #"[A-Z]{4}[_-]?[0-9]{3}\.?[0-9]{2}"#, options: .regularExpression)

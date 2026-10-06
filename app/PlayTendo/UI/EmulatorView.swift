@@ -118,12 +118,21 @@ struct EmulatorView: View {
                                   fillScreen: controls.canFillScreen && fillScreen)
     }
 
-    /// Les images du jeu (deux pour la DS, une pour les autres consoles).
+    /// Les images du jeu (deux pour la DS, une pour les autres consoles ; la PS2 dessine elle-même dans sa vue).
+    @ViewBuilder
     private func screens(_ layout: ControlLayout) -> some View {
-        ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
-            GameScreen(frameBuffer: session.frameBuffer, source: screen.source)
-                .frame(width: screen.frame.width, height: screen.frame.height)
-                .position(x: screen.frame.midX, y: screen.frame.midY)
+        if let ps2View = session.ps2View {
+            if let screen = layout.screens.first {
+                PS2Screen(renderView: ps2View)
+                    .frame(width: screen.frame.width, height: screen.frame.height)
+                    .position(x: screen.frame.midX, y: screen.frame.midY)
+            }
+        } else {
+            ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
+                GameScreen(frameBuffer: session.frameBuffer, source: screen.source)
+                    .frame(width: screen.frame.width, height: screen.frame.height)
+                    .position(x: screen.frame.midX, y: screen.frame.midY)
+            }
         }
     }
 
@@ -160,7 +169,8 @@ struct EmulatorView: View {
         closeMenu()
     }
 
-    /// PSP en paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à côté).
+    /// PSP et PS2 en paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à côté).
+    /// Choix commun aux deux consoles (clé historique « pleinEcranPSP »).
     private func toggleFillScreen() {
         fillScreen.toggle()
         UserDefaults.standard.set(fillScreen, forKey: Self.fillScreenKey)
@@ -206,7 +216,7 @@ private struct PauseMenu: View {
     /// DS en paysage : taille actuelle de l'écran tactile (nil = réglage masqué).
     let touchSizeLabel: String?
     let onTouchSize: () -> Void
-    /// PSP en paysage : taille actuelle de l'image (nil = réglage masqué).
+    /// PSP et PS2 en paysage : taille actuelle de l'image (nil = réglage masqué).
     let imageSizeLabel: String?
     let onImageSize: () -> Void
     let onQuit: () -> Void

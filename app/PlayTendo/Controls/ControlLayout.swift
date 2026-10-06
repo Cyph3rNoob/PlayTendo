@@ -5,8 +5,10 @@ enum ControlElement: Hashable {
     case face(PTButton)
     case shoulder(PTButton)
     case small(PTButton)
-    /// Stick analogique gauche (N64, PSP).
+    /// Stick analogique gauche (N64, PSP, PS2).
     case stick
+    /// Stick analogique droit (PS2), sous les boutons ✕ ○ □ △.
+    case rightStick
     /// Bouton C jaune de la N64, transmis au moteur par le stick analogique droit.
     case cButton(CDirection)
     case menu
@@ -108,7 +110,8 @@ struct ControlLayout: Equatable {
         var dpadCenter: CGPoint
         var faceCenter: CGPoint
         // Consoles à stick : deux commandes l'une sous l'autre à gauche. N64 : le stick, puis une
-        // petite croix ; PSP : la croix, puis le stick.
+        // petite croix ; PSP et PS2 : la croix, puis le stick. PS2 : de même à droite, les boutons puis le
+        // stick droit (comme sur la manette).
         let analog = scheme.hasAnalogStick
         let secondaryRatio: CGFloat = scheme.isNintendo64 ? 0.55 : 0.72
         var secondaryCenter = CGPoint.zero
@@ -167,7 +170,7 @@ struct ControlLayout: Equatable {
                                                                y: bottomRow, width: smallSize.width, height: smallSize.height),
                                                  label: "START"))
         } else {
-            cluster = max(110, min(dualScreen || scheme == .psp ? 150 : 168, usable.height * 0.42))
+            cluster = max(110, min(dualScreen || scheme == .psp || scheme == .playStation2 ? 150 : 168, usable.height * 0.42))
             if dualScreen {
                 // Grands écrans sur toute la largeur, avec ou sans manette (choix de l'utilisateur,
                 // 2026-10-06) : les boutons tactiles passent par-dessus, en semi-transparent, et un
@@ -254,6 +257,10 @@ struct ControlLayout: Equatable {
             let (primary, secondary): (ControlElement, ControlElement) = scheme.isNintendo64 ? (.stick, .dpad) : (.dpad, .stick)
             layout.controls.append(PlacedControl(element: primary, frame: square(dpadCenter, cluster), label: ""))
             layout.controls.append(PlacedControl(element: secondary, frame: square(secondaryCenter, secondarySize), label: ""))
+            if scheme.hasRightStick {
+                let rightCenter = CGPoint(x: faceCenter.x, y: secondaryCenter.y)
+                layout.controls.append(PlacedControl(element: .rightStick, frame: square(rightCenter, secondarySize), label: ""))
+            }
         } else {
             layout.controls.append(PlacedControl(element: .dpad, frame: square(dpadCenter, cluster), label: ""))
         }

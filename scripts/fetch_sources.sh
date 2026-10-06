@@ -48,6 +48,7 @@ fetch_database() {
            "metadat/no-intro/Nintendo - Nintendo DS.dat" \
            "metadat/redump/Sony - PlayStation.dat" \
            "metadat/redump/Sony - PlayStation Portable.dat" \
+           "metadat/redump/Sony - PlayStation 2.dat" \
            "metadat/no-intro/Sony - PlayStation Portable.dat"; do
     local out="$dir/${f#metadat/}"
     if [ -s "$out" ]; then continue; fi

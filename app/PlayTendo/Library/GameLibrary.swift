@@ -27,6 +27,7 @@ final class GameLibrary: ObservableObject {
         var files: [URL] = []
         for case let url as URL in enumerator {
             if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                if moveIfPS2BIOS(url) { continue }
                 files.append(url)
             }
         }
@@ -87,7 +88,9 @@ final class GameLibrary: ObservableObject {
             for entry in archive.entries {
                 let name = (entry.path as NSString).lastPathComponent
                 guard let destination = destination(forFileNamed: name) else { continue }
-                try archive.extract(entry, to: uniqueURL(destination))
+                let target = uniqueURL(destination)
+                try archive.extract(entry, to: target)
+                moveIfPS2BIOS(target)
                 count += 1
             }
             return count
@@ -99,7 +102,25 @@ final class GameLibrary: ObservableObject {
         }
         let target = uniqueURL(destination)
         try manager.copyItem(at: url, to: target)
+        moveIfPS2BIOS(target)
         return 1
+    }
+
+    /// Un BIOS PS2 (nom variable, reconnu à son contenu) arrivé dans Jeux est rangé dans BIOS.
+    @discardableResult
+    nonisolated private static func moveIfPS2BIOS(_ url: URL) -> Bool {
+        guard GameSystem.isPS2BIOS(url) else { return false }
+        let target = Paths.bios.appendingPathComponent(url.lastPathComponent)
+        let manager = FileManager.default
+        try? manager.removeItem(at: target)
+        do {
+            try manager.moveItem(at: url, to: target)
+            PTLogLine("BIOS PS2 rangé dans BIOS : \(url.lastPathComponent)")
+            return true
+        } catch {
+            PTLogLine("BIOS PS2 \(url.lastPathComponent) : rangement impossible (\(error.localizedDescription))")
+            return false
+        }
     }
 
     nonisolated private static func destination(forFileNamed name: String) -> URL? {
@@ -108,6 +129,8 @@ final class GameLibrary: ObservableObject {
             return Paths.bios.appendingPathComponent(lower)
         }
         let ext = (lower as NSString).pathExtension
+        // BIOS PS2 au format « .ROM0 » (les « .BIN » sont reconnus à leur contenu, après la copie).
+        if ext == "rom0" { return Paths.bios.appendingPathComponent(name) }
         guard GameSystem.forExtension(ext) != nil || GameSystem.companionExtensions.contains(ext) else { return nil }
         return Paths.games.appendingPathComponent(name)
     }

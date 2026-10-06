@@ -517,6 +517,8 @@ private struct ContinueCard: View {
     }
 
     private static func relative(_ date: Date) -> String {
+        // Partie qui vient de se terminer : le formateur dirait « dans 0 seconde ».
+        guard Date().timeIntervalSince(date) >= 60 else { return "À L'INSTANT" }
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = Locale(identifier: "fr_FR")
         formatter.unitsStyle = .full
@@ -565,7 +567,7 @@ private struct EmptyLibraryView: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gb, .gbc]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.gba, .nds, .psx, .psp]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.gba, .nds, .psx, .psp, .ps2]) { SystemBadge(system: $0) } }
             }
             .padding(.top, 10)
         }

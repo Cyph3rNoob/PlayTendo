@@ -52,6 +52,11 @@ enum Paths {
         }
     }
 
+    /// Dossier interne du moteur PS2 (réglages, journal `logs/emulog.txt`, caches). Ses BIOS sont dans BIOS
+    /// avec les autres, ses cartes mémoire dans Sauvegardes/PS2.
+    static let ps2Engine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Systeme/PS2", isDirectory: true)
+
     /// Dossier « sauvegardes » donné au moteur. Pour la PSP, c'est la carte mémoire entière : la
     /// console y range ses sauvegardes dans PSP/SAVEDATA, comme sur une vraie carte. (Un dossier
     /// nommé « PSP » faisait passer PPSSPP dans un mode de compatibilité qui crée les dossiers de
@@ -108,12 +113,15 @@ enum Paths {
       Game Boy .gb · Game Boy Color .gbc · Game Boy Advance .gba · Nintendo DS .nds
       PlayStation .chd .pbp .m3u, ou .cue avec ses fichiers .bin
       PlayStation Portable .iso .cso .pbp
+      PlayStation 2 .iso .chd .cso
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)
       PlayStation : scph5501.bin (ou scph1001.bin…)
       Nintendo DS : bios7.bin, bios9.bin, firmware.bin
       Game Boy Advance : gba_bios.bin
+      PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo
+        (« SCPH-70004… », n'importe quel nom, PlayTendo le reconnaît)
 
     Sauvegardes
       Les sauvegardes de tes jeux. Copie ce dossier pour les mettre à l'abri.

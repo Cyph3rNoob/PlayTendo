@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "sources", "libretro-database")
 OUT = os.path.join(ROOT, "cores", "assets", "Bases")
 
-# Dossier de la console dans l'app → fichiers de la base. Pour les disques (PS1, PSP), le CRC n'est
+# Dossier de la console dans l'app → fichiers de la base. Pour les disques (PS1, PSP, PS2), le CRC n'est
 # pas utilisé (fichiers trop gros pour être relus) : seul l'identifiant du disque compte.
 SOURCES = {
     "NES": (["no-intro/Nintendo - Nintendo Entertainment System.dat"], True),
@@ -27,6 +27,7 @@ SOURCES = {
     "DS": (["no-intro/Nintendo - Nintendo DS.dat"], True),
     "PS1": (["redump/Sony - PlayStation.dat"], False),
     "PSP": (["redump/Sony - PlayStation Portable.dat", "no-intro/Sony - PlayStation Portable.dat"], False),
+    "PS2": (["redump/Sony - PlayStation 2.dat"], False),
 }
 
 GAME = re.compile(r'^game \($(.*?)^\)$', re.S | re.M)
