@@ -77,7 +77,7 @@ struct AboutView: View {
                 }
 
                 Section("Mode turbo") {
-                    Text("JIT de la PSP activé par StikJIT 1.9.0 (MPL-2.0, avec idevice sous licence MIT) dans l'extension PlayTendoJIT, ou par l'app StikDebug, avec le script universal.js. Démarrage de l'extension inspiré de Madeira et LiveContainer.")
+                    Text("JIT de la PSP activé par l'app StikDebug (script universal.js), selon le protocole iOS 26 décrit par StikJIT.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

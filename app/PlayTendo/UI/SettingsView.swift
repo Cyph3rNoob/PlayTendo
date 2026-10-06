@@ -6,8 +6,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
-    @State private var importingPairing = false
-    @State private var importError: String?
 
     var body: some View {
         NavigationStack {
@@ -45,61 +43,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Mode turbo (JIT)")
                 } footer: {
-                    Text("Accélère la PSP : son code est traduit pour l'iPhone au lieu d'être interprété. Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un jeu PSP, et reste actif jusqu'à la fermeture de l'app. « Intégré » n'a besoin que de ton fichier de jumelage et de LocalDevVPN ; « Via StikDebug » passe par l'app StikDebug.")
-                }
-
-                if jit.method == .builtIn {
-                    Section {
-                        Requirement(text: jit.hasPairingFile ? "Fichier de jumelage importé" : "Fichier de jumelage à importer",
-                                    done: jit.hasPairingFile)
-                        Button {
-                            importingPairing = true
-                        } label: {
-                            Label(jit.hasPairingFile ? "Remplacer le fichier de jumelage…" : "Importer le fichier de jumelage…",
-                                  systemImage: "square.and.arrow.down")
-                        }
-                        if jit.hasPairingFile {
-                            Button(role: .destructive) {
-                                jit.deletePairingFile()
-                            } label: {
-                                Label("Supprimer le fichier de jumelage", systemImage: "trash")
-                            }
-                        }
-                    } header: {
-                        Text("Fichier de jumelage")
-                    } footer: {
-                        Text("Le même que celui de StikDebug (pairingFile.plist). Il est rangé dans le trousseau chiffré de l'iPhone, jamais envoyé ailleurs. Tu peux aussi le déposer dans Fichiers › PlayTendo : il y sera pris puis effacé.")
-                    }
-
-                    Section {
-                        Requirement(text: "LocalDevVPN connecté (en Wi-Fi de préférence)", done: nil)
-                        Requirement(text: "Mode développeur activé (Réglages › Confidentialité et sécurité)", done: nil)
-                        Button {
-                            Task { await jit.checkDevice() }
-                        } label: {
-                            Label("Vérifier la connexion", systemImage: "antenna.radiowaves.left.and.right")
-                        }
-                        .disabled(jit.checking || !jit.hasPairingFile)
-                        if let message = jit.checkMessage {
-                            HStack(spacing: 8) {
-                                if jit.checking { ProgressView() }
-                                Text(message).font(.subheadline).foregroundStyle(.secondary)
-                            }
-                        }
-                        if let txm = jit.txmPresent {
-                            LabeledContent("Protection TXM", value: txm ? "présente" : "absente")
-                        }
-                        Button {
-                            Task { await jit.resetDiskImage() }
-                        } label: {
-                            Label("Réinitialiser l'image disque développeur", systemImage: "arrow.counterclockwise")
-                        }
-                        .disabled(jit.checking)
-                    } header: {
-                        Text("Ce qu'il faut")
-                    } footer: {
-                        Text("La première activation télécharge l'image disque développeur d'Apple (une seule fois, puis gardée). Si l'activation échoue sans cesse : redémarre l'iPhone, puis réinitialise l'image disque.")
-                    }
+                    Text("Accélère la PSP : son code est traduit pour l'iPhone au lieu d'être interprété. Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un jeu PSP, et reste actif jusqu'à la fermeture de l'app.")
                 }
 
                 if jit.method == .stikDebug {
@@ -111,7 +55,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Ce qu'il faut")
                     } footer: {
-                        Text("Au lancement d'un jeu PSP, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo.")
+                        Text("Au lancement d'un jeu PSP, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
                     }
                 }
             }
@@ -121,19 +65,6 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("OK") { dismiss() }
                 }
-            }
-            .fileImporter(isPresented: $importingPairing, allowedContentTypes: [.item]) { result in
-                switch result {
-                case .success(let url):
-                    do { try jit.importPairingFile(from: url) } catch { importError = error.localizedDescription }
-                case .failure(let error):
-                    importError = error.localizedDescription
-                }
-            }
-            .alert("Import impossible", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
-                Button("OK") {}
-            } message: {
-                Text(importError ?? "")
             }
             .onAppear { stikDebugInstalled = jit.isStikDebugInstalled }
             .onChange(of: scenePhase) { _, phase in
