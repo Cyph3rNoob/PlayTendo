@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
+    @State private var vpnConnected = false
 
     var body: some View {
         NavigationStack {
@@ -49,13 +50,15 @@ struct SettingsView: View {
                 if jit.method == .stikDebug {
                     Section {
                         Requirement(text: "StikDebug installé", done: stikDebugInstalled)
-                        Requirement(text: "Ton fichier de jumelage importé dans StikDebug", done: nil)
-                        Requirement(text: "LocalDevVPN connecté (en Wi-Fi de préférence)", done: nil)
-                        Requirement(text: "Mode développeur activé (Réglages › Confidentialité et sécurité)", done: nil)
+                        Requirement(text: "Ton fichier de jumelage importé dans StikDebug", done: jit.hasWorked ? true : nil)
+                        // Le VPN ne sert qu'au moment de l'activation : turbo actif, son absence n'est pas une erreur.
+                        Requirement(text: "LocalDevVPN connecté (en Wi-Fi de préférence)",
+                                    done: vpnConnected ? true : (jit.isActive ? nil : false))
+                        Requirement(text: "Mode développeur activé (Réglages › Confidentialité et sécurité)", done: jit.hasWorked ? true : nil)
                     } header: {
                         Text("Ce qu'il faut")
                     } footer: {
-                        Text("Au lancement d'un jeu PSP, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
+                        Text("Au lancement d'un jeu PSP, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
                     }
                 }
             }
@@ -66,13 +69,25 @@ struct SettingsView: View {
                     Button("OK") { dismiss() }
                 }
             }
-            .onAppear { stikDebugInstalled = jit.isStikDebugInstalled }
+            .onAppear(perform: refreshChecks)
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { stikDebugInstalled = jit.isStikDebugInstalled }
+                if phase == .active { refreshChecks() }
+            }
+            .task {
+                // LocalDevVPN peut se connecter pendant que les réglages sont ouverts.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    vpnConnected = JITManager.isLocalDevVPNConnected
+                }
             }
         }
         .tint(.playTendoAccent)
         .preferredColorScheme(.dark)
+    }
+
+    private func refreshChecks() {
+        stikDebugInstalled = jit.isStikDebugInstalled
+        vpnConnected = JITManager.isLocalDevVPNConnected
     }
 
     private var isActivating: Bool {

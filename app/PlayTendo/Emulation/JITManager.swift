@@ -37,18 +37,42 @@ final class JITManager: ObservableObject {
     /// Le JIT de PPSSPP prend 16 Mo et son décodeur de sommets 256 Ko : 32 Mo laissent de la marge.
     nonisolated static let poolSize = 32 << 20
     private static let methodKey = "methodeJIT"
+    private static let lastSuccessKey = "dernierTurboReussi"
     private static let scriptName = "universal.js"
 
     @Published var method: Method {
         didSet { UserDefaults.standard.set(method.rawValue, forKey: Self.methodKey) }
     }
     @Published private(set) var status: Status
+    /// Dernière activation réussie : preuve que le fichier de jumelage et le mode développeur sont en place.
+    @Published private(set) var lastSuccess: Date?
 
     private var running: Task<Void, Error>?
 
     init() {
         method = Method(rawValue: UserDefaults.standard.string(forKey: Self.methodKey) ?? "") ?? .stikDebug
         status = PTJITIsActive() ? .active : .inactive
+        lastSuccess = UserDefaults.standard.object(forKey: Self.lastSuccessKey) as? Date
+    }
+
+    /// Le turbo a déjà marché sur cet iPhone (maintenant ou lors d'une ouverture précédente).
+    var hasWorked: Bool { isActive || lastSuccess != nil }
+
+    /// LocalDevVPN est connecté : une interface tunnel (utun) a une adresse dans 10.7.0.0/16, celle du tunnel de
+    /// LocalDevVPN. Lecture locale des interfaces, sans rien envoyer.
+    nonisolated static var isLocalDevVPNConnected: Bool {
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return false }
+        defer { freeifaddrs(list) }
+        for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let entry = pointer.pointee
+            guard let address = entry.ifa_addr, address.pointee.sa_family == UInt8(AF_INET),
+                  (entry.ifa_flags & UInt32(IFF_UP)) != 0,
+                  String(cString: entry.ifa_name).hasPrefix("utun") else { continue }
+            let ip = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { UInt32(bigEndian: $0.pointee.sin_addr.s_addr) }
+            if ip >> 16 == (10 << 8 | 7) { return true }
+        }
+        return false
     }
 
     var isActive: Bool { PTJITIsActive() }
@@ -77,6 +101,8 @@ final class JITManager: ObservableObject {
             try await task.value
             running = nil
             status = .active
+            lastSuccess = Date()
+            UserDefaults.standard.set(lastSuccess, forKey: Self.lastSuccessKey)
         } catch {
             running = nil
             status = .failed(error.localizedDescription)
