@@ -138,20 +138,14 @@ struct LibraryView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("PLAYTENDO")
-                    .font(.orbitron(30, weight: 900))
-                    .tracking(2)
-                    .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
-                    .shadow(color: Neon.cyan.opacity(0.55), radius: 10)
-                    .shadow(color: Neon.magenta.opacity(0.35), radius: 18)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text(summary)
-                    .font(Neon.mono(11, weight: .semibold))
-                    .tracking(1.5)
-                    .foregroundStyle(Neon.dim)
-            }
+            Text("PLAYTENDO")
+                .font(.orbitron(30, weight: 900))
+                .tracking(2)
+                .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
+                .shadow(color: Neon.cyan.opacity(0.55), radius: 10)
+                .shadow(color: Neon.magenta.opacity(0.35), radius: 18)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Spacer(minLength: 8)
             NeonIconButton(systemName: "info", color: Neon.violet) { showingAbout = true }
                 .accessibilityLabel("À propos")
@@ -161,12 +155,6 @@ struct LibraryView: View {
                 .accessibilityLabel("Ajouter des jeux")
         }
         .padding(.top, 8)
-    }
-
-    private var summary: String {
-        let count = library.games.count
-        let systems = Set(library.games.map(\.system)).count
-        return "// \(count) JEU\(count > 1 ? "X" : "") · \(systems) CONSOLE\(systems > 1 ? "S" : "")"
     }
 
     private var searchField: some View {
