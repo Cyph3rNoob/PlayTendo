@@ -12,6 +12,9 @@ consoles) peut exécuter du code. Elle est vue deux fois : une adresse pour écr
    pas encore prête à ce moment-là).
 4. JIT des shaders : copie le code par l'adresse d'écriture.
 5. arm_dynarmic.cpp : 32 Mo de code par cœur au lieu de 128 (jusqu'à 4 cœurs en mode New 3DS).
+
+Écrans : 6. citra_libretro.cpp : L3 n'inverse plus les écrans (il reste le bouton HOME) ; PlayTendo découpe l'image
+   du moteur en deux écrans qu'il place lui-même, et une inversion par le moteur les mélangerait.
 """
 import os
 import sys
@@ -125,6 +128,12 @@ patch("externals/dynarmic/src/dynarmic/common/spin_lock_arm64.cpp", [
 patch("src/video_core/shader/shader_jit_a64_compiler.cpp", [
     ("    std::memcpy(code_mem->ptr(), code_vec.data(), code_vec.size() * sizeof(u32));\n",
      "    std::memcpy(code_mem->wptr(), code_vec.data(), code_vec.size() * sizeof(u32)); // PlayTendo : écriture\n"),
+])
+
+patch("src/citra_libretro/citra_libretro.cpp", [
+    ("    bool screen_swap_btn =\n        !!LibRetro::CheckInput(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3);\n",
+     "    // PlayTendo : L3 = HOME seulement ; l'app place elle-même les deux écrans (« Inverser les écrans »).\n"
+     "    bool screen_swap_btn = false;\n"),
 ])
 
 patch("src/core/arm/dynarmic/arm_dynarmic.cpp", [

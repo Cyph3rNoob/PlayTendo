@@ -241,7 +241,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private static let compressedStateMagic = Data("PTZ1".utf8)
 
     private static func packState(_ state: Data) -> Data {
-        guard let compressed = try? (state as NSData).compressed(using: .lzfse) else { return state }
+        // Gardée brute si la compression n'y gagne rien (3DS : 24 Mo compressés en… 24 Mo).
+        guard let compressed = try? (state as NSData).compressed(using: .lzfse),
+              compressed.length + compressedStateMagic.count < state.count * 9 / 10 else { return state }
         return compressedStateMagic + (compressed as Data)
     }
 

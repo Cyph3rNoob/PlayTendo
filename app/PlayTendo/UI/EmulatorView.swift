@@ -253,9 +253,12 @@ private struct PauseMenu: View {
     /// GameCube et Wii : résolution et lissage des bords (gardés pour tous leurs jeux).
     @AppStorage(DolphinSettings.resolutionKey) private var dolphinResolution = DolphinSettings.Resolution.x1.rawValue
     @AppStorage(DolphinSettings.smoothingKey) private var dolphinSmoothing = DolphinSettings.Smoothing.off.rawValue
+    /// 3DS : résolution et lissage des textures (gardés pour tous ses jeux).
+    @AppStorage(N3DSSettings.resolutionKey) private var n3dsResolution = N3DSSettings.Resolution.x1.rawValue
+    @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
-    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii].contains(session.game.system) }
+    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii, .n3ds].contains(session.game.system) }
 
     private struct Item: Identifiable {
         let title: String
@@ -388,6 +391,19 @@ private struct PauseMenu: View {
                                         selection: dolphinSmoothing) { value in
                     choose { dolphinSmoothing = value }
                 })
+        } else if session.game.system == .n3ds {
+            imageSettings(
+                resolution: NeonSegments(title: "RÉSOLUTION",
+                                         detail: (N3DSSettings.Resolution(rawValue: n3dsResolution) ?? .x1).size,
+                                         options: N3DSSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: n3dsResolution) { value in
+                    choose { n3dsResolution = value }
+                },
+                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                                        options: N3DSSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: n3dsSmoothing) { value in
+                    choose { n3dsSmoothing = value }
+                })
         } else if session.game.system == .ps2 {
             imageSettings(
                 resolution: NeonSegments(title: "RÉSOLUTION",
@@ -439,6 +455,8 @@ private struct PauseMenu: View {
         UISelectionFeedbackGenerator().selectionChanged()
         if isDolphin {
             session.applyDolphinImage()
+        } else if session.game.system == .n3ds {
+            session.applyOptions(N3DSSettings.coreOptions)
         } else if session.game.system == .ps2 {
             session.applyPS2Image()
         } else {

@@ -239,7 +239,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "citra_use_cpu_jit": "enabled",
                 "citra_use_shader_jit": "enabled",
                 "citra_language_value": "French",
-            ]
+            ].merging(N3DSSettings.coreOptions) { $1 }
         case .psx:
             ["pcsx_rearmed_drc": "disabled"]
         case .n64:
