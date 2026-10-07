@@ -23,9 +23,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Agrandit les images si le moteur annonce une résolution plus grande (même framebuffer).
 - (BOOL)ensureWidth:(unsigned)width height:(unsigned)height;
 
-/// Termine l'image en cours (`width`×`height` utiles), la renvoie et fait dessiner l'image
-/// suivante dans un autre tampon.
-- (CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height CF_RETURNS_NOT_RETAINED;
+/// Termine l'image en cours (`width`×`height` utiles) sans l'attendre, fait dessiner l'image suivante dans un autre
+/// tampon et renvoie l'image précédente, terminée par la puce graphique (NULL après la toute première). Au simulateur
+/// (rendu par copie), renvoie l'image en cours.
+- (nullable CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height CF_RETURNS_NOT_RETAINED;
 
 @end
 

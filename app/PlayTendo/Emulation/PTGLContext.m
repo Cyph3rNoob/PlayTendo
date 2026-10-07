@@ -13,14 +13,17 @@
 #import <OpenGLES/ES3/gl.h>
 #import <OpenGLES/ES3/glext.h>
 
-// Trois images qui tournent : une affichée, une en attente, une en cours de dessin.
-#define PT_GL_BUFFERS 3
+// Quatre images qui tournent : une en cours de dessin, la précédente (terminée par la puce graphique, donnée à
+// l'écran), celle encore affichée tant que l'écran n'a pas pris la nouvelle, et une libre.
+#define PT_GL_BUFFERS 4
 
 @implementation PTGLContext {
     EAGLContext *_context;
     CVOpenGLESTextureCacheRef _cache;
     CVPixelBufferRef _buffers[PT_GL_BUFFERS];
     CVOpenGLESTextureRef _textures[PT_GL_BUFFERS];
+    // Image dessinée mais peut-être pas encore terminée par la puce graphique (marqueur à attendre).
+    GLsync _fences[PT_GL_BUFFERS];
     GLuint _framebuffer;
     GLuint _depthStencil;
     int _current;
@@ -69,6 +72,8 @@
 
 - (void)releaseBuffers {
     for (int i = 0; i < PT_GL_BUFFERS; i++) {
+        if (_fences[i]) glDeleteSync(_fences[i]);
+        _fences[i] = NULL;
         if (_textures[i]) CFRelease(_textures[i]);
         if (_buffers[i]) CVPixelBufferRelease(_buffers[i]);
         _textures[i] = NULL;
@@ -164,21 +169,33 @@ static void PTSetTextureParameters(void) {
 }
 
 - (CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height {
-    CVPixelBufferRef done = _buffers[_current];
     if (_copyMode) {
+        // Secours (simulateur) : la lecture de l'image attend de toute façon la puce graphique.
+        CVPixelBufferRef done = _buffers[_current];
         [self copyFrameInto:done width:MIN(width, _width) height:MIN(height, _height)];
-    } else {
-        glFinish();
+        _current = (_current + 1) % PT_GL_BUFFERS;
+        return done;
     }
+    // Pas d'attente de l'image qui vient d'être dessinée (glFinish faisait patienter le processeur pendant tout le
+    // travail de la puce graphique : 20 ms par image pour Smash Bros. en 1920×1080). Elle est marquée, et c'est
+    // l'image précédente, terminée depuis (ou presque), qui est affichée : une image de décalage.
+    int drawn = _current;
+    if (_fences[drawn]) glDeleteSync(_fences[drawn]);
+    _fences[drawn] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glFlush();
     _current = (_current + 1) % PT_GL_BUFFERS;
-    if (!_copyMode) {
-        GLint previous = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous);
-        glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, [self drawingTexture], 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous);
-    }
-    return done;
+    GLint previousBinding = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousBinding);
+    glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, [self drawingTexture], 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previousBinding);
+
+    int ready = (drawn + PT_GL_BUFFERS - 1) % PT_GL_BUFFERS;
+    if (!_fences[ready]) return NULL;   // première image : rien de terminé à montrer encore
+    glClientWaitSync(_fences[ready], GL_SYNC_FLUSH_COMMANDS_BIT, 100000000ull);   // 100 ms au plus
+    glDeleteSync(_fences[ready]);
+    _fences[ready] = NULL;
+    return _buffers[ready];
 }
 
 /// Méthode de secours : lit l'image dessinée (RGBA) et la range en BGRA dans l'image partagée.

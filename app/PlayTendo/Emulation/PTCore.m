@@ -218,7 +218,9 @@ static void PTVideoRefresh(const void *data, unsigned width, unsigned height, si
         PTHardwareVideoHandler handler = core->_hardwareVideoHandler;
         if (core->_gl && handler && width > 0 && height > 0) {
             unsigned w = MIN(width, core->_gl.width), h = MIN(height, core->_gl.height);
-            handler([core->_gl finishFrameWithWidth:w height:h], w, h, core->_hw.bottom_left_origin);
+            // Avec un décalage d'une image : rien à montrer après la toute première.
+            CVPixelBufferRef buffer = [core->_gl finishFrameWithWidth:w height:h];
+            if (buffer) handler(buffer, w, h, core->_hw.bottom_left_origin);
         } else if (core->_vk && handler && width > 0 && height > 0) {
             CVPixelBufferRef buffer = [core->_vk finishFrameWithWidth:width height:height];
             if (buffer) handler(buffer, width, height, NO);

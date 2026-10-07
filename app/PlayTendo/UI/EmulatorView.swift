@@ -261,7 +261,6 @@ private struct PauseMenu: View {
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
     /// N64 et PS1 : résolution et lissage (gardés pour tous leurs jeux).
     @AppStorage(N64Settings.resolutionKey) private var n64Resolution = N64Settings.Resolution.x2.rawValue
-    @AppStorage(N64Settings.smoothingKey) private var n64Smoothing = N64Settings.Smoothing.off.rawValue
     @AppStorage(N64Settings.formatKey) private var n64Format = N64Settings.Format.standard.rawValue
     @AppStorage(PS1Settings.resolutionKey) private var ps1Resolution = PS1Settings.Resolution.x1.rawValue
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
@@ -409,14 +408,9 @@ private struct PauseMenu: View {
                                          selection: n64Resolution) { value in
                     choose { n64Resolution = value }
                 },
-                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
-                                        options: N64Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
-                                        selection: n64Smoothing) { value in
-                    choose { n64Smoothing = value }
-                },
-                extra: NeonSegments(title: "FORMAT", detail: nil,
-                                    options: N64Settings.Format.allCases.map { ($0.rawValue, $0.label) },
-                                    selection: n64Format) { value in
+                smoothing: NeonSegments(title: "FORMAT", detail: nil,
+                                        options: N64Settings.Format.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: n64Format) { value in
                     choose { n64Format = value }
                 })
         } else if session.game.system == .psx {
@@ -474,22 +468,19 @@ private struct PauseMenu: View {
         }
     }
 
-    /// `extra` : troisième réglage (format de la N64).
+    /// `smoothing` : second réglage (le format pour la N64).
     @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
-                                            smoothing smoothingPicker: NeonSegments,
-                                            extra extraPicker: NeonSegments? = nil) -> some View {
+                                            smoothing smoothingPicker: NeonSegments) -> some View {
         if compact {
             HStack(alignment: .top, spacing: 14) {
                 resolutionPicker
                 smoothingPicker
-                if let extraPicker { extraPicker }
             }
             .padding(.vertical, 2)
         } else {
             VStack(spacing: 10) {
                 resolutionPicker
                 smoothingPicker
-                if let extraPicker { extraPicker }
             }
             .padding(.vertical, 4)
         }
