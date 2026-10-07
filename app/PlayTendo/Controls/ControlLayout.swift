@@ -230,7 +230,10 @@ struct ControlLayout: Equatable {
                 // et START, et restent assez gros malgré la bande étroite.
                 let top = usable.minY + 10 + shoulderSize.height + 8
                 let bottom = usable.maxY - 6 - smallSize.height - 6
-                faceSize = min(rightPanel.width / 0.7, (bottom - top) / 1.1, 200)
+                // En plein écran (boutons par-dessus l'image), la bande à droite peut être presque nulle (image
+                // 16:9) : les boutons gardent alors leur taille habituelle.
+                let panelWidth = fillScreen ? max(rightPanel.width, 150) : rightPanel.width
+                faceSize = min(panelWidth / 0.7, (bottom - top) / 1.1, 200)
                 faceCenter = CGPoint(x: min(rightPanel.midX, usable.maxX - faceSize * 0.33 - 6),
                                      y: (top + bottom) / 2 + faceSize * 0.05)
                 verticalFace = true

@@ -410,6 +410,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var lastAutoSave = clock.now
         var clockReset = false
         var wasPaused = false
+        // Mesure de vitesse (journal toutes les 10 s si le jeu n'arrive pas à suivre : son haché, ralentis).
+        var statStart = clock.now
+        var statFrames = 0
+        var statLate = 0
+        var statWork = 0.0
 
         while true {
             condition.lock()
@@ -442,10 +447,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     core = reloaded
                 }
                 deadline = clock.now - 0.05
+                statStart = clock.now
+                statFrames = 0
+                statLate = 0
+                statWork = 0
             }
 
             let steps = fastForward ? 3 : 1
+            let workStart = clock.now
             for _ in 0..<steps { core.runFrame() }
+            statWork += clock.now - workStart
+            statFrames += 1
             if core.shutdownRequested { break }
             if let state = pendingReloadState {
                 pendingReloadAttempts += 1
@@ -486,8 +498,20 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
             if deadline > now {
                 clock.sleep(until: deadline)
-            } else if now - deadline > 0.25 {
-                deadline = now
+            } else {
+                if !fastForward { statLate += 1 }
+                if now - deadline > 0.25 { deadline = now }
+            }
+            if now - statStart >= 10 {
+                if statLate * 50 > statFrames {
+                    PTLogLine(String(format: "Lenteur : %d images en retard sur %d (une image prend %.1f ms en moyenne, il en faut %.1f)",
+                                     statLate, statFrames, statWork / Double(max(statFrames, 1)) * 1000,
+                                     1000 / max(core.framesPerSecond, 1)))
+                }
+                statStart = now
+                statFrames = 0
+                statLate = 0
+                statWork = 0
             }
 
             if now - lastAutoSave > 30 {
