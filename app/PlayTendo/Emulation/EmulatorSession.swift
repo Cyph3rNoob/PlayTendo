@@ -62,6 +62,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     // Uniquement manipulés sur le thread d'émulation.
     private var fastForward = false
     private var lastSavedRAM: Data?
+    /// N64 : moteur à recharger à la reprise (réglages d'image lus seulement au démarrage d'un jeu).
+    private var coreReloadRequested = false
 
     init(game: Game) {
         self.game = game
@@ -160,6 +162,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     private static func applyPS2Image(to engine: PTPS2Engine?) {
         engine?.setImageUpscale(PS2Settings.resolution.rawValue, smoothing: PS2Settings.smoothing == .on)
+    }
+
+    /// Réglages que le moteur ne lit qu'au démarrage du jeu (image N64) : à la reprise, le moteur est rechargé avec
+    /// eux, la partie étant gardée par une sauvegarde rapide.
+    func requestCoreReload() {
+        perform { [self] in coreReloadRequested = true }
     }
 
     /// GameCube/Wii : applique la résolution et le lissage choisis dans le menu pause (DolphinSettings).
@@ -365,46 +373,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
         let corePath = "\(frameworks)/\(system.coreName).framework/\(system.coreName)"
 
-        let core: PTCore
+        var core: PTCore
         do {
-            core = try PTCore(libraryPath: corePath)
+            core = try loadCore(path: corePath)
         } catch {
             fail(error.localizedDescription)
             return
         }
-
-        core.allowsJIT = JITManager.benefits(system)
-        core.prefersVulkan = system == .n3ds
-        let frameBuffer = self.frameBuffer
-        let ring = self.ring
-        core.videoHandler = { pixels, width, height, pitch, format in
-            frameBuffer.store(pixels, width: Int(width), height: Int(height), pitch: pitch, format: format)
-        }
-        core.hardwareVideoHandler = { buffer, width, height, flipped in
-            frameBuffer.storeHardware(buffer, width: Int(width), height: Int(height), flipped: flipped)
-        }
-        core.audioHandler = { [unowned self] samples, frames in
-            if !self.fastForward { PTAudioRingWrite(ring, samples, frames) }
-        }
-
-        condition.lock()
-        let options = system.coreOptions.merging(optionOverrides) { $1 }
-        condition.unlock()
-        do {
-            try core.loadGame(atPath: game.url.path,
-                              systemDirectory: Paths.systemDirectory(for: system).path,
-                              saveDirectory: Paths.coreSaveDirectory(for: system).path,
-                              options: options)
-        } catch {
-            fail(error.localizedDescription)
-            return
-        }
-        self.core = core
-
-        if let data = try? Data(contentsOf: Paths.saveRAMFile(for: game)) {
-            core.restoreSaveRAM(data)
-        }
-        lastSavedRAM = core.saveRAM()
 
         let audio = AudioOutput(sampleRate: core.sampleRate, ring: ring)
         audio.start()
@@ -451,6 +426,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
             if wasPaused {
                 wasPaused = false
+                if coreReloadRequested {
+                    coreReloadRequested = false
+                    guard let reloaded = reloadCore(core, path: corePath) else {
+                        audio.stop()
+                        self.audio = nil
+                        self.core = nil
+                        fail("Le jeu n'a pas pu redémarrer avec les nouveaux réglages d'image.")
+                        return
+                    }
+                    core = reloaded
+                }
                 deadline = clock.now - 0.05
             }
 
@@ -503,6 +489,63 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async {
             self.state = .stopped
             self.finishStop()
+        }
+    }
+
+    /// Charge le moteur libretro et le jeu (thread d'émulation), avec la mémoire de sauvegarde de la cartouche.
+    private func loadCore(path: String) throws -> PTCore {
+        let system = game.system
+        let core = try PTCore(libraryPath: path)
+        core.allowsJIT = JITManager.benefits(system)
+        core.prefersVulkan = system == .n3ds
+        let frameBuffer = self.frameBuffer
+        let ring = self.ring
+        core.videoHandler = { pixels, width, height, pitch, format in
+            frameBuffer.store(pixels, width: Int(width), height: Int(height), pitch: pitch, format: format)
+        }
+        core.hardwareVideoHandler = { buffer, width, height, flipped in
+            frameBuffer.storeHardware(buffer, width: Int(width), height: Int(height), flipped: flipped)
+        }
+        core.audioHandler = { [unowned self] samples, frames in
+            if !self.fastForward { PTAudioRingWrite(ring, samples, frames) }
+        }
+
+        condition.lock()
+        let options = system.coreOptions.merging(optionOverrides) { $1 }
+        condition.unlock()
+        try core.loadGame(atPath: game.url.path,
+                          systemDirectory: Paths.systemDirectory(for: system).path,
+                          saveDirectory: Paths.coreSaveDirectory(for: system).path,
+                          options: options)
+        self.core = core
+
+        if let data = try? Data(contentsOf: Paths.saveRAMFile(for: game)) {
+            core.restoreSaveRAM(data)
+        }
+        lastSavedRAM = core.saveRAM()
+        return core
+    }
+
+    /// Recharge le moteur avec les réglages actuels sans perdre la partie : sauvegarde rapide en mémoire, moteur
+    /// déchargé puis rechargé, sauvegarde reprise. Nil si le jeu n'a pas pu être rechargé (l'ancien moteur est fermé).
+    private func reloadCore(_ old: PTCore, path: String) -> PTCore? {
+        let clock = MachClock()
+        let start = clock.now
+        let state = old.saveState()
+        persistSaveRAM()
+        self.core = nil
+        old.unloadGame()
+        do {
+            let core = try loadCore(path: path)
+            if let state, !core.loadState(state) {
+                PTLogLine("Rechargement du moteur : la partie n'a pas pu être reprise")
+            }
+            PTLogLine(String(format: "Moteur rechargé avec les nouveaux réglages d'image en %.1f s", clock.now - start))
+            showToast("Image appliquée")
+            return core
+        } catch {
+            PTLogLine("Rechargement du moteur impossible : \(error.localizedDescription)")
+            return nil
         }
     }
 

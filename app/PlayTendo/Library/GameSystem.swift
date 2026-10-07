@@ -241,14 +241,14 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "citra_language_value": "French",
             ].merging(N3DSSettings.coreOptions) { $1 }
         case .psx:
-            ["pcsx_rearmed_drc": "disabled"]
+            ["pcsx_rearmed_drc": "disabled"].merging(PS1Settings.coreOptions) { $1 }
         case .n64:
             // Sans JIT (iOS) : interpréteur « en cache » ; rendu 3D GLideN64 en OpenGL ES.
             [
                 "mupen64plus-cpucore": "cached_interpreter",
                 "mupen64plus-rdp-plugin": "gliden64",
                 "mupen64plus-rsp-plugin": "hle",
-            ]
+            ].merging(N64Settings.coreOptions) { $1 }
         case .psp:
             // Avec la réserve JIT de l'app : recompilation (JIT) ; sinon l'interpréteur « IR », le plus
             // rapide sans recompilation. Résolution et lissage des textures : réglages de l'utilisateur.

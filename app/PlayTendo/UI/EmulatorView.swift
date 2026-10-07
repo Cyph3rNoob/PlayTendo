@@ -14,6 +14,8 @@ struct EmulatorView: View {
     @State private var fillScreen: Bool
     /// Wii : Wiimote + Nunchuk ou manette GameCube (choix retenu par jeu).
     @State private var wiiController: DolphinSettings.WiiController
+    /// PS1 : lissage des bords, fait par l'écran de jeu (filtre FXAA de PlayTendo).
+    @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
 
     init(game: Game) {
         self.game = game
@@ -139,7 +141,8 @@ struct EmulatorView: View {
             }
         } else {
             ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
-                GameScreen(frameBuffer: session.frameBuffer, source: screen.source)
+                GameScreen(frameBuffer: session.frameBuffer, source: screen.source,
+                           smoothing: game.system == .psx && ps1Smoothing == PS1Settings.Smoothing.on.rawValue)
                     .frame(width: screen.frame.width, height: screen.frame.height)
                     .position(x: screen.frame.midX, y: screen.frame.midY)
             }
@@ -256,9 +259,14 @@ private struct PauseMenu: View {
     /// 3DS : résolution et lissage des textures (gardés pour tous ses jeux).
     @AppStorage(N3DSSettings.resolutionKey) private var n3dsResolution = N3DSSettings.Resolution.x1.rawValue
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
+    /// N64 et PS1 : résolution et lissage (gardés pour tous leurs jeux).
+    @AppStorage(N64Settings.resolutionKey) private var n64Resolution = N64Settings.Resolution.x2.rawValue
+    @AppStorage(N64Settings.smoothingKey) private var n64Smoothing = N64Settings.Smoothing.off.rawValue
+    @AppStorage(PS1Settings.resolutionKey) private var ps1Resolution = PS1Settings.Resolution.x1.rawValue
+    @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
-    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii, .n3ds].contains(session.game.system) }
+    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii, .n3ds, .n64, .psx].contains(session.game.system) }
 
     private struct Item: Identifiable {
         let title: String
@@ -391,6 +399,32 @@ private struct PauseMenu: View {
                                         selection: dolphinSmoothing) { value in
                     choose { dolphinSmoothing = value }
                 })
+        } else if session.game.system == .n64 {
+            imageSettings(
+                resolution: NeonSegments(title: "RÉSOLUTION",
+                                         detail: (N64Settings.Resolution(rawValue: n64Resolution) ?? .x2).size,
+                                         options: N64Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: n64Resolution) { value in
+                    choose { n64Resolution = value }
+                },
+                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                                        options: N64Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: n64Smoothing) { value in
+                    choose { n64Smoothing = value }
+                })
+        } else if session.game.system == .psx {
+            imageSettings(
+                resolution: NeonSegments(title: "RÉSOLUTION",
+                                         detail: (PS1Settings.Resolution(rawValue: ps1Resolution) ?? .x1).detail,
+                                         options: PS1Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: ps1Resolution) { value in
+                    choose { ps1Resolution = value }
+                },
+                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                                        options: PS1Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: ps1Smoothing) { value in
+                    choose { ps1Smoothing = value }
+                })
         } else if session.game.system == .n3ds {
             imageSettings(
                 resolution: NeonSegments(title: "RÉSOLUTION",
@@ -457,6 +491,11 @@ private struct PauseMenu: View {
             session.applyDolphinImage()
         } else if session.game.system == .n3ds {
             session.applyOptions(N3DSSettings.coreOptions)
+        } else if session.game.system == .n64 {
+            // Lu seulement au démarrage du jeu : moteur rechargé à la reprise, partie gardée.
+            session.requestCoreReload()
+        } else if session.game.system == .psx {
+            session.applyOptions(PS1Settings.coreOptions)
         } else if session.game.system == .ps2 {
             session.applyPS2Image()
         } else {

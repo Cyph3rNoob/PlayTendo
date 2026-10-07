@@ -8,6 +8,8 @@ import SwiftUI
 struct GameScreen: UIViewRepresentable {
     let frameBuffer: FrameBuffer
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
+    /// Lissage des bords (FXAA) avant l'agrandissement (PS1).
+    var smoothing = false
 
     func makeCoordinator() -> GameRenderer {
         GameRenderer(frameBuffer: frameBuffer)
@@ -27,6 +29,7 @@ struct GameScreen: UIViewRepresentable {
 
     func updateUIView(_ view: MTKView, context: Context) {
         context.coordinator.source = source
+        context.coordinator.smoothing = smoothing
     }
 }
 
@@ -35,6 +38,11 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     private let frameBuffer: FrameBuffer
     private let queue: MTLCommandQueue?
     private var pipeline: MTLRenderPipelineState?
+    /// Lissage : FXAA vers une image intermédiaire à la taille du jeu, ensuite agrandie comme d'habitude.
+    private var fxaaPipeline: MTLRenderPipelineState?
+    private var smoothedTexture: MTLTexture?
+    var smoothing = false
+    private var drawnSmoothing = false
     private var sampler: MTLSamplerState?
     private var texture: MTLTexture?
     private var lastSequence: UInt64 = 0
@@ -61,6 +69,8 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         descriptor.fragmentFunction = library.makeFunction(name: "gameFragment")
         descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         pipeline = try? device.makeRenderPipelineState(descriptor: descriptor)
+        descriptor.fragmentFunction = library.makeFunction(name: "fxaaFragment")
+        fxaaPipeline = try? device.makeRenderPipelineState(descriptor: descriptor)
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .linear
@@ -77,19 +87,30 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         let updated = uploadLatestFrame()
         // Rien de nouveau (jeu en pause, même image, jeu à 30 images/s) : l'écran garde l'image déjà
         // affichée, sans réveiller la puce graphique.
-        guard updated || view.drawableSize != drawnSize || source != drawnSource else { return }
+        guard updated || view.drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing else { return }
         guard let queue, let pipeline, let sampler,
               let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
-              let commands = queue.makeCommandBuffer(),
-              let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
+              let commands = queue.makeCommandBuffer() else { return }
+
+        var texture = self.texture
+        var shownRect = CGRect.zero
+        var flipped = self.flipped
+        if let frame = texture {
+            // Zone affichée = la partie demandée (un écran de DS…) de la zone occupée par l'image.
+            shownRect = CGRect(x: region.minX + source.minX * region.width,
+                               y: region.minY + source.minY * region.height,
+                               width: source.width * region.width, height: source.height * region.height)
+            if smoothing, let smoothed = smooth(frame, rect: shownRect, flipped: flipped, commands: commands) {
+                texture = smoothed
+                shownRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+                flipped = false
+            }
+        }
+        guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
 
         if let texture {
             let size = SIMD2<Float>(Float(texture.width), Float(texture.height))
-            // Zone affichée = la partie demandée (un écran de DS…) de la zone occupée par l'image.
-            let shownRect = CGRect(x: region.minX + source.minX * region.width,
-                                   y: region.minY + source.minY * region.height,
-                                   width: source.width * region.width, height: source.height * region.height)
             let shown = SIMD2<Float>(size.x * Float(shownRect.width), size.y * Float(shownRect.height))
             let drawableSize = view.drawableSize
             let scale = max(1, floor(min(Float(drawableSize.width) / shown.x, Float(drawableSize.height) / shown.y)))
@@ -107,6 +128,36 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         commands.commit()
         drawnSize = view.drawableSize
         drawnSource = source
+        drawnSmoothing = smoothing
+    }
+
+    /// Passe FXAA : la partie affichée de l'image, à sa taille d'origine, lissée dans une image intermédiaire.
+    private func smooth(_ frame: MTLTexture, rect: CGRect, flipped: Bool, commands: MTLCommandBuffer) -> MTLTexture? {
+        guard let device, let fxaaPipeline, let sampler else { return nil }
+        let width = max(1, Int((Double(frame.width) * rect.width).rounded()))
+        let height = max(1, Int((Double(frame.height) * rect.height).rounded()))
+        if smoothedTexture?.width != width || smoothedTexture?.height != height {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+            descriptor.usage = [.renderTarget, .shaderRead]
+            descriptor.storageMode = .private
+            smoothedTexture = device.makeTexture(descriptor: descriptor)
+        }
+        guard let target = smoothedTexture else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .dontCare
+        pass.colorAttachments[0].storeAction = .store
+        guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return nil }
+        var uniforms = [SIMD4<Float>(Float(frame.width), Float(frame.height), 1, flipped ? 1 : 0),
+                        SIMD4<Float>(Float(rect.minX), Float(rect.minY), Float(rect.width), Float(rect.height))]
+        encoder.setRenderPipelineState(fxaaPipeline)
+        encoder.setFragmentTexture(frame, index: 0)
+        encoder.setFragmentSamplerState(sampler, index: 0)
+        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride * 2, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+        return target
     }
 
     /// Prépare la dernière image du jeu si elle est nouvelle. Renvoie vrai dans ce cas.
