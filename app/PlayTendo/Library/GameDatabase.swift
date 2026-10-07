@@ -49,8 +49,14 @@ final class GameDatabase: @unchecked Sendable {
             if let index = byCRC[crc] { return names[index] }
         }
         let hints = Self.regionHints(fileName)
+        let revision = Self.revisionTag(fileName)
         for serial in keys.serials {
-            if let candidates = bySerial[serial], !candidates.isEmpty {
+            if var candidates = bySerial[serial], !candidates.isEmpty {
+                // Même code pour plusieurs versions (3DS : « (Rev 1) ») : celle que nomme le fichier d'abord.
+                if let revision {
+                    let same = candidates.filter { names[$0].lowercased().contains(revision) }
+                    if !same.isEmpty { candidates = same }
+                }
                 return names[best(candidates, hints: hints)]
             }
         }
@@ -100,7 +106,8 @@ final class GameDatabase: @unchecked Sendable {
             score += 100 - rank * 10
             break
         }
-        for unwanted in ["beta", "proto", "demo", "sample", "kiosk", "virtual console", "pirate", "unl", "aftermarket"]
+        for unwanted in ["beta", "proto", "demo", "sample", "kiosk", "virtual console", "pirate", "unl", "aftermarket",
+                         "legit cia"]
             where tags.contains("(\(unwanted)") || tags.contains(" \(unwanted)") {
             score -= 200
         }
@@ -111,6 +118,12 @@ final class GameDatabase: @unchecked Sendable {
     // MARK: Texte
 
     /// Régions citées dans un nom de fichier (« (Europe) », « _EUR_ », « (USA) »…).
+    /// « (rev 1) » si le nom du fichier indique une révision.
+    private static func revisionTag(_ fileName: String) -> String? {
+        guard let range = fileName.lowercased().range(of: #"\(rev ?\d+\)"#, options: .regularExpression) else { return nil }
+        return fileName.lowercased()[range].replacingOccurrences(of: "rev", with: "rev ").replacingOccurrences(of: "rev  ", with: "rev ")
+    }
+
     private static func regionHints(_ fileName: String) -> [String] {
         let tokens = Set(fileName.lowercased().split { !$0.isLetter }.map(String.init))
         var hints: [String] = []

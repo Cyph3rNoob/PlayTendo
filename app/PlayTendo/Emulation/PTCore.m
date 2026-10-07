@@ -1,7 +1,9 @@
 #import "PTCore.h"
 #import "PTGLContext.h"
 #import "PTJIT.h"
+#import "PTVulkanContext.h"
 #import "libretro.h"
+#import "libretro_vulkan.h"
 
 #import <dlfcn.h>
 #import <mach/mach_time.h>
@@ -174,6 +176,10 @@ static PTCore *gCore;
     struct retro_hw_render_callback _hw;
     BOOL _hwRequested;
     PTGLContext *_gl;
+    // Rendu 3D Vulkan (3DS) : interface de négociation donnée par le moteur, contexte créé après load_game.
+    BOOL _wantsVulkan;
+    const struct retro_hw_render_context_negotiation_interface_vulkan *_vkNegotiation;
+    PTVulkanContext *_vk;
     unsigned _pendingGLWidth;
     unsigned _pendingGLHeight;
 
@@ -213,6 +219,9 @@ static void PTVideoRefresh(const void *data, unsigned width, unsigned height, si
         if (core->_gl && handler && width > 0 && height > 0) {
             unsigned w = MIN(width, core->_gl.width), h = MIN(height, core->_gl.height);
             handler([core->_gl finishFrameWithWidth:w height:h], w, h, core->_hw.bottom_left_origin);
+        } else if (core->_vk && handler && width > 0 && height > 0) {
+            CVPixelBufferRef buffer = [core->_vk finishFrameWithWidth:width height:height];
+            if (buffer) handler(buffer, width, height, NO);
         }
         return;
     }
@@ -462,6 +471,18 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         // Indispensable même en cas de souci : certains moteurs (N64) plantent à la fermeture
         // s'ils n'ont jamais été prévenus que leur contexte existe.
         if (_hw.context_reset) _hw.context_reset();
+    } else if (_hwRequested && _wantsVulkan) {
+        // Vulkan (3DS) : instance créée par PlayTendo (MoltenVK), périphérique par le moteur, puis le moteur est
+        // prévenu (c'est là qu'il charge vraiment le jeu).
+        const VkApplicationInfo *app = _vkNegotiation && _vkNegotiation->get_application_info
+            ? _vkNegotiation->get_application_info() : NULL;
+        NSString *moltenVK = [NSBundle.mainBundle.privateFrameworksPath stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"];
+        _vk = [[PTVulkanContext alloc] initWithMoltenVKPath:moltenVK applicationInfo:app];
+        if (!_vk || ![_vk createDeviceWithNegotiation:_vkNegotiation]) {
+            [self unloadGame];
+            return [self failWithMessage:@"L'affichage 3D (Vulkan) n'a pas pu démarrer." error:error] != nil;
+        }
+        if (_hw.context_reset) _hw.context_reset();
     }
     _api.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
     PTLogLine([NSString stringWithFormat:@"Jeu chargé : %u×%u, %.3f images/s, son %.0f Hz",
@@ -514,12 +535,18 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         [_gl makeCurrent];
         if (_hw.context_destroy) _hw.context_destroy();
     }
+    if (_vk && _hw.context_destroy) _hw.context_destroy();
     if (_gameLoaded) _api.unload_game();
     _gameLoaded = NO;
     if (_initialized) _api.deinit();
     _initialized = NO;
     _gameData = nil;
     _gl = nil;
+    // Le périphérique Vulkan appartient à PlayTendo : détruit après le moteur.
+    [_vk destroy];
+    _vk = nil;
+    _vkNegotiation = NULL;
+    _wantsVulkan = NO;
     _hwRequested = NO;
     if (gCore == self) gCore = nil;
 }
@@ -816,6 +843,14 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_SET_HW_RENDER): {
             struct retro_hw_render_callback *callback = data;
+            if (callback->context_type == RETRO_HW_CONTEXT_VULKAN) {
+                // Le contexte est créé après load_game, quand le moteur a donné son interface de négociation.
+                if (!_prefersVulkan) return false;
+                _hw = *callback;
+                _hwRequested = YES;
+                _wantsVulkan = YES;
+                return true;
+            }
             BOOL supported = callback->context_type == RETRO_HW_CONTEXT_OPENGLES2
                 || callback->context_type == RETRO_HW_CONTEXT_OPENGLES3
                 || (callback->context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION
@@ -841,8 +876,27 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             return true;
         }
         case PT_ENV(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER):
-            *(unsigned *)data = RETRO_HW_CONTEXT_OPENGLES3;
+            *(unsigned *)data = _prefersVulkan ? RETRO_HW_CONTEXT_VULKAN : RETRO_HW_CONTEXT_OPENGLES3;
             return true;
+        case PT_ENV(RETRO_ENVIRONMENT_SET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE): {
+            const struct retro_hw_render_context_negotiation_interface_vulkan *negotiation = data;
+            if (!negotiation || negotiation->interface_type != RETRO_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_VULKAN)
+                return false;
+            _vkNegotiation = negotiation;
+            return true;
+        }
+        case PT_ENV(RETRO_ENVIRONMENT_GET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_SUPPORT): {
+            struct retro_hw_render_context_negotiation_interface *support = data;
+            // Version 1 : le moteur crée le périphérique (create_device) ; l'instance est celle de PlayTendo.
+            support->interface_version = support->interface_type == RETRO_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE_VULKAN ? 1 : 0;
+            return true;
+        }
+        case PT_ENV(RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE): {
+            const void *interface = _vk.renderInterface;
+            if (!interface) return false;
+            *(const void **)data = interface;
+            return true;
+        }
         case PT_ENV(RETRO_ENVIRONMENT_SHUTDOWN):
             _shutdownRequested = YES;
             return true;

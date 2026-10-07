@@ -30,6 +30,8 @@ SOURCES = {
     "PS2": (["redump/Sony - PlayStation 2.dat"], False),
     "GameCube": (["redump/Nintendo - GameCube.dat"], False),
     "Wii": (["redump/Nintendo - Wii.dat"], False),
+    # 3DS : code produit de l'en-tête NCCH du jeu (« CTR-P-AJRP » → « CTRPAJRP »), boîte et eShop.
+    "3DS": (["no-intro/Nintendo - Nintendo 3DS.dat", "no-intro/Nintendo - Nintendo 3DS (Digital).dat"], False),
 }
 
 # GameCube / Wii : l'app lit le code du jeu dans l'en-tête du disque (« GZLP » dans « GZLP01 ») ; la base

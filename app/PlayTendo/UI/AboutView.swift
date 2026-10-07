@@ -21,6 +21,8 @@ struct AboutView: View {
         Engine(name: "PPSSPP", version: "1.20.4", consoles: "PlayStation Portable", license: "GPL-2.0+"),
         Engine(name: "ARMSX2 (PCSX2)", version: "iOS 2.6.0", consoles: "PlayStation 2", license: "GPL-3.0"),
         Engine(name: "DolphiniOS (Dolphin)", version: "5.0.0 bêta 6", consoles: "GameCube, Wii", license: "GPL-2.0+"),
+        Engine(name: "Azahar", version: "2126.1.2", consoles: "Nintendo 3DS", license: "GPL-2.0+"),
+        Engine(name: "MoltenVK", version: "1.4.2", consoles: "Affichage 3DS (Vulkan vers Metal)", license: "Apache-2.0"),
     ]
 
     private var appVersion: String {

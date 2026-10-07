@@ -125,7 +125,7 @@ struct LibraryView: View {
             } catch {
                 if waitingForJIT == game {
                     waitingForJIT = nil
-                    let slow = [.ps2, .gameCube, .wii].contains(game.system)
+                    let slow = [.ps2, .gameCube, .wii, .n3ds].contains(game.system)
                         ? "\n\nSans turbo, la \(game.system.name) est très lente (injouable)." : ""
                     jitFailure = JITFailure(game: game, message: error.localizedDescription + slow)
                 }
@@ -568,8 +568,9 @@ private struct EmptyLibraryView: View {
             .buttonStyle(.plain)
 
             VStack(spacing: 8) {
-                HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii, .gb]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.gbc, .gba, .nds, .psx, .psp, .ps2]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.gb, .gbc, .gba, .nds, .n3ds]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.psx, .psp, .ps2]) { SystemBadge(system: $0) } }
             }
             .padding(.top, 10)
         }

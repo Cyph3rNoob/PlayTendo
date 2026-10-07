@@ -371,6 +371,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
 
         core.allowsJIT = JITManager.benefits(system)
+        core.prefersVulkan = system == .n3ds
         let frameBuffer = self.frameBuffer
         let ring = self.ring
         core.videoHandler = { pixels, width, height, pitch, format in

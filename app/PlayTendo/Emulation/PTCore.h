@@ -52,6 +52,8 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 /// Vrai si le moteur dessine en 3D avec OpenGL ES.
 /// Le moteur peut se servir de la réserve JIT de l'app (à régler avant le chargement du jeu).
 @property (nonatomic) BOOL allowsJIT;
+/// Le moteur dessine avec Vulkan (3DS, par MoltenVK) plutôt qu'OpenGL ES (à régler avant le chargement du jeu).
+@property (nonatomic) BOOL prefersVulkan;
 
 /// Renseignés après le chargement du jeu (et mis à jour si le moteur les change).
 @property (nonatomic, readonly) double framesPerSecond;

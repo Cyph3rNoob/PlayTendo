@@ -45,6 +45,42 @@ else
   echo "OK  dolphin-ios deja present"
 fi
 
+# Phase 3 : 3DS. Archive officielle complète d'Azahar (avec ses sous-modules : dynarmic, oaknut…), vérifiée par
+# l'empreinte SHA-256 publiée avec elle.
+AZAHAR_TAG=2126.1.2
+if [ ! -d azahar ]; then
+  echo ""
+  echo ">>> azahar (version $AZAHAR_TAG, 43 Mo)"
+  base="https://github.com/azahar-emu/azahar/releases/download/$AZAHAR_TAG"
+  curl -fL --progress-bar "$base/azahar-unified-source-$AZAHAR_TAG.tar.xz" -o azahar.tar.xz
+  expected=$(curl -fsL "$base/azahar-unified-source-$AZAHAR_TAG.tar.xz.sha256sum" | awk '{print $1}')
+  actual=$(shasum -a 256 azahar.tar.xz | awk '{print $1}')
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+    echo "!!! azahar : empreinte SHA-256 différente de celle publiée ($actual / $expected)"
+    rm -f azahar.tar.xz
+    exit 1
+  fi
+  echo "OK  empreinte SHA-256 vérifiée"
+  rm -rf azahar.tmp && mkdir azahar.tmp && tar -xJf azahar.tar.xz -C azahar.tmp && rm azahar.tar.xz
+  # L'archive contient un seul dossier : il devient sources/azahar.
+  mv azahar.tmp/*(/) azahar && rmdir azahar.tmp
+else
+  echo "OK  azahar deja present"
+fi
+
+# MoltenVK (Vulkan traduit en Metal, Apache-2.0) : l'image de la 3DS sur iPhone.
+MOLTENVK_TAG=v1.4.2
+if [ ! -d MoltenVK ]; then
+  echo ""
+  echo ">>> MoltenVK (version $MOLTENVK_TAG, 35 Mo)"
+  curl -fL --progress-bar "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_TAG/MoltenVK-ios.tar" \
+    -o MoltenVK-ios.tar
+  rm -rf MoltenVK.tmp && mkdir MoltenVK.tmp && tar -xf MoltenVK-ios.tar -C MoltenVK.tmp && rm MoltenVK-ios.tar
+  mv MoltenVK.tmp MoltenVK
+else
+  echo "OK  MoltenVK deja present"
+fi
+
 # Bibliothèque : base libretro (No-Intro / Redump) pour reconnaître les jeux.
 DB_TAG=v1.22.1
 fetch_database() {
@@ -62,7 +98,9 @@ fetch_database() {
            "metadat/redump/Sony - PlayStation 2.dat" \
            "metadat/redump/Nintendo - GameCube.dat" \
            "metadat/redump/Nintendo - Wii.dat" \
-           "metadat/no-intro/Sony - PlayStation Portable.dat"; do
+           "metadat/no-intro/Sony - PlayStation Portable.dat" \
+           "metadat/no-intro/Nintendo - Nintendo 3DS.dat" \
+           "metadat/no-intro/Nintendo - Nintendo 3DS (Digital).dat"; do
     local out="$dir/${f#metadat/}"
     if [ -s "$out" ]; then continue; fi
     mkdir -p "$(dirname "$out")"

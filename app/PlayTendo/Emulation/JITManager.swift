@@ -82,7 +82,7 @@ final class JITManager: ObservableObject {
     var isActive: Bool { PTJITIsActive() }
 
     /// Consoles dont le moteur sait se servir du JIT.
-    nonisolated static func benefits(_ system: GameSystem) -> Bool { [.psp, .ps2, .gameCube, .wii].contains(system) }
+    nonisolated static func benefits(_ system: GameSystem) -> Bool { [.psp, .ps2, .gameCube, .wii, .n3ds].contains(system) }
 
     var isStikDebugInstalled: Bool {
         UIApplication.shared.canOpenURL(URL(string: "stikdebug://")!)

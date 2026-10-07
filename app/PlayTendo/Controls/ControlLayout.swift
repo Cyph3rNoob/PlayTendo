@@ -82,6 +82,10 @@ struct ControlLayout: Equatable {
     /// ensuite affichée où l'on veut.
     static let topScreen = CGRect(x: 0, y: 0, width: 1, height: 0.5)
     static let bottomScreen = CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
+    /// 3DS (disposition « default » d'Azahar, 400×480) : l'écran du haut (400×240, 5:3) au-dessus de celui du bas
+    /// (320×240, 4:3) centré.
+    static let topScreen3DS = CGRect(x: 0, y: 0, width: 1, height: 0.5)
+    static let bottomScreen3DS = CGRect(x: 0.1, y: 0.5, width: 0.8, height: 0.5)
 
     static func == (lhs: ControlLayout, rhs: ControlLayout) -> Bool {
         lhs.gameRect == rhs.gameRect && lhs.screens == rhs.screens
@@ -126,7 +130,7 @@ struct ControlLayout: Equatable {
             if dualScreen {
                 layout.placeDualScreens(in: usable, portrait: true,
                                         maxStackHeight: usable.height * (controllerConnected ? 1 : 0.70),
-                                        centered: false, dual: dual)
+                                        centered: false, dual: dual, scheme: scheme)
             } else {
                 var width = usable.width
                 var height = width / aspect
@@ -178,7 +182,8 @@ struct ControlLayout: Equatable {
                 // Grands écrans sur toute la largeur, avec ou sans manette (choix de l'utilisateur,
                 // 2026-10-06) : les boutons tactiles passent par-dessus, en semi-transparent, et un
                 // bouton visible a priorité sur l'écran tactile qu'il recouvre.
-                layout.placeDualScreens(in: usable, portrait: false, maxStackHeight: 0, centered: true, dual: dual)
+                layout.placeDualScreens(in: usable, portrait: false, maxStackHeight: 0, centered: true, dual: dual,
+                                        scheme: scheme)
             } else {
                 var height = fillScreen ? bounds.height : usable.height
                 var width = height * aspect
@@ -280,41 +285,47 @@ struct ControlLayout: Equatable {
         return layout
     }
 
-    /// DS : place les deux écrans (4:3 chacun) dans `area`. En portrait ils sont empilés ;
+    /// DS et 3DS : place les deux écrans dans `area`, à la même hauteur de lignes (192 pour la DS, 240 pour la 3DS),
+    /// chacun à son format (DS : 4:3 tous les deux ; 3DS : 5:3 en haut, 4:3 en bas). En portrait ils sont empilés ;
     /// en paysage, l'écran principal est à gauche et l'autre à droite, à la taille choisie.
     private mutating func placeDualScreens(in area: CGRect, portrait: Bool, maxStackHeight: CGFloat,
-                                           centered: Bool, dual: DualScreenOptions) {
-        let mainSource = dual.swapped ? Self.bottomScreen : Self.topScreen
-        let otherSource = dual.swapped ? Self.topScreen : Self.bottomScreen
+                                           centered: Bool, dual: DualScreenOptions, scheme: ControlScheme) {
+        let is3DS = scheme.isNintendo3DS
+        let top = (source: is3DS ? Self.topScreen3DS : Self.topScreen, aspect: is3DS ? 5.0 / 3.0 : 4.0 / 3.0)
+        let bottom = (source: is3DS ? Self.bottomScreen3DS : Self.bottomScreen, aspect: 4.0 / 3.0)
+        let main = dual.swapped ? bottom : top
+        let other = dual.swapped ? top : bottom
         let first: CGRect
         let second: CGRect
         if portrait {
-            var width = area.width
-            var height = width * 0.75
+            // Même hauteur pour les deux : la plus large des deux tient dans la largeur, la pile dans la hauteur.
+            var height = area.width / max(main.aspect, other.aspect)
             if height * 2 > maxStackHeight {
                 height = maxStackHeight / 2
-                width = height / 0.75
             }
-            let top = centered ? area.midY - height : area.minY
-            first = CGRect(x: area.midX - width / 2, y: top, width: width, height: height)
-            second = first.offsetBy(dx: 0, dy: height)
+            let y = centered ? area.midY - height : area.minY
+            first = CGRect(x: area.midX - height * main.aspect / 2, y: y, width: height * main.aspect, height: height)
+            second = CGRect(x: area.midX - height * other.aspect / 2, y: y + height,
+                            width: height * other.aspect, height: height)
         } else {
             let gap: CGFloat = 8
             let available = max(0, area.width - gap)
             var mainWidth = available * (1 - dual.touchSize.fraction)
             var otherWidth = available * dual.touchSize.fraction
-            if mainWidth * 0.75 > area.height {
-                let shrink = area.height / (mainWidth * 0.75)
+            let tallest = max(mainWidth / main.aspect, otherWidth / other.aspect)
+            if tallest > area.height {
+                let shrink = area.height / tallest
                 mainWidth *= shrink
                 otherWidth *= shrink
             }
             let left = area.midX - (mainWidth + gap + otherWidth) / 2
-            first = CGRect(x: left, y: area.midY - mainWidth * 0.375, width: mainWidth, height: mainWidth * 0.75)
-            second = CGRect(x: first.maxX + gap, y: area.midY - otherWidth * 0.375,
-                            width: otherWidth, height: otherWidth * 0.75)
+            let mainHeight = mainWidth / main.aspect
+            let otherHeight = otherWidth / other.aspect
+            first = CGRect(x: left, y: area.midY - mainHeight / 2, width: mainWidth, height: mainHeight)
+            second = CGRect(x: first.maxX + gap, y: area.midY - otherHeight / 2, width: otherWidth, height: otherHeight)
         }
-        screens = [ScreenPlacement(frame: first, source: mainSource, isTouch: mainSource == Self.bottomScreen),
-                   ScreenPlacement(frame: second, source: otherSource, isTouch: otherSource == Self.bottomScreen)]
+        screens = [ScreenPlacement(frame: first, source: main.source, isTouch: main.source == bottom.source),
+                   ScreenPlacement(frame: second, source: other.source, isTouch: other.source == bottom.source)]
         gameRect = first.union(second)
     }
 
@@ -352,7 +363,7 @@ struct ControlLayout: Equatable {
             controls.append(PlacedControl(element: .shoulder(.r), frame: z, label: "Z"))
             return
         }
-        let ps = scheme.hasSecondShoulders
+        let ps = scheme.hasSecondShoulders && !scheme.isNintendo3DS
         controls.append(PlacedControl(element: .shoulder(.l),
                                       frame: CGRect(x: left, y: top, width: size.width, height: size.height),
                                       label: ps ? "L1" : "L"))
@@ -366,16 +377,17 @@ struct ControlLayout: Equatable {
                 : CGRect(x: left + size.width + 8, y: top, width: size.width, height: size.height)
             controls.append(PlacedControl(element: .shoulder(.l2), frame: frame, label: "Z"))
         }
-        guard ps else { return }
+        guard scheme.hasSecondShoulders else { return }
+        // PlayStation : L2 et R2 ; 3DS : ZL et ZR (New 3DS), à l'intérieur de L et R.
         let second: (CGFloat, CGFloat, CGFloat) = stacked
             ? (left, right - size.width, top + size.height + 8)
             : (left + size.width + 8, right - 2 * size.width - 8, top)
         controls.append(PlacedControl(element: .shoulder(.l2),
                                       frame: CGRect(x: second.0, y: second.2, width: size.width, height: size.height),
-                                      label: "L2"))
+                                      label: ps ? "L2" : "ZL"))
         controls.append(PlacedControl(element: .shoulder(.r2),
                                       frame: CGRect(x: second.1, y: second.2, width: size.width, height: size.height),
-                                      label: "R2"))
+                                      label: ps ? "R2" : "ZR"))
     }
 
     /// `vertical` (N64 en paysage) : boutons C en haut, A et B en dessous.

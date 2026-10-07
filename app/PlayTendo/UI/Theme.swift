@@ -27,6 +27,7 @@ extension GameSystem {
         case .gbc: Color(red: 1.0, green: 0.36, blue: 0.86)
         case .gba: Color(red: 0.42, green: 0.55, blue: 1.0)
         case .nds: Color(red: 0.36, green: 0.90, blue: 1.0)
+        case .n3ds: Color(red: 1.0, green: 0.30, blue: 0.30)
         case .psx: Color(red: 0.26, green: 0.60, blue: 1.0)
         case .psp: Color(red: 0.86, green: 0.92, blue: 1.0)
         case .ps2: Color(red: 0.36, green: 0.44, blue: 1.0)

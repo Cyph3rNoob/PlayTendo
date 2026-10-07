@@ -21,6 +21,7 @@ enum GameIdentifier {
         case .psp: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
         case .ps2: return GameKeys(serials: discSerial(url, system: system).map { [$0] } ?? [])
         case .gameCube, .wii: return GameKeys(serials: nintendoDiscKeys(url))
+        case .n3ds: return GameKeys(serials: n3dsProductCode(url).map { [$0] } ?? [])
         default: return cartridgeKeys(url, system: system)
         }
     }
@@ -214,6 +215,27 @@ enum GameIdentifier {
         guard let header = nintendoDiscHeader(url), let code = ascii(header.subdata(in: 0..<4)) else { return [] }
         let version = header[7]
         return version > 0 ? ["\(code)R\(version)", code] : [code]
+    }
+
+    // MARK: 3DS
+
+    /// Code produit de l'en-tête NCCH (« CTR-P-AJRP », écrit « CTRPAJRP » comme dans la base). .3ds / .cci : image
+    /// de carte (« NCSD ») dont la première partition est le jeu ; .cxi : le jeu lui-même. Les formats compressés
+    /// d'Azahar (.zcci…) et les programmes .3dsx n'en ont pas de lisible : reconnus par leur nom.
+    private static func n3dsProductCode(_ url: URL) -> String? {
+        var ncch: UInt64 = 0
+        switch url.pathExtension.lowercased() {
+        case "3ds", "cci":
+            guard let card = read(url, offset: 0x100, count: 0x28), card.prefix(4) == Data("NCSD".utf8) else { return nil }
+            ncch = UInt64(le32(card, 0x20)) * 0x200
+        case "cxi":
+            ncch = 0
+        default:
+            return nil
+        }
+        guard let header = read(url, offset: ncch + 0x100, count: 0x60), header.prefix(4) == Data("NCCH".utf8),
+              let code = cString(header, at: 0x50), code.hasPrefix("CTR") else { return nil }
+        return cleanSerial(code)
     }
 
     private static func ascii(_ data: Data) -> String? {

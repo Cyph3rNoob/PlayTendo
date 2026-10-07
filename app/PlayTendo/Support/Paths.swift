@@ -121,6 +121,7 @@ enum Paths {
       PlayStation Portable .iso .cso .pbp
       PlayStation 2 .iso .chd .cso
       GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
+      Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)

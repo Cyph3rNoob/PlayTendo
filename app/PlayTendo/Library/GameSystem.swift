@@ -13,6 +13,9 @@ enum ControlScheme {
     case gameBoy
     case gameBoyAdvance
     case nintendoDS
+    /// 3DS : deux écrans (celui du haut plus large), stick circulaire au-dessus de la croix, A B X Y, L R ZL ZR,
+    /// stick C (New 3DS), HOME.
+    case nintendo3DS
     case playStation
     case psp
     case playStation2
@@ -21,16 +24,18 @@ enum ControlScheme {
     case wiimote
 
     var hasShoulders: Bool { ![.nes, .gameBoy].contains(self) }
-    var hasSecondShoulders: Bool { self == .playStation || self == .playStation2 }
-    var hasFourFaceButtons: Bool { [.snes, .nintendoDS, .playStation, .psp, .playStation2].contains(self) }
+    var hasSecondShoulders: Bool { [.playStation, .playStation2, .nintendo3DS].contains(self) }
+    var hasFourFaceButtons: Bool { [.snes, .nintendoDS, .nintendo3DS, .playStation, .psp, .playStation2].contains(self) }
     var usesPlayStationSymbols: Bool { [.playStation, .psp, .playStation2].contains(self) }
-    var usesTouchScreen: Bool { self == .nintendoDS }
+    var usesTouchScreen: Bool { self == .nintendoDS || self == .nintendo3DS }
+    /// 3DS : écran du haut en 5:3 (400×240), celui du bas en 4:3 (320×240), centré sous lui dans l'image du moteur.
+    var isNintendo3DS: Bool { self == .nintendo3DS }
     /// Stick analogique virtuel (N64, PSP, PS2, GameCube, Nunchuk de la Wii).
-    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote].contains(self) }
-    /// Second stick (droit) : PS2, stick C de la GameCube.
-    var hasRightStick: Bool { self == .playStation2 || self == .gameCube }
-    /// À gauche, le stick en haut et une petite croix dessous (N64, GameCube, Wii) ; sinon l'inverse.
-    var stickAboveDPad: Bool { [.nintendo64, .gameCube, .wiimote].contains(self) }
+    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote, .nintendo3DS].contains(self) }
+    /// Second stick (droit) : PS2, stick C de la GameCube et de la New 3DS.
+    var hasRightStick: Bool { [.playStation2, .gameCube, .nintendo3DS].contains(self) }
+    /// À gauche, le stick en haut et une petite croix dessous (N64, GameCube, Wii, 3DS) ; sinon l'inverse.
+    var stickAboveDPad: Bool { [.nintendo64, .gameCube, .wiimote, .nintendo3DS].contains(self) }
     var hasSelect: Bool { self != .nintendo64 && self != .gameCube }
     /// N64 : gâchette Z et boutons C jaunes (envoyés au stick analogique droit).
     var isNintendo64: Bool { self == .nintendo64 }
@@ -46,7 +51,7 @@ enum ControlScheme {
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {
-    case nes, snes, n64, gb, gbc, gba, nds, psx, psp, ps2, gameCube, wii
+    case nes, snes, n64, gb, gbc, gba, nds, n3ds, psx, psp, ps2, gameCube, wii
 
     var id: String { rawValue }
 
@@ -59,6 +64,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gbc: "Game Boy Color"
         case .gba: "Game Boy Advance"
         case .nds: "Nintendo DS"
+        case .n3ds: "Nintendo 3DS"
         case .psx: "PlayStation"
         case .psp: "PlayStation Portable"
         case .ps2: "PlayStation 2"
@@ -76,6 +82,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gbc: "GBC"
         case .gba: "GBA"
         case .nds: "DS"
+        case .n3ds: "3DS"
         case .psx: "PS1"
         case .psp: "PSP"
         case .ps2: "PS2"
@@ -98,6 +105,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gbc: ["gbc"]
         case .gba: ["gba"]
         case .nds: ["nds"]
+        // Jeux décryptés (Azahar ne lit plus les jeux cryptés) ; pas de .cia dans la version libretro.
+        case .n3ds: ["3ds", "cci", "cxi", "3dsx", "zcci", "zcxi", "z3dsx"]
         case .psx: Self.psxExtensions
         case .psp: Self.pspExtensions
         case .ps2: ["iso", "chd", "cso"]
@@ -123,6 +132,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .n64: "mupen64plus_next"
         case .gb, .gbc, .gba: "mgba"
         case .nds: "melondsds"
+        case .n3ds: "azahar"
         case .psx: "pcsx_rearmed"
         case .psp: "ppsspp"
         case .ps2: "PS2Core"
@@ -137,6 +147,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .n64: "Mupen64Plus-Next"
         case .gb, .gbc, .gba: "mGBA"
         case .nds: "melonDS DS"
+        case .n3ds: "Azahar"
         case .psx: "PCSX-ReARMed"
         case .psp: "PPSSPP"
         case .ps2: "ARMSX2 (PCSX2)"
@@ -154,6 +165,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gbc: "Nintendo - Game Boy Color"
         case .gba: "Nintendo - Game Boy Advance"
         case .nds: "Nintendo - Nintendo DS"
+        case .n3ds: "Nintendo - Nintendo 3DS"
         case .psx: "Sony - PlayStation"
         case .psp: "Sony - PlayStation Portable"
         case .ps2: "Sony - PlayStation 2"
@@ -172,6 +184,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gbc: "GBC"
         case .gba: "GBA"
         case .nds: "DS"
+        case .n3ds: "3DS"
         case .psx: "PS1"
         case .psp: "PSP"
         case .ps2: "PS2"
@@ -188,6 +201,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .gb, .gbc: .gameBoy
         case .gba: .gameBoyAdvance
         case .nds: .nintendoDS
+        case .n3ds: .nintendo3DS
         case .psx: .playStation
         case .psp: .psp
         case .ps2: .playStation2
@@ -209,6 +223,22 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 // Écrans toujours rendus empilés ; l'app découpe et place ensuite chacun d'eux.
                 "melonds_screen_layout1": "top-bottom",
                 "melonds_screen_gap": "0",
+            ]
+        case .n3ds:
+            // Vulkan (MoltenVK) : le seul rendu matériel du moteur sur iPhone. Écrans toujours rendus empilés (le bas
+            // centré sous le haut) ; l'app découpe et place ensuite chacun d'eux. Stick droit = stick C seulement
+            // (pas de pointeur : on touche l'écran du bas). Recompilateur si la réserve JIT de l'app est prête
+            // (le moteur vérifie aussi GET_JIT_CAPABLE).
+            [
+                "citra_graphics_api": "Vulkan",
+                "citra_layout_option": "default",
+                "citra_swap_screen": "Top",
+                "citra_analog_function": "c_stick",
+                "citra_enable_mouse_touchscreen": "disabled",
+                "citra_enable_touch_touchscreen": "enabled",
+                "citra_use_cpu_jit": "enabled",
+                "citra_use_shader_jit": "enabled",
+                "citra_language_value": "French",
             ]
         case .psx:
             ["pcsx_rearmed_drc": "disabled"]
@@ -235,7 +265,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
     }
 
     /// Ordre d'affichage dans la bibliothèque.
-    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .psx, .psp, .ps2]
+    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .psp, .ps2]
 
     static func forExtension(_ ext: String) -> GameSystem? {
         let ext = ext.lowercased()
