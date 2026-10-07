@@ -1,6 +1,6 @@
 import GameController
 
-/// Manettes Bluetooth (Xbox, PlayStation, MFi…). La disposition suit la position des
+/// Manettes Bluetooth (Xbox, PlayStation, Switch, MFi…). La disposition suit la position des
 /// boutons : celui du bas = B, celui de droite = A, comme sur une manette Nintendo.
 final class GamepadManager: ObservableObject {
     @Published private(set) var isConnected = false
@@ -67,12 +67,21 @@ final class GamepadManager: ObservableObject {
         isConnected = controller != nil
         if !isConnected { isActive = false }
         if let controller, let pad = controller.extendedGamepad {
-            PTLogLine("Manette détectée : \(controller.vendorName ?? "sans nom")")
-            bind(pad)
+            let nintendo = Self.reportsNintendoLabels(controller)
+            PTLogLine("Manette détectée : \(controller.vendorName ?? "sans nom") (\(controller.productCategory))"
+                      + (nintendo ? ", boutons Nintendo remis par position" : ""))
+            bind(pad, nintendoLabels: nintendo)
         }
     }
 
-    private func bind(_ pad: GCExtendedGamepad) {
+    /// Manettes Nintendo (Switch Pro, Joy-Con, manettes Switch Online) : iOS donne leurs boutons par lettre (`buttonA` =
+    /// le A, à droite), alors que pour les autres `buttonA` est le bouton du bas.
+    private static func reportsNintendoLabels(_ controller: GCController) -> Bool {
+        let names = controller.productCategory + " " + (controller.vendorName ?? "")
+        return ["Switch", "Joy-Con", "Nintendo"].contains { names.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func bind(_ pad: GCExtendedGamepad, nintendoLabels: Bool) {
         func map(_ input: GCControllerButtonInput?, _ button: PTButton) {
             input?.pressedChangedHandler = { [weak self] _, _, pressed in
                 guard let self else { return }
@@ -85,10 +94,18 @@ final class GamepadManager: ObservableObject {
                 onButton?(button, pressed)
             }
         }
-        map(pad.buttonA, .b)
-        map(pad.buttonB, .a)
-        map(pad.buttonX, .y)
-        map(pad.buttonY, .x)
+        // Bouton du bas → B, de droite → A, de gauche → Y, du haut → X (PlayStation : croix, rond, carré, triangle).
+        if nintendoLabels {
+            map(pad.buttonB, .b)
+            map(pad.buttonA, .a)
+            map(pad.buttonY, .y)
+            map(pad.buttonX, .x)
+        } else {
+            map(pad.buttonA, .b)
+            map(pad.buttonB, .a)
+            map(pad.buttonX, .y)
+            map(pad.buttonY, .x)
+        }
         map(pad.leftShoulder, .l)
         map(pad.rightShoulder, .r)
         map(pad.leftTrigger, .l2)
