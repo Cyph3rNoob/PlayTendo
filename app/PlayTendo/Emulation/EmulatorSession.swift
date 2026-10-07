@@ -200,7 +200,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             do {
                 let packed = Self.packState(data)
                 try packed.write(to: Paths.stateFile(for: game), options: .atomic)
-                PTLogLine("Sauvegarde rapide : \(data.count / 1024) Ko, \(packed.count / 1024) Ko une fois compressée")
+                PTLogLine(packed.count == data.count ? "Sauvegarde rapide : \(data.count / 1024) Ko (gardée brute)"
+                          : "Sauvegarde rapide : \(data.count / 1024) Ko, \(packed.count / 1024) Ko une fois compressée")
                 saveThumbnail()
                 DispatchQueue.main.async { self.hasSaveState = true }
                 showToast("Partie sauvegardée")
