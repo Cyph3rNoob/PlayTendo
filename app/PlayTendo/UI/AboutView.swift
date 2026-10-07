@@ -3,6 +3,7 @@ import SwiftUI
 /// « À propos » : l'essentiel pour se servir de l'app (jeux, BIOS, turbo, sauvegardes, dépannage), puis les crédits.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(WelcomeView.seenKey) private var welcomeSeen = 0
 
     private struct Engine: Identifiable {
         let name: String
@@ -37,8 +38,8 @@ struct AboutView: View {
         ("Nintendo DS", ".nds"),
         ("Nintendo 3DS", ".3ds .cci .cxi .3dsx (décryptés)"),
         ("PlayStation", ".cue + .bin, .chd, .pbp"),
-        ("PlayStation Portable", ".iso .cso .pbp"),
         ("PlayStation 2", ".iso .chd .cso"),
+        ("PlayStation Portable", ".iso .cso .pbp"),
     ]
 
     private var appVersion: String {
@@ -49,6 +50,16 @@ struct AboutView: View {
         NavigationStack {
             List {
                 header
+
+                Section {
+                    Button {
+                        // La présentation réapparaît par-dessus la bibliothèque, une fois cette page fermée.
+                        welcomeSeen = 0
+                        dismiss()
+                    } label: {
+                        Label("Revoir la présentation", systemImage: "sparkles")
+                    }
+                }
 
                 Section("Ajouter des jeux") {
                     Label("App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque (.zip acceptés).",
@@ -77,8 +88,13 @@ struct AboutView: View {
                 Section("Mode turbo") {
                     Label("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP.",
                           systemImage: "bolt.fill")
-                    Label("Il faut StikDebug et LocalDevVPN. Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo (détails dans la roue dentée).",
-                          systemImage: "gearshape")
+                    // Liens : site officiel de StikDebug (celui de son dépôt GitHub) et page App Store de LocalDevVPN
+                    // (vérifiés le 2026-10-07).
+                    Label {
+                        Text("Il faut [StikDebug](https://stikdebug.xyz/) et [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044). Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo (détails dans la roue dentée).")
+                    } icon: {
+                        Image(systemName: "gearshape")
+                    }
                 }
 
                 Section("Sauvegardes") {

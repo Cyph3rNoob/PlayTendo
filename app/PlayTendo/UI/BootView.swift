@@ -3,7 +3,7 @@ import UIKit
 
 /// Animation de démarrage : un écran cathodique s'allume sur le logo, une étincelle jaillit entre
 /// les deux manettes, puis « PLAYTENDO » s'écrit.
-/// Un toucher la passe. Version sobre si « Réduire les animations » est activé.
+/// Un toucher la passe. Version sobre si « Réduire les animations » est activé. Son : `BootSound`.
 struct BootView: View {
     let onFinish: () -> Void
 
@@ -101,6 +101,8 @@ struct BootView: View {
     // MARK: Déroulé
 
     private func run() async {
+        // Son calé sur ce déroulé : écran ouvert à 0,41 s, étincelle à 0,81 s.
+        BootSound.play()
         if reduceMotion {
             lineOpacity = 0
             logoScaleY = 1

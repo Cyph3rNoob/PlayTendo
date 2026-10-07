@@ -118,8 +118,8 @@ enum Paths {
       NES .nes · Super Nintendo .sfc .smc · Nintendo 64 .z64 .n64 .v64
       Game Boy .gb · Game Boy Color .gbc · Game Boy Advance .gba · Nintendo DS .nds
       PlayStation .chd .pbp .m3u, ou .cue avec ses fichiers .bin
-      PlayStation Portable .iso .cso .pbp
       PlayStation 2 .iso .chd .cso
+      PlayStation Portable .iso .cso .pbp
       GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
       Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
       Les .zip sont acceptés avec le bouton « + » de l'app.

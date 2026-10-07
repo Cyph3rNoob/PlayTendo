@@ -187,8 +187,8 @@ struct LibraryView: View {
     }
 
     private var presentSystems: [GameSystem] {
-        let present = Set(library.games.map(\.system))
-        return GameSystem.displayOrder.filter(present.contains)
+        let present = Set(library.games.map(\.system.libraryGroup))
+        return GameSystem.libraryGroups.filter(present.contains)
     }
 
     private var filterChips: some View {
@@ -196,7 +196,7 @@ struct LibraryView: View {
             HStack(spacing: 8) {
                 FilterChip(label: "TOUT", color: Neon.cyan, selected: filter == nil) { filter = nil }
                 ForEach(presentSystems) { system in
-                    FilterChip(label: system.shortName, color: system.neon, selected: filter == system) {
+                    FilterChip(label: system.badgeName, color: system.neon, selected: filter == system) {
                         filter = filter == system ? nil : system
                     }
                 }
@@ -230,11 +230,11 @@ struct LibraryView: View {
 
     private var sections: some View {
         LazyVStack(alignment: .leading, spacing: 28) {
-            ForEach(filter.map { [$0] } ?? GameSystem.displayOrder) { system in
+            ForEach(filter.map { [$0] } ?? GameSystem.libraryGroups) { system in
                 let games = filteredGames(for: system)
                 if !games.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
-                        NeonSectionTitle(text: system.name.uppercased(), color: system.neon, count: games.count)
+                        NeonSectionTitle(text: system.libraryTitle, color: system.neon, count: games.count)
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14, alignment: .top)],
                                   spacing: 20) {
                             ForEach(games) { game in
@@ -265,12 +265,13 @@ struct LibraryView: View {
     }
 
     private var sectionsAreEmpty: Bool {
-        (filter.map { [$0] } ?? GameSystem.displayOrder).allSatisfy { filteredGames(for: $0).isEmpty }
+        (filter.map { [$0] } ?? GameSystem.libraryGroups).allSatisfy { filteredGames(for: $0).isEmpty }
     }
 
     /// Jeux d'une console, triés par titre affiché, filtrés par la recherche.
+    /// Jeux d'une catégorie (GB/C : Game Boy et Game Boy Color ensemble).
     private func filteredGames(for system: GameSystem) -> [Game] {
-        let games = library.games(for: system)
+        let games = system.groupMembers.flatMap { library.games(for: $0) }
             .map { ($0, metadata.display(for: $0)) }
             .sorted { $0.1.sortKey.localizedStandardCompare($1.1.sortKey) == .orderedAscending }
         let query = search.trimmingCharacters(in: .whitespaces)
@@ -427,7 +428,7 @@ private struct GeneratedCover: View {
                 context.stroke(lines, with: .color(system.neon.opacity(0.08)), lineWidth: 1)
             }
             VStack(spacing: 10) {
-                Text(system.shortName)
+                Text(system.badgeName)
                     .font(.orbitron(34, weight: 900))
                     .foregroundStyle(system.neon.opacity(0.85))
                     .neonGlow(system.neon, radius: 10)
@@ -569,8 +570,8 @@ private struct EmptyLibraryView: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.gb, .gbc, .gba, .nds, .n3ds]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.psx, .psp, .ps2]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.gb, .gba, .nds, .n3ds]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.psx, .ps2, .psp]) { SystemBadge(system: $0) } }
             }
             .padding(.top, 10)
         }

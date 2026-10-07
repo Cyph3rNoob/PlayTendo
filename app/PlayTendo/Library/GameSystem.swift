@@ -293,8 +293,17 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// Ordre d'affichage dans la bibliothèque.
-    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .psp, .ps2]
+    /// Ordre d'affichage dans la bibliothèque et la présentation (choisi par l'utilisateur le 2026-10-07) : Nintendo de
+    /// salon, portables Nintendo, puis Sony.
+    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .ps2, .psp]
+
+    /// Bibliothèque et présentation : le Game Boy et la Game Boy Color forment une seule catégorie « GB/C » (demandé
+    /// le 2026-10-07). Pour le moteur, les sauvegardes, la reconnaissance et les jaquettes, ce restent deux consoles.
+    var libraryGroup: GameSystem { self == .gbc ? .gb : self }
+    /// Les catégories de la bibliothèque, dans l'ordre (sans la Game Boy Color, rangée avec le Game Boy).
+    static let libraryGroups = displayOrder.filter { $0 != .gbc }
+    /// Les consoles d'une catégorie.
+    var groupMembers: [GameSystem] { self == .gb ? [.gb, .gbc] : [self] }
 
     static func forExtension(_ ext: String) -> GameSystem? {
         let ext = ext.lowercased()

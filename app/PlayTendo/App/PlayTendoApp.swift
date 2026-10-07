@@ -6,6 +6,7 @@ struct PlayTendoApp: App {
     @StateObject private var metadata = GameMetadata()
     @StateObject private var jit = JITManager()
     @State private var showBoot = true
+    @AppStorage(WelcomeView.seenKey) private var welcomeSeen = 0
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -13,15 +14,22 @@ struct PlayTendoApp: App {
         PTLogSetFile(Paths.logFile.path)
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PTLogLine("PlayTendo \(version) démarré — iOS \(UIDevice.current.systemVersion)")
+        BootSound.prepare()
     }
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 LibraryView()
+                // Présentation : sous l'animation de démarrage, qui s'efface en la dévoilant.
+                if welcomeSeen < WelcomeView.version {
+                    WelcomeView { withAnimation(.easeOut(duration: 0.3)) { welcomeSeen = WelcomeView.version } }
+                        .transition(.opacity)
+                        .zIndex(1)
+                }
                 if showBoot {
                     BootView { showBoot = false }
-                        .zIndex(1)
+                        .zIndex(2)
                 }
             }
             .environmentObject(library)

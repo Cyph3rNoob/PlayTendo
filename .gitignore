@@ -9,3 +9,5 @@ cores/ios/PS2Core.framework/
 cores/sim/PS2Core.framework/
 cores/ios/DolphinCore.framework/
 cores/sim/DolphinCore.framework/
+# Sons de démarrage proposés (WAV) : refaits par scripts/make_boot_sounds.py
+art/sons-proposes/

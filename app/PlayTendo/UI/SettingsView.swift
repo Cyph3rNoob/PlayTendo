@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Réglages de l'app : pour l'instant le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS.
+/// Réglages de l'app : le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS, et le son du démarrage.
 struct SettingsView: View {
     @EnvironmentObject private var jit: JITManager
+    @AppStorage(BootSound.enabledKey) private var bootSound = true
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
@@ -60,6 +61,14 @@ struct SettingsView: View {
                     } footer: {
                         Text("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
                     }
+                }
+
+                Section {
+                    Toggle("Son au démarrage", isOn: $bootSound)
+                } header: {
+                    Text("Démarrage")
+                } footer: {
+                    Text("Joué avec l'animation d'ouverture de PlayTendo. Muet en mode silencieux, comme le son des jeux.")
                 }
             }
             .navigationTitle("Réglages")

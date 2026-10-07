@@ -17,14 +17,20 @@ enum Neon {
 }
 
 extension GameSystem {
-    /// Couleur néon de la console.
+    /// Nom sur les pastilles et étiquettes : le Game Boy et la Game Boy Color partagent « GB/C » (`libraryGroup`).
+    /// `shortName` reste précis (journal).
+    var badgeName: String { libraryGroup == .gb ? "GB/C" : shortName }
+
+    /// Titre de la section de la bibliothèque.
+    var libraryTitle: String { self == .gb ? "GAME BOY / COLOR" : name.uppercased() }
+
+    /// Couleur néon de la console (la Game Boy Color prend le vert du Game Boy : une seule catégorie GB/C).
     var neon: Color {
         switch self {
         case .nes: Color(red: 1.0, green: 0.27, blue: 0.40)
         case .snes: Color(red: 0.70, green: 0.48, blue: 1.0)
         case .n64: Color(red: 0.20, green: 1.0, blue: 0.55)
-        case .gb: Color(red: 0.74, green: 1.0, blue: 0.26)
-        case .gbc: Color(red: 1.0, green: 0.36, blue: 0.86)
+        case .gb, .gbc: Color(red: 0.74, green: 1.0, blue: 0.26)
         case .gba: Color(red: 0.42, green: 0.55, blue: 1.0)
         case .nds: Color(red: 0.36, green: 0.90, blue: 1.0)
         case .n3ds: Color(red: 1.0, green: 0.30, blue: 0.30)
@@ -160,7 +166,7 @@ struct SystemBadge: View {
     var size: CGFloat = 10
 
     var body: some View {
-        Text(system.shortName)
+        Text(system.badgeName)
             .font(.orbitron(size, weight: 900))
             .tracking(1)
             .foregroundStyle(.black)
