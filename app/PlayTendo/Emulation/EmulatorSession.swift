@@ -360,6 +360,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         handlers.forEach { $0() }
     }
 
+    /// Réserve JIT sans assez de place d'un seul tenant (ne devrait plus arriver : voir PT_JIT_SMALL dans PTJIT.m).
+    private static let jitFullMessage = "la mémoire du mode turbo est encore occupée par une autre console. Ferme "
+        + "PlayTendo (fais-la glisser vers le haut dans le sélecteur d'apps), puis relance-la."
+
     /// Après une partie PS2, sa console en veille garde des Go d'adresses réservées (dont celles que la PSP veut
     /// pour sa mémoire : « Memory init failed ») et sa part de la réserve JIT : on l'arrête avant une autre console.
     private func releasePS2Memory() {
@@ -639,6 +643,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         } else {
             releasePS2Memory()
             PTLogLine("\(name) : lancement de \(game.url.lastPathComponent)")
+            // Le recompilateur de Dolphin prend 256 Mo d'un seul tenant (TOTAL_CODE_SIZE, JitArm64/Jit.cpp) : sans
+            // cette place, il écrirait son code dans le vide et l'app planterait.
+            if PTJITIsActive() && PTJITLargestFree() < 256 << 20 {
+                fail("La \(game.system.name) ne peut pas démarrer : \(Self.jitFullMessage)")
+                return
+            }
             Self.applyDolphinImage(to: engine as? PTDolphinEngine)
         }
 
@@ -649,6 +659,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
               !DispatchQueue.main.sync(execute: { engine.renderView.window != nil && engine.renderView.bounds.width > 0 }) {
             Thread.sleep(forTimeInterval: 0.02)
         }
+        let jitFailures = PTJITFailureCount()
         guard engine.boot(path: game.url.path, jit: PTJITIsActive()) else {
             fail(engine.lastError() ?? "Le jeu n'a pas pu démarrer.")
             return
@@ -681,6 +692,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 if engineState == .running || engineState == .paused {
                     started = true
                     PTLogLine(String(format: "%@ : jeu démarré en %.1f s", name, clock.now - bootStart))
+                    // Recompilateur sans place dans la réserve (la PS2 passe alors à l'interpréteur, injouable) :
+                    // arrêté, avec le moyen d'y remédier.
+                    if PTJITIsActive() && PTJITFailureCount() != jitFailures {
+                        failure = Self.jitFullMessage
+                        break
+                    }
                     let jit = PTJITIsActive()
 #if targetEnvironment(simulator)
                     PTLogLine(jit ? "\(name) : code dans la réserve JIT de l'app" : "\(name) : sans la réserve JIT de l'app")

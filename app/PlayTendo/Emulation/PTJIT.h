@@ -33,6 +33,11 @@ void *PTJITAlloc(size_t size, void **executable);
 /// Rend un bloc obtenu par PTJITAlloc (adresse d'écriture).
 void PTJITFree(void *writable);
 
+/// Plus grande place libre d'un seul tenant dans la réserve (0 sans réserve).
+size_t PTJITLargestFree(void);
+/// Demandes refusées faute de place depuis le lancement de l'app (un moteur a alors démarré sans turbo).
+unsigned PTJITFailureCount(void);
+
 #ifdef __cplusplus
 }
 #endif

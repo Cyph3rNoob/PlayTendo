@@ -29,6 +29,11 @@ extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 #define PT_JIT_GRANULE ((size_t)16 * 1024)
 // Dolphin prend un petit bloc par format de sommets (décodeurs recompilés) : plusieurs centaines par jeu.
 #define PT_JIT_MAX_BLOCKS 4096
+// Petits blocs (verrou du recompilateur 3DS, décodeurs de sommets de Dolphin, shaders 3DS…) : pris à la fin de la
+// réserve, les gros au début. Le verrou de la 3DS (4 Ko) reste jusqu'à la fermeture de l'app : pris juste après
+// ses 4 × 32 Mo, il coupait la réserve en deux morceaux trop petits pour la PS2 (305 Mo) et GameCube/Wii (256 Mo),
+// qui plantait (2026-10-07).
+#define PT_JIT_SMALL ((size_t)1024 * 1024)
 /// Encodage de `brk #0xf00d`.
 #define PT_JIT_BRK 0xD43E01A0u
 
@@ -125,6 +130,7 @@ static atomic_bool gActive;
 static os_unfair_lock gLock = OS_UNFAIR_LOCK_INIT;
 static PTJITBlock gBlocks[PT_JIT_MAX_BLOCKS];
 static int gBlockCount;
+static atomic_uint gFailures;
 
 static void PTJITSetError(char *error, size_t errorSize, NSString *_Nullable message) {
     if (!message) message = @"erreur inconnue.";
@@ -252,32 +258,89 @@ bool PTJITIsActive(void) {
     return atomic_load(&gActive);
 }
 
+/// Prend `size` octets (arrondis) : un gros bloc au début du premier bloc libre assez grand, un petit à la fin du
+/// dernier. Sous le verrou. SIZE_MAX s'il n'y a pas la place.
+static size_t PTJITTake(size_t size) {
+    const bool small = size <= PT_JIT_SMALL;
+    for (int n = 0; n < gBlockCount; n++) {
+        const int i = small ? gBlockCount - 1 - n : n;
+        PTJITBlock *block = &gBlocks[i];
+        if (block->used || block->size < size) continue;
+        // Bloc juste à la taille, ou tableau plein : tout le bloc est pris.
+        if (block->size == size || gBlockCount == PT_JIT_MAX_BLOCKS) {
+            block->used = true;
+            return block->offset;
+        }
+        memmove(&gBlocks[i + 2], &gBlocks[i + 1], (size_t)(gBlockCount - i - 1) * sizeof(PTJITBlock));
+        gBlockCount++;
+        if (small) {
+            block->size -= size;
+            gBlocks[i + 1] = (PTJITBlock){block->offset + block->size, size, true};
+            return gBlocks[i + 1].offset;
+        }
+        gBlocks[i + 1] = (PTJITBlock){block->offset + size, block->size - size, false};
+        block->size = size;
+        block->used = true;
+        return block->offset;
+    }
+    return SIZE_MAX;
+}
+
+/// Sous le verrou.
+static size_t PTJITLargestFreeLocked(void) {
+    size_t largest = 0;
+    for (int i = 0; i < gBlockCount; i++) {
+        if (!gBlocks[i].used && gBlocks[i].size > largest) largest = gBlocks[i].size;
+    }
+    return largest;
+}
+
+/// Ce qui occupe la réserve, pour le journal quand elle n'a plus la place (sous le verrou).
+static NSString *PTJITDescribeLocked(void) {
+    size_t usedBytes = 0;
+    int usedCount = 0;
+    NSMutableArray<NSString *> *first = [NSMutableArray array];
+    for (int i = 0; i < gBlockCount; i++) {
+        if (!gBlocks[i].used) continue;
+        usedBytes += gBlocks[i].size;
+        usedCount++;
+        if (first.count < 8) {
+            [first addObject:[NSString stringWithFormat:@"%zu Ko à %.1f Mo", gBlocks[i].size >> 10,
+                              gBlocks[i].offset / 1048576.0]];
+        }
+    }
+    return [NSString stringWithFormat:@"plus grande place libre %zu Ko ; occupé : %d blocs, %zu Ko : %@%@",
+            PTJITLargestFreeLocked() >> 10, usedCount, usedBytes >> 10, [first componentsJoinedByString:@", "],
+            usedCount > 8 ? @"…" : @""];
+}
+
 __attribute__((visibility("default"), used))
 void *PTJITAlloc(size_t size, void **executable) {
     if (!atomic_load(&gActive) || size == 0) return NULL;
     size = PTJITRound(size);
-    size_t offset = SIZE_MAX;
     os_unfair_lock_lock(&gLock);
-    for (int i = 0; i < gBlockCount; i++) {
-        PTJITBlock *block = &gBlocks[i];
-        if (block->used || block->size < size) continue;
-        if (block->size > size && gBlockCount < PT_JIT_MAX_BLOCKS) {
-            memmove(&gBlocks[i + 2], &gBlocks[i + 1], (size_t)(gBlockCount - i - 1) * sizeof(PTJITBlock));
-            gBlocks[i + 1] = (PTJITBlock){block->offset + size, block->size - size, false};
-            gBlockCount++;
-            block->size = size;
-        }
-        block->used = true;
-        offset = block->offset;
-        break;
-    }
+    const size_t offset = PTJITTake(size);
+    NSString *details = offset == SIZE_MAX ? PTJITDescribeLocked() : nil;
     os_unfair_lock_unlock(&gLock);
     if (offset == SIZE_MAX) {
-        PTLogLine([NSString stringWithFormat:@"JIT : réserve pleine (%zu Ko demandés)", size >> 10]);
+        atomic_fetch_add(&gFailures, 1);
+        PTLogLine([NSString stringWithFormat:@"JIT : réserve pleine (%zu Ko demandés ; %@)", size >> 10, details]);
         return NULL;
     }
     if (executable) *executable = gExecutable + offset;
     return gWritable + offset;
+}
+
+size_t PTJITLargestFree(void) {
+    if (!atomic_load(&gActive)) return 0;
+    os_unfair_lock_lock(&gLock);
+    const size_t largest = PTJITLargestFreeLocked();
+    os_unfair_lock_unlock(&gLock);
+    return largest;
+}
+
+unsigned PTJITFailureCount(void) {
+    return atomic_load(&gFailures);
 }
 
 __attribute__((visibility("default"), used))
