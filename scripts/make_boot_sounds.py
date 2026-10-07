@@ -3,9 +3,9 @@
 de démarrage (BootView) : l'écran s'ouvre à 0,41 s, étincelle à 0,81 s, titre écrit de 0,96 à 1,46 s, fondu
 jusqu'à ~2,5 s. Usage : make_boot_sounds.py <dossier de sortie>
 
-Choisi par l'utilisateur le 2026-10-07 : n° 4 « Puissance », dans sa version 4b « Puissance iPhone » (la 4 n'était
-presque que du grave : sur le haut-parleur de l'iPhone, il n'en restait que deux notes aiguës). Dans l'app :
-  afconvert -f m4af -d aac -b 128000 "<dossier>/4b - Puissance iPhone.wav" app/PlayTendo/Resources/BootSound.m4a"""
+Choisi par l'utilisateur le 2026-10-07 : n° 4 « Puissance ». La 4b « Puissance iPhone » (grave rendu par ses
+harmoniques, plus audible sur le haut-parleur de l'iPhone) a été essayée puis écartée : il préfère la 4. Dans l'app :
+  afconvert -f m4af -d aac -b 128000 "<dossier>/4 - Puissance.wav" app/PlayTendo/Resources/BootSound.m4a"""
 import math
 import os
 import random
