@@ -48,6 +48,28 @@ enum ControlScheme {
     var usesPointer: Bool { self == .wiimote }
     /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
     var canFillScreen: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote].contains(self) }
+
+    /// Manette Nintendo (Switch Pro, Joy-Con) : boutons de l'app faits par ses A, B, X, Y. Par défaut ceux à la même
+    /// place (les bonnes lettres sur NES, Super Nintendo, Game Boy, DS, 3DS ; la croix en bas sur les consoles Sony).
+    /// GameCube, Wii et N64 ont leur A en bas, comme le A d'une manette Xbox : avec une manette Nintendo, chaque bouton
+    /// fait plutôt la lettre écrite dessus, comme sur Switch Online (demandé le 2026-10-07).
+    var nintendoLetters: NintendoLetters {
+        switch self {
+        // A, B, X, Y du jeu (N64 : A et B seulement, ses boutons C sont sur le stick droit).
+        case .gameCube, .nintendo64: NintendoLetters(a: .b, b: .y, x: .a, y: .x)
+        // A, B (la gâchette), 2 (bouton du haut de l'app), 1 (bouton de gauche).
+        case .wiimote: NintendoLetters(a: .b, b: .a, x: .x, y: .y)
+        default: .samePlace
+        }
+    }
+}
+
+/// Boutons de l'app (RetroPad) faits par les boutons A, B, X, Y d'une manette Nintendo.
+struct NintendoLetters: Equatable {
+    var a, b, x, y: PTButton
+
+    /// Même place : A à droite, B en bas, X en haut, Y à gauche.
+    static let samePlace = NintendoLetters(a: .a, b: .b, x: .x, y: .y)
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {

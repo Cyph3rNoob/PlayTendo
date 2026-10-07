@@ -1,7 +1,8 @@
 import GameController
 
 /// Manettes Bluetooth (Xbox, PlayStation, Switch, MFi…). La disposition suit la position des
-/// boutons : celui du bas = B, celui de droite = A, comme sur une manette Nintendo.
+/// boutons : celui du bas = B, celui de droite = A, comme sur une manette Nintendo. Sauf une manette Nintendo sur
+/// GameCube, Wii et N64 : chaque bouton y fait sa lettre (`nintendoLetters`).
 final class GamepadManager: ObservableObject {
     @Published private(set) var isConnected = false
     /// Vrai dès qu'on se sert de la manette ; les boutons tactiles se cachent alors.
@@ -12,6 +13,17 @@ final class GamepadManager: ObservableObject {
     var onMenu: (() -> Void)?
     /// Le stick gauche appuie aussi sur la croix (consoles sans stick analogique).
     var stickMovesDPad = true
+    /// Boutons de l'app faits par les A, B, X, Y d'une manette Nintendo, selon la console
+    /// (`ControlScheme.nintendoLetters`).
+    var nintendoLetters = NintendoLetters.samePlace {
+        didSet {
+            // Seule une manette Nintendo est concernée : elle est rebranchée avec les nouveaux boutons.
+            guard nintendoLetters != oldValue, let controller = Self.currentController,
+                  Self.reportsNintendoLabels(controller) else { return }
+            releaseAll()
+            refresh()
+        }
+    }
 
     private var observers: [NSObjectProtocol] = []
     /// Boutons enfoncés en ce moment (hors directions), à relâcher si la manette disparaît.
@@ -63,15 +75,20 @@ final class GamepadManager: ObservableObject {
             return
         }
         #endif
-        let controller = GCController.controllers().first { $0.extendedGamepad != nil }
+        let controller = Self.currentController
         isConnected = controller != nil
         if !isConnected { isActive = false }
         if let controller, let pad = controller.extendedGamepad {
             let nintendo = Self.reportsNintendoLabels(controller)
+            let layout = nintendoLetters == .samePlace ? "remis par position" : "chacun fait sa lettre"
             PTLogLine("Manette détectée : \(controller.vendorName ?? "sans nom") (\(controller.productCategory))"
-                      + (nintendo ? ", boutons Nintendo remis par position" : ""))
+                      + (nintendo ? ", boutons Nintendo \(layout)" : ""))
             bind(pad, nintendoLabels: nintendo)
         }
+    }
+
+    private static var currentController: GCController? {
+        GCController.controllers().first { $0.extendedGamepad != nil }
     }
 
     /// Manettes Nintendo (Switch Pro, Joy-Con, manettes Switch Online) : iOS donne leurs boutons par lettre (`buttonA` =
@@ -96,10 +113,11 @@ final class GamepadManager: ObservableObject {
         }
         // Bouton du bas → B, de droite → A, de gauche → Y, du haut → X (PlayStation : croix, rond, carré, triangle).
         if nintendoLabels {
-            map(pad.buttonB, .b)
-            map(pad.buttonA, .a)
-            map(pad.buttonY, .y)
-            map(pad.buttonX, .x)
+            // iOS donne les boutons d'une manette Nintendo par lettre : chacun fait le bouton choisi pour la console.
+            map(pad.buttonA, nintendoLetters.a)
+            map(pad.buttonB, nintendoLetters.b)
+            map(pad.buttonX, nintendoLetters.x)
+            map(pad.buttonY, nintendoLetters.y)
         } else {
             map(pad.buttonA, .b)
             map(pad.buttonB, .a)

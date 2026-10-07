@@ -68,6 +68,7 @@ struct EmulatorView: View {
             gamepad.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: x, y: y) }
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
             gamepad.stickMovesDPad = !controls.hasAnalogStick
+            gamepad.nintendoLetters = controls.nintendoLetters
             UIApplication.shared.isIdleTimerDisabled = true
             session.setWiimote(controls.isWiimote)
             session.start()
@@ -202,6 +203,7 @@ struct EmulatorView: View {
         DolphinSettings.setController(wiiController, for: game)
         session.clearInput()
         session.setWiimote(wiiController == .wiimote)
+        gamepad.nintendoLetters = controls.nintendoLetters
         closeMenu()
     }
 
