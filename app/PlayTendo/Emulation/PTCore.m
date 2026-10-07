@@ -18,20 +18,66 @@ static dispatch_queue_t PTLogQueue(void) {
     return queue;
 }
 
+/// Taille maximale du journal : au-delà, une seule ligne le signale et la suite n'est plus écrite.
+static const unsigned long long PTLogMaxBytes = 4 * 1024 * 1024;
+
 static NSFileHandle *gLogHandle;
 static unsigned long long gLogBytes;
+static BOOL gLogFull;
+/// Dernière ligne écrite (sans l'heure) et nombre de fois qu'elle est revenue juste après : un moteur qui répète
+/// le même message en boucle ne remplit plus le journal.
+static NSString *gLogLastLine;
+static NSUInteger gLogRepeats;
+static NSDate *gLogLastRepeat;
+
+/// Sur la file du journal uniquement.
+static void PTLogWrite(NSDate *date, NSString *line) {
+    if (!gLogHandle || gLogFull) return;
+    static NSDateFormatter *formatter;
+    if (!formatter) {
+        formatter = [NSDateFormatter new];
+        formatter.dateFormat = @"HH:mm:ss.SSS";
+    }
+    if (gLogBytes > PTLogMaxBytes) {
+        gLogFull = YES;
+        line = @"Journal plein (4 Mo) : la suite n'est pas écrite.";
+    }
+    NSString *text = [NSString stringWithFormat:@"%@ %@\n", [formatter stringFromDate:date], line];
+    NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
+    // Une écriture ratée (appareil plein) perd la ligne sans arrêter l'app.
+    if ([gLogHandle writeData:data error:nil]) gLogBytes += data.length;
+}
+
+/// Écrit le nombre de répétitions en attente, avec le début de la ligne répétée (sur la file du journal uniquement).
+static void PTLogWriteRepeats(void) {
+    if (gLogRepeats == 0) return;
+    NSString *excerpt = gLogLastLine.length > 60 ? [[gLogLastLine substringToIndex:60] stringByAppendingString:@"…"]
+                                                 : gLogLastLine;
+    PTLogWrite(gLogLastRepeat, [NSString stringWithFormat:@"(« %@ » répétée encore %lu fois)",
+                                excerpt, (unsigned long)gLogRepeats]);
+    gLogRepeats = 0;
+}
 
 void PTLogSetFile(NSString *path) {
     dispatch_async(PTLogQueue(), ^{
-        [[NSFileManager defaultManager] createFileAtPath:path contents:nil attributes:nil];
+        // Le journal de la session d'avant est gardé à côté (trace d'un plantage, si l'app a été relancée depuis).
+        NSFileManager *files = [NSFileManager defaultManager];
+        NSString *previous = [[path stringByDeletingPathExtension] stringByAppendingString:@"-precedent.txt"];
+        [files removeItemAtPath:previous error:nil];
+        [files moveItemAtPath:path toPath:previous error:nil];
+        [files createFileAtPath:path contents:nil attributes:nil];
         gLogHandle = [NSFileHandle fileHandleForWritingAtPath:path];
         gLogBytes = 0;
+        gLogFull = NO;
+        gLogLastLine = nil;
+        gLogRepeats = 0;
     });
 }
 
 void PTLogFlush(void) {
     dispatch_sync(PTLogQueue(), ^{
-        [gLogHandle synchronizeFile];
+        PTLogWriteRepeats();
+        [gLogHandle synchronizeAndReturnError:nil];
     });
 }
 
@@ -41,16 +87,16 @@ void PTLogLine(NSString *line) {
 #endif
     NSDate *now = [NSDate date];
     dispatch_async(PTLogQueue(), ^{
-        if (!gLogHandle || gLogBytes > 4 * 1024 * 1024) return;
-        static NSDateFormatter *formatter;
-        if (!formatter) {
-            formatter = [NSDateFormatter new];
-            formatter.dateFormat = @"HH:mm:ss.SSS";
+        if ([line isEqualToString:gLogLastLine]) {
+            gLogRepeats++;
+            gLogLastRepeat = now;
+            // Boucle sans fin : le compte est écrit de temps en temps, au cas où l'app serait arrêtée entre-temps.
+            if (gLogRepeats >= 10000) PTLogWriteRepeats();
+            return;
         }
-        NSString *text = [NSString stringWithFormat:@"%@ %@\n", [formatter stringFromDate:now], line];
-        NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
-        [gLogHandle writeData:data];
-        gLogBytes += data.length;
+        PTLogWriteRepeats();
+        gLogLastLine = line;
+        PTLogWrite(now, line);
     });
 }
 
@@ -797,12 +843,15 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_SET_MESSAGE): {
             const struct retro_message *message = data;
-            if (message->msg) PTLogLine([NSString stringWithFormat:@"[%@ message] %s", _libraryName, message->msg]);
+            // Message vide : le moteur efface son affichage (melonDS DS le fait à chaque image), rien à noter.
+            if (message->msg && message->msg[0])
+                PTLogLine([NSString stringWithFormat:@"[%@ message] %s", _libraryName, message->msg]);
             return true;
         }
         case PT_ENV(RETRO_ENVIRONMENT_SET_MESSAGE_EXT): {
             const struct retro_message_ext *message = data;
-            if (message->msg) PTLogLine([NSString stringWithFormat:@"[%@ message] %s", _libraryName, message->msg]);
+            if (message->msg && message->msg[0])
+                PTLogLine([NSString stringWithFormat:@"[%@ message] %s", _libraryName, message->msg]);
             return true;
         }
         case PT_ENV(RETRO_ENVIRONMENT_GET_MESSAGE_INTERFACE_VERSION):

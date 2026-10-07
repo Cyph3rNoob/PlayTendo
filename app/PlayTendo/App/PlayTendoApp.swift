@@ -6,6 +6,7 @@ struct PlayTendoApp: App {
     @StateObject private var metadata = GameMetadata()
     @StateObject private var jit = JITManager()
     @State private var showBoot = true
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         Paths.prepare()
@@ -29,6 +30,10 @@ struct PlayTendoApp: App {
             .preferredColorScheme(.dark)
             .tint(.playTendoAccent)
             .onOpenURL { url in library.importFiles([url]) }
+            // En arrière-plan, iOS peut arrêter l'app sans prévenir : le journal est mis à jour sur le disque avant.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { PTLogFlush() }
+            }
             #if DEBUG
             .onAppear(perform: forceLandscapeForTesting)
             #endif

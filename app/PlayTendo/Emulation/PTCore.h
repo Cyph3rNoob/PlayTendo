@@ -97,7 +97,8 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 
 @end
 
-/// Journal partagé (fichier Documents/Journal.txt).
+/// Journal partagé (fichier Documents/Journal.txt ; celui de la session d'avant : Journal-precedent.txt). Les lignes
+/// identiques qui se suivent sont comptées au lieu d'être réécrites.
 void PTLogLine(NSString *line);
 void PTLogSetFile(NSString *path);
 /// Attend que les lignes en attente soient écrites sur le disque (avant une étape qui peut tuer l'app).

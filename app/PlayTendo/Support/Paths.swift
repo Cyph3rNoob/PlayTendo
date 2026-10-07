@@ -136,5 +136,6 @@ enum Paths {
 
     Journal.txt
       Le journal technique de l'app, utile en cas de problème.
+      Journal-precedent.txt : celui de la session d'avant.
     """
 }

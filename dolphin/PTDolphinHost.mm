@@ -114,16 +114,20 @@ PTDOLPHIN_EXPORT char* PTDolphinCopyLastError(void)
 
 // MARK: - Préparation
 
-/// Journal du moteur (User/Logs/dolphin.log) : démarrage, cœur, image, son, recompilateur.
+/// Journal du moteur (User/Logs/dolphin.log) : démarrage, cœur, image, son, recompilateur. Sans les lectures du
+/// disque (DVD : une ligne par lecture, 98 % du journal). Dolphin complète ce fichier sans jamais le vider : il
+/// repart à zéro à chaque lancement de l'app, celui d'avant gardé dans dolphin-precedent.log. Réglage réécrit à
+/// chaque lancement (remplace celui des versions précédentes).
 static void PTDolphinWriteLoggerConfig()
 {
-  const std::string path = File::GetUserPath(F_LOGGERCONFIG_IDX);
-  if (File::Exists(path))
-    return;
-  File::WriteStringToFile(path, "[Options]\nVerbosity = 4\nWriteToFile = True\nWriteToConsole = False\n"
-                                "[Logs]\nBOOT = True\nCOMMON = True\nCORE = True\nVIDEO = True\n"
-                                "Host GPU = True\nDVD = True\nPOWERPC = True\nDYNA_REC = True\n"
-                                "Audio = True\nEXI = True\nIOS = True\nSI = True\n");
+  const std::string log = File::GetUserPath(F_MAINLOG_IDX);
+  if (File::Exists(log))
+    File::Rename(log, log.substr(0, log.rfind('.')) + "-precedent.log");
+  File::WriteStringToFile(File::GetUserPath(F_LOGGERCONFIG_IDX),
+                          "[Options]\nVerbosity = 4\nWriteToFile = True\nWriteToConsole = False\n"
+                          "[Logs]\nBOOT = True\nCOMMON = True\nCORE = True\nVIDEO = True\n"
+                          "Host GPU = True\nDVD = False\nPOWERPC = True\nDYNA_REC = True\n"
+                          "Audio = True\nEXI = True\nIOS = True\nSI = True\n");
 }
 
 /// Profils tactiles de DolphiniOS (Sys/Profiles/…/Touchscreen.ini) : manette GameCube 1 et télécommande Wii 1

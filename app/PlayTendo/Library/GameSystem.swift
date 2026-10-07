@@ -223,6 +223,13 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 // Écrans toujours rendus empilés ; l'app découpe et place ensuite chacun d'eux.
                 "melonds_screen_layout1": "top-bottom",
                 "melonds_screen_gap": "0",
+                // États affichés en surimpression par le moteur, renvoyés à chaque image (« Layout 1/1 » ~80 fois par
+                // seconde) : l'app ne les montre pas, ils ne faisaient que remplir le journal.
+                "melonds_show_current_layout": "disabled",
+                "melonds_show_mic_state": "disabled",
+                "melonds_show_camera_state": "disabled",
+                "melonds_show_lid_state": "disabled",
+                "melonds_show_sensor_reading": "disabled",
             ]
         case .n3ds:
             // Vulkan (MoltenVK) : le seul rendu matériel du moteur sur iPhone. Écrans toujours rendus empilés (le bas
