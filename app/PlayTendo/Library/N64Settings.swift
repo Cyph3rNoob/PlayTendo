@@ -5,13 +5,28 @@ import Foundation
 /// (`EmulatorSession.requestCoreReload`), sans que la partie soit perdue.
 enum N64Settings {
     /// Taille de l'image rendue, en multiple de la N64 (320×240). x2 (640×480) par défaut, comme avant ce réglage.
+    /// En 16:9, les tailles proposées par le moteur les plus proches (640×360 à 1920×1080).
     enum Resolution: Int, CaseIterable, Identifiable {
         case x1 = 1, x2, x3, x4
 
         var id: Int { rawValue }
         var label: String { "x\(rawValue)" }
-        var size: String { "\(320 * rawValue)×\(240 * rawValue)" }
-        var coreValue: String { "\(320 * rawValue)x\(240 * rawValue)" }
+
+        func coreValue(wide: Bool) -> String {
+            guard wide else { return "\(320 * rawValue)x\(240 * rawValue)" }
+            return ["640x360", "960x540", "1280x720", "1920x1080"][rawValue - 1]
+        }
+
+        func size(wide: Bool) -> String { coreValue(wide: wide).replacingOccurrences(of: "x", with: "×") }
+    }
+
+    /// Format de l'image : 4:3 d'origine, ou 16:9 « ajusté » de GLideN64 (la 3D est dessinée plus large, on voit plus
+    /// de décor ; selon les jeux, des éléments 2D peuvent être étirés ou mal placés).
+    enum Format: Int, CaseIterable, Identifiable {
+        case standard = 0, wide
+
+        var id: Int { rawValue }
+        var label: String { self == .standard ? "4:3" : "16:9" }
     }
 
     /// Lissage des bords en escalier (FXAA de GLideN64), comme pour la PS2 et la GameCube.
@@ -24,6 +39,7 @@ enum N64Settings {
 
     static let resolutionKey = "resolutionN64"
     static let smoothingKey = "lissageN64"
+    static let formatKey = "formatN64"
 
     static var resolution: Resolution {
         Resolution(rawValue: UserDefaults.standard.integer(forKey: resolutionKey)) ?? .x2
@@ -33,10 +49,17 @@ enum N64Settings {
         Smoothing(rawValue: UserDefaults.standard.integer(forKey: smoothingKey)) ?? .off
     }
 
+    static var format: Format {
+        Format(rawValue: UserDefaults.standard.integer(forKey: formatKey)) ?? .standard
+    }
+
     /// Réglages correspondants du moteur.
     static var coreOptions: [String: String] {
-        [
-            "mupen64plus-43screensize": resolution.coreValue,
+        let wide = format == .wide
+        return [
+            "mupen64plus-aspect": wide ? "16:9 adjusted" : "4:3",
+            "mupen64plus-43screensize": resolution.coreValue(wide: false),
+            "mupen64plus-169screensize": resolution.coreValue(wide: true),
             "mupen64plus-FXAA": smoothing == .on ? "1" : "0",
         ]
     }

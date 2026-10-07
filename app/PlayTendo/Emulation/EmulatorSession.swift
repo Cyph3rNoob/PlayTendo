@@ -64,6 +64,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private var lastSavedRAM: Data?
     /// N64 : moteur à recharger à la reprise (réglages d'image lus seulement au démarrage d'un jeu).
     private var coreReloadRequested = false
+    /// Partie à reprendre après un rechargement du moteur : Mupen64Plus refuse une sauvegarde rapide avant d'avoir
+    /// fait tourner au moins une image, elle est donc rechargée après les premières (essais limités).
+    private var pendingReloadState: Data?
+    private var pendingReloadAttempts = 0
 
     init(game: Game) {
         self.game = game
@@ -443,6 +447,18 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             let steps = fastForward ? 3 : 1
             for _ in 0..<steps { core.runFrame() }
             if core.shutdownRequested { break }
+            if let state = pendingReloadState {
+                pendingReloadAttempts += 1
+                if core.loadState(state) {
+                    pendingReloadState = nil
+                    PTLogLine("Rechargement du moteur : partie reprise après \(pendingReloadAttempts) image(s)")
+                    showToast("Image appliquée")
+                } else if pendingReloadAttempts >= 120 {
+                    pendingReloadState = nil
+                    PTLogLine("Rechargement du moteur : la partie n'a pas pu être reprise")
+                    showToast("Partie non reprise (sauvegarde rapide toujours disponible)")
+                }
+            }
 
             if core.aspectRatio != currentAspect {
                 currentAspect = core.aspectRatio
@@ -537,11 +553,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         old.unloadGame()
         do {
             let core = try loadCore(path: path)
-            if let state, !core.loadState(state) {
-                PTLogLine("Rechargement du moteur : la partie n'a pas pu être reprise")
-            }
             PTLogLine(String(format: "Moteur rechargé avec les nouveaux réglages d'image en %.1f s", clock.now - start))
-            showToast("Image appliquée")
+            // Reprise de la partie après les premières images (voir pendingReloadState).
+            pendingReloadState = state
+            pendingReloadAttempts = 0
+            if state == nil { showToast("Image appliquée") }
             return core
         } catch {
             PTLogLine("Rechargement du moteur impossible : \(error.localizedDescription)")

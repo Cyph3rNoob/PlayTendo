@@ -47,7 +47,7 @@ enum ControlScheme {
     /// Toucher l'image du jeu sert de pointeur (Wiimote). La DS a son propre écran tactile (`usesTouchScreen`).
     var usesPointer: Bool { self == .wiimote }
     /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
-    var canFillScreen: Bool { [.psp, .playStation2, .gameCube, .wiimote].contains(self) }
+    var canFillScreen: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote].contains(self) }
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {

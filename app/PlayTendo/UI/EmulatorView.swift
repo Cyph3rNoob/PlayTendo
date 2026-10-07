@@ -183,8 +183,8 @@ struct EmulatorView: View {
         closeMenu()
     }
 
-    /// PSP et PS2 en paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à côté).
-    /// Choix commun aux deux consoles (clé historique « pleinEcranPSP »).
+    /// N64, PSP, PS2, GameCube et Wii en paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à
+    /// côté). Choix commun à ces consoles (clé historique « pleinEcranPSP »).
     private func toggleFillScreen() {
         fillScreen.toggle()
         UserDefaults.standard.set(fillScreen, forKey: Self.fillScreenKey)
@@ -239,7 +239,7 @@ private struct PauseMenu: View {
     /// DS en paysage : taille actuelle de l'écran tactile (nil = réglage masqué).
     let touchSizeLabel: String?
     let onTouchSize: () -> Void
-    /// PSP et PS2 en paysage : taille actuelle de l'image (nil = réglage masqué).
+    /// En paysage (N64, PSP, PS2, GameCube, Wii) : taille actuelle de l'image (nil = réglage masqué).
     let imageSizeLabel: String?
     let onImageSize: () -> Void
     /// Wii : manette en cours (nil = réglage masqué).
@@ -262,6 +262,7 @@ private struct PauseMenu: View {
     /// N64 et PS1 : résolution et lissage (gardés pour tous leurs jeux).
     @AppStorage(N64Settings.resolutionKey) private var n64Resolution = N64Settings.Resolution.x2.rawValue
     @AppStorage(N64Settings.smoothingKey) private var n64Smoothing = N64Settings.Smoothing.off.rawValue
+    @AppStorage(N64Settings.formatKey) private var n64Format = N64Settings.Format.standard.rawValue
     @AppStorage(PS1Settings.resolutionKey) private var ps1Resolution = PS1Settings.Resolution.x1.rawValue
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
 
@@ -402,7 +403,8 @@ private struct PauseMenu: View {
         } else if session.game.system == .n64 {
             imageSettings(
                 resolution: NeonSegments(title: "RÉSOLUTION",
-                                         detail: (N64Settings.Resolution(rawValue: n64Resolution) ?? .x2).size,
+                                         detail: (N64Settings.Resolution(rawValue: n64Resolution) ?? .x2)
+                                            .size(wide: n64Format == N64Settings.Format.wide.rawValue),
                                          options: N64Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: n64Resolution) { value in
                     choose { n64Resolution = value }
@@ -411,6 +413,11 @@ private struct PauseMenu: View {
                                         options: N64Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: n64Smoothing) { value in
                     choose { n64Smoothing = value }
+                },
+                extra: NeonSegments(title: "FORMAT", detail: nil,
+                                    options: N64Settings.Format.allCases.map { ($0.rawValue, $0.label) },
+                                    selection: n64Format) { value in
+                    choose { n64Format = value }
                 })
         } else if session.game.system == .psx {
             imageSettings(
@@ -467,18 +474,22 @@ private struct PauseMenu: View {
         }
     }
 
+    /// `extra` : troisième réglage (format de la N64).
     @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
-                                            smoothing smoothingPicker: NeonSegments) -> some View {
+                                            smoothing smoothingPicker: NeonSegments,
+                                            extra extraPicker: NeonSegments? = nil) -> some View {
         if compact {
             HStack(alignment: .top, spacing: 14) {
                 resolutionPicker
                 smoothingPicker
+                if let extraPicker { extraPicker }
             }
             .padding(.vertical, 2)
         } else {
             VStack(spacing: 10) {
                 resolutionPicker
                 smoothingPicker
+                if let extraPicker { extraPicker }
             }
             .padding(.vertical, 4)
         }
