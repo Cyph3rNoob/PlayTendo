@@ -159,13 +159,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         perform { [self] in core?.updateOptions(options) }
     }
 
-    /// PS2 : applique la résolution et le lissage choisis dans le menu pause (PS2Settings).
+    /// PS2 : applique la résolution, le lissage et le format choisis dans le menu pause (PS2Settings).
     func applyPS2Image() {
         perform { [self] in Self.applyPS2Image(to: external as? PTPS2Engine) }
     }
 
     private static func applyPS2Image(to engine: PTPS2Engine?) {
-        engine?.setImageUpscale(PS2Settings.resolution.rawValue, smoothing: PS2Settings.smoothing == .on)
+        engine?.setImageUpscale(PS2Settings.resolution.rawValue, smoothing: PS2Settings.smoothing == .on,
+                                widescreen: PS2Settings.format == .wide)
     }
 
     /// Réglages que le moteur ne lit qu'au démarrage du jeu (image N64) : à la reprise, le moteur est rechargé avec

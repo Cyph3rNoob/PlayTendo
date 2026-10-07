@@ -28,8 +28,18 @@ enum PS2Settings {
         var label: String { self == .off ? "Non" : "Oui" }
     }
 
+    /// Format : 16:9 active les correctifs « écran large » fournis avec le moteur (environ 4 150 jeux). Le jeu calcule
+    /// alors une image plus large, sans déformation ; un jeu sans correctif reste en 4:3.
+    enum Format: Int, CaseIterable, Identifiable {
+        case standard = 0, wide
+
+        var id: Int { rawValue }
+        var label: String { self == .standard ? "4:3" : "16:9" }
+    }
+
     static let resolutionKey = "resolutionPS2"
     static let smoothingKey = "lissagePS2"
+    static let formatKey = "formatPS2"
 
     static var resolution: Resolution {
         Resolution(rawValue: UserDefaults.standard.integer(forKey: resolutionKey)) ?? .x1
@@ -37,5 +47,9 @@ enum PS2Settings {
 
     static var smoothing: Smoothing {
         Smoothing(rawValue: UserDefaults.standard.integer(forKey: smoothingKey)) ?? .off
+    }
+
+    static var format: Format {
+        Format(rawValue: UserDefaults.standard.integer(forKey: formatKey)) ?? .standard
     }
 }

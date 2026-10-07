@@ -44,7 +44,12 @@ extension PTPS2Engine: ExternalEngine {
     func boot(path: String, jit: Bool) -> Bool { bootGame(atPath: path) }
     /// La PS2 capture son image même en pause (`snapshot`).
     func prepareSnapshot() {}
-    var imageAspectRatio: CGFloat? { nil }
+
+    /// 4:3, ou 16:9 quand un correctif écran large est actif (FORMAT du menu pause).
+    var imageAspectRatio: CGFloat? {
+        let ratio = aspectRatio
+        return ratio > 0.5 && ratio < 4 ? CGFloat(ratio) : nil
+    }
 }
 
 extension PTDolphinEngine: ExternalEngine {

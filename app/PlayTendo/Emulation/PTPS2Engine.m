@@ -5,7 +5,7 @@
 #define PT_PS2_FUNCTIONS(X) \
     X(PTPS2Setup) X(PTPS2PickBIOS) X(PTPS2Boot) X(PTPS2GetState) X(PTPS2SetPaused) X(PTPS2Stop) \
     X(PTPS2Reset) X(PTPS2ReleaseMemory) X(PTPS2SetTurbo) X(PTPS2SetButton) X(PTPS2SetStick) X(PTPS2SaveState) X(PTPS2LoadState) \
-    X(PTPS2SetImageOptions) X(PTPS2CopySnapshot) X(PTPS2CopyLastError)
+    X(PTPS2SetImageOptions) X(PTPS2GetAspectRatio) X(PTPS2CopySnapshot) X(PTPS2CopyLastError)
 
 typedef struct {
 #define PT_FIELD(name) __typeof__(&name) name;
@@ -104,8 +104,12 @@ static PTPS2Engine *loadedEngine;
     return _fn.PTPS2LoadState(path.fileSystemRepresentation);
 }
 
-- (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing {
-    _fn.PTPS2SetImageOptions((int)upscale, smoothing);
+- (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing widescreen:(BOOL)widescreen {
+    _fn.PTPS2SetImageOptions((int)upscale, smoothing, widescreen);
+}
+
+- (float)aspectRatio {
+    return _fn.PTPS2GetAspectRatio();
 }
 
 - (UIImage *)snapshot {

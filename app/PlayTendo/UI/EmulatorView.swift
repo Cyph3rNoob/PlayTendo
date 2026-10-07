@@ -33,6 +33,10 @@ struct EmulatorView: View {
         return wiiController == .wiimote ? .wiimote : .gameCube
     }
 
+    /// PS2 avec une manette branchée : en paysage, l'image prend toute la hauteur (comme « Plein écran »), quel que
+    /// soit le réglage Image (demandé le 2026-10-07). En portrait, elle prend déjà toute la largeur.
+    private var ps2FillsForController: Bool { game.system == .ps2 && gamepad.isConnected }
+
     private static let touchSizeKey = "tailleEcranTactileDS"
     private static let fillScreenKey = "pleinEcranPSP"
 
@@ -126,7 +130,7 @@ struct EmulatorView: View {
                                   controllerConnected: gamepad.isConnected,
                                   hideTouchControls: gamepad.isActive,
                                   dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
-                                  fillScreen: controls.canFillScreen && fillScreen)
+                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController))
     }
 
     /// Les images du jeu (deux pour la DS, une pour les autres consoles ; la PS2 et la GameCube/Wii dessinent
@@ -158,7 +162,8 @@ struct EmulatorView: View {
                          onSwapScreens: swap,
                          touchSizeLabel: controls.usesTouchScreen && landscape ? touchSize.label : nil,
                          onTouchSize: { nextTouchSize() },
-                         imageSizeLabel: controls.canFillScreen && landscape ? (fillScreen ? "Plein écran" : "Réduite") : nil,
+                         imageSizeLabel: controls.canFillScreen && landscape && !ps2FillsForController
+                            ? (fillScreen ? "Plein écran" : "Réduite") : nil,
                          onImageSize: { toggleFillScreen() },
                          controllerLabel: game.system == .wii ? wiiController.label : nil,
                          onController: { switchWiiController() },
@@ -253,6 +258,7 @@ private struct PauseMenu: View {
     /// PS2 : résolution et lissage des bords (gardés pour tous les jeux PS2).
     @AppStorage(PS2Settings.resolutionKey) private var ps2Resolution = PS2Settings.Resolution.x1.rawValue
     @AppStorage(PS2Settings.smoothingKey) private var ps2Smoothing = PS2Settings.Smoothing.off.rawValue
+    @AppStorage(PS2Settings.formatKey) private var ps2Format = PS2Settings.Format.standard.rawValue
     /// GameCube et Wii : résolution et lissage des bords (gardés pour tous leurs jeux).
     @AppStorage(DolphinSettings.resolutionKey) private var dolphinResolution = DolphinSettings.Resolution.x1.rawValue
     @AppStorage(DolphinSettings.smoothingKey) private var dolphinSmoothing = DolphinSettings.Smoothing.off.rawValue
@@ -451,6 +457,14 @@ private struct PauseMenu: View {
                                         options: PS2Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: ps2Smoothing) { value in
                     choose { ps2Smoothing = value }
+                },
+                format: NeonSegments(title: "FORMAT",
+                                     // 16:9 choisi mais image restée en 4:3 : ce jeu n'a pas de correctif écran large.
+                                     detail: ps2Format == PS2Settings.Format.wide.rawValue && session.aspectRatio < 1.5
+                                        ? "reste en 4:3" : nil,
+                                     options: PS2Settings.Format.allCases.map { ($0.rawValue, $0.label) },
+                                     selection: ps2Format) { value in
+                    choose { ps2Format = value }
                 })
         } else {
             imageSettings(
@@ -468,19 +482,22 @@ private struct PauseMenu: View {
         }
     }
 
-    /// `smoothing` : second réglage (le format pour la N64).
+    /// `smoothing` : second réglage (le format pour la N64) ; `format` : troisième (PS2).
     @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
-                                            smoothing smoothingPicker: NeonSegments) -> some View {
+                                            smoothing smoothingPicker: NeonSegments,
+                                            format formatPicker: NeonSegments? = nil) -> some View {
         if compact {
             HStack(alignment: .top, spacing: 14) {
                 resolutionPicker
                 smoothingPicker
+                if let formatPicker { formatPicker }
             }
             .padding(.vertical, 2)
         } else {
             VStack(spacing: 10) {
                 resolutionPicker
                 smoothingPicker
+                if let formatPicker { formatPicker }
             }
             .padding(.vertical, 4)
         }

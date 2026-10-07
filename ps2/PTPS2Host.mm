@@ -455,7 +455,7 @@ PTPS2_EXPORT bool PTPS2SaveState(const char* path)
     return started && error->empty() && FileSystem::FileExists(target.c_str());
 }
 
-PTPS2_EXPORT void PTPS2SetImageOptions(int upscale, bool smoothing)
+PTPS2_EXPORT void PTPS2SetImageOptions(int upscale, bool smoothing, bool widescreen)
 {
     if (!s_settings_interface)
         return;
@@ -463,9 +463,31 @@ PTPS2_EXPORT void PTPS2SetImageOptions(int upscale, bool smoothing)
         auto lock = Host::GetSettingsLock();
         s_settings_interface->SetFloatValue("EmuCore/GS", "upscale_multiplier", static_cast<float>(std::clamp(upscale, 1, 4)));
         s_settings_interface->SetBoolValue("EmuCore/GS", "fxaa", smoothing);
+        // Écran large : correctifs de patches.zip (fournis avec le moteur). Un jeu qui en a un passe tout seul en 16:9
+        // (format « Auto ») ; les autres restent en 4:3.
+        s_settings_interface->SetBoolValue("EmuCore", "EnableWideScreenPatches", widescreen);
+        s_settings_interface->SetStringValue("EmuCore/GS", "AspectRatio", "Auto 4:3/3:2");
         s_settings_interface->Save();
     }
     [ARMSX2Bridge applyGraphicsSettingsNow]; // sans effet hors partie
+}
+
+PTPS2_EXPORT float PTPS2GetAspectRatio(void)
+{
+    if (!VMManager::HasValidVM())
+        return 0.0f;
+    // Comme GSRenderer (CalculateDrawDstRect) : « Auto » = 4:3, ou le format demandé par un correctif écran large.
+    switch (EmuConfig.CurrentAspectRatio)
+    {
+        case AspectRatioType::R4_3:
+            return 4.0f / 3.0f;
+        case AspectRatioType::R16_9:
+            return 16.0f / 9.0f;
+        case AspectRatioType::RAuto4_3_3_2:
+            return EmuConfig.CurrentCustomAspectRatio > 0.0f ? EmuConfig.CurrentCustomAspectRatio : 4.0f / 3.0f;
+        default:
+            return 0.0f;
+    }
 }
 
 PTPS2_EXPORT void* PTPS2CopySnapshot(int* width, int* height)
