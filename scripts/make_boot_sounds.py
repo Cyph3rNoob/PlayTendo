@@ -3,8 +3,9 @@
 de démarrage (BootView) : l'écran s'ouvre à 0,41 s, étincelle à 0,81 s, titre écrit de 0,96 à 1,46 s, fondu
 jusqu'à ~2,5 s. Usage : make_boot_sounds.py <dossier de sortie>
 
-Choisi par l'utilisateur le 2026-10-07 : n° 4 « Puissance ». Dans l'app (app/PlayTendo/Resources/BootSound.m4a) :
-  afconvert -f m4af -d aac -b 128000 "<dossier>/4 - Puissance.wav" app/PlayTendo/Resources/BootSound.m4a"""
+Choisi par l'utilisateur le 2026-10-07 : n° 4 « Puissance », dans sa version 4b « Puissance iPhone » (la 4 n'était
+presque que du grave : sur le haut-parleur de l'iPhone, il n'en restait que deux notes aiguës). Dans l'app :
+  afconvert -f m4af -d aac -b 128000 "<dossier>/4b - Puissance iPhone.wav" app/PlayTendo/Resources/BootSound.m4a"""
 import math
 import os
 import random
@@ -116,6 +117,7 @@ class Mix:
         self.dry = [0.0] * self.n
         self.send = [0.0] * self.n
         self.room, self.damp = room, damp
+        self.limit = 0.0  # compression douce à l'écriture (0 : aucune)
 
     def add(self, start, samples, gain=1.0, rev=0.3):
         i0 = int(start * SR)
@@ -162,6 +164,11 @@ class Mix:
             r = (self.dry[i] + right[i] * wet) * g
             stereo.append((l, r))
             peak = max(peak, abs(l), abs(r))
+        if self.limit:
+            # Compression douce : rapproche les passages faibles des forts (plus audible sur un petit haut-parleur).
+            norm = math.tanh(self.limit)
+            stereo = [(math.tanh(self.limit * l / peak) / norm, math.tanh(self.limit * r / peak) / norm) for l, r in stereo]
+            peak = max(max(abs(l), abs(r)) for l, r in stereo)
         scale = 0.89 / peak
         for l, r in stereo:
             frames.append(struct.pack("<hh", int(l * scale * 32767), int(r * scale * 32767)))
@@ -241,6 +248,48 @@ def power():
     return m
 
 
+def saturate(x, drive):
+    """Saturation douce : ajoute des harmoniques, que l'oreille entend comme du grave même sur un petit haut-parleur."""
+    norm = math.tanh(drive)
+    return [math.tanh(drive * v) / norm for v in x]
+
+
+def power_phone():
+    """4b. Puissance pour haut-parleur d'iPhone (qui ne rend presque rien sous 300 Hz : seules les deux notes aiguës
+    de « Puissance » y restaient). Les basses n'y gardent que leurs harmoniques (au-dessus de 150 Hz), que l'oreille
+    entend comme du grave même sur un petit haut-parleur, plus une infrabasse discrète pour un casque ou des
+    enceintes ; choc avec du corps, nappe une octave plus haut."""
+    m = Mix(3.6, room=0.88)
+
+    def harmonics(x, drive):
+        return lowpass(highpass(highpass(saturate(x, drive), 150), 150), 2500)
+
+    rise = osc("sin", lambda t: 40 + 40 * t / 0.81, 0.83, lambda t: min(1, t / 0.81) ** 2)
+    m.add(0, harmonics(rise, 5), gain=0.35, rev=0.15)
+    m.add(0, rise, gain=0.08, rev=0.05)
+    riser = lowpass(noise(0.83, lambda t: 0.3 * min(1, t / 0.81) ** 3), lambda t: 400 + 7000 * min(1, t / 0.81) ** 3)
+    m.add(0, riser, rev=0.3)
+    thump = osc("sin", lambda t: 90 * math.exp(-t / 0.05) + 45, 0.3, lambda t: math.exp(-t / 0.08))
+    m.add(OPEN, harmonics(thump, 5), gain=0.5, rev=0.2)
+    m.add(OPEN, thump, gain=0.12, rev=0.1)
+    m.add(OPEN, lowpass(noise(0.08, lambda t: 0.4 * math.exp(-t / 0.015)), 1200), rev=0.2)
+    boom = osc("sin", lambda t: 45 + 110 * math.exp(-t / 0.03), 2.0, lambda t: math.exp(-t / 0.55) * min(1, t / 0.003))
+    m.add(SPARK, harmonics(boom, 6), gain=0.7, rev=0.3)
+    m.add(SPARK, boom, gain=0.15, rev=0.2)
+    body = osc("saw", lambda t: 70 + 60 * math.exp(-t / 0.04), 0.8, lambda t: math.exp(-t / 0.18) * min(1, t / 0.003))
+    m.add(SPARK, lowpass(highpass(highpass(body, 150), 150), 1200), gain=0.6, rev=0.35)
+    m.add(SPARK, lowpass(noise(0.5, lambda t: 0.6 * math.exp(-t / 0.08)), 4500), rev=0.5)
+    voices = []
+    for note in (52, 59, 64, 66, 71):  # mi, si, mi, fa#, si (une octave plus haut que « Puissance »)
+        for detune in (-0.06, 0.06):
+            voices.append(osc("saw", hz(note + detune), 2.6, lambda t: 0.11 * adsr(t, 2.6, 0.15, 0.8, 0.6, 1.3)))
+    m.add(SPARK, lowpass(mixed(*voices), lambda t: 500 + 2200 * (1 - math.exp(-t / 0.4))), rev=0.45)
+    m.add(SPARK + 0.25, bell(hz(88), 1.6, decay=0.6, amp=0.025), rev=0.7)
+    m.add(SPARK + 0.37, bell(hz(95), 1.6, decay=0.6, amp=0.025), rev=0.7)
+    m.limit = 3.0
+    return m
+
+
 def discret():
     """5. Discret : petit déclic, puis « bip-biiip » doux. Court."""
     m = Mix(1.9, room=0.75)
@@ -256,8 +305,9 @@ def discret():
 if __name__ == "__main__":
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    for index, (name, make) in enumerate((("Neon", neon), ("Cristal", cristal), ("8-bits", chip), ("Puissance", power),
-                                          ("Discret", discret)), 1):
-        path = os.path.join(out, f"{index} - {name}.wav")
+    for number, name, make in (("1", "Neon", neon), ("2", "Cristal", cristal), ("3", "8-bits", chip),
+                               ("4", "Puissance", power), ("4b", "Puissance iPhone", power_phone),
+                               ("5", "Discret", discret)):
+        path = os.path.join(out, f"{number} - {name}.wav")
         make().write(path)
         print(path)
