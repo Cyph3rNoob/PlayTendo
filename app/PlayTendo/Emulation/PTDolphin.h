@@ -32,11 +32,25 @@ void PTDolphinReset(void);
 /// Avance rapide (vitesse ×3).
 void PTDolphinSetTurbo(bool enabled);
 
-/// Bouton de la manette GameCube, avec les numéros RetroPad de PlayTendo (PTButton) : B = B, A = A,
-/// Y = Y, X = X, R1 = Z, L2/R2 = gâchettes L/R, Start, croix.
+/// Commandes envoyées à la Wiimote + Nunchuk (vrai) ou à la manette GameCube (faux, par défaut). Relâche tout.
+void PTDolphinSetWiimote(bool enabled);
+/// Bouton RetroPad de PlayTendo (PTButton), placé par position. Manette GameCube : bas = A, gauche = B,
+/// droite = X, haut = Y, R1 = Z, L1/L2 = L, R2 = R, Start, croix. Wiimote : bas = A, droite et R2 = B,
+/// gauche = 1, haut = 2, Start = +, Select = −, R3 = Home, L1 = C, L2 = Z, R1 = secouer, croix.
 void PTDolphinSetButton(int retroPadButton, bool pressed);
-/// Stick 0 (principal) ou 1 (stick C), de -1 à 1 (y positif vers le bas).
+/// Stick 0 (principal ; Nunchuk) ou 1 (stick C ; pointeur de la Wiimote), de -1 à 1 (y positif vers le bas).
 void PTDolphinSetStick(int stick, float x, float y);
+/// Pointeur de la Wiimote, de -1 à 1 sur l'image (y positif vers le bas).
+void PTDolphinSetPointer(float x, float y);
+
+/// Format de l'image en cours (largeur / hauteur : 4:3, 16:9…), ou 0 s'il n'est pas encore connu.
+float PTDolphinGetAspectRatio(void);
+/// Résolution de rendu (×1 à ×4 celle de la console) et lissage des bords (filtre FXAA). Appliqués à l'image suivante.
+void PTDolphinSetImageOptions(int scale, bool smoothing);
+/// Capture l'image suivante en PNG à `path` (bloquant, jeu en marche seulement ; ≤ 1 s). Vrai si écrite.
+bool PTDolphinCaptureScreen(const char *path);
+/// Mémoire rapide (fastmem) disponible ; `largestBlockGB` reçoit le plus grand bloc d'adresses libre mesuré.
+bool PTDolphinFastmemStatus(float *largestBlockGB);
 
 /// Sauvegarde et chargement rapides (bloquants : hors du thread principal).
 bool PTDolphinSaveState(const char *path);

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Droits de l'app, posés dans l'IPA par scripts/build_app.sh (AltStore les reprend en la signant).
+     increased-memory-limit : iOS ferme l'app plus tard quand la mémoire manque (GameCube/Wii, PS2) ; accepté
+     par AltStore 2.2+ avec un compte gratuit, comme pour DolphiniOS.
+     get-task-allow : indispensable au turbo (StikDebug s'attache à l'app). -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>

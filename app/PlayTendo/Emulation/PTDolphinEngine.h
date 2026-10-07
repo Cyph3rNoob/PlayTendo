@@ -28,10 +28,22 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)stop;
 - (void)reset;
 - (void)setTurbo:(BOOL)enabled;
+/// Commandes envoyées à la Wiimote + Nunchuk (YES) ou à la manette GameCube (NO). Relâche tout.
+- (void)setWiimote:(BOOL)enabled;
 /// Bouton RetroPad (PTButton).
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed;
-/// Stick 0 (principal) ou 1 (stick C), de -1 à 1.
+/// Stick 0 (principal ; Nunchuk) ou 1 (stick C ; pointeur de la Wiimote), de -1 à 1.
 - (void)setStick:(int)stick x:(float)x y:(float)y;
+/// Pointeur de la Wiimote, de -1 à 1 sur l'image.
+- (void)setPointerX:(float)x y:(float)y;
+/// Format de l'image en cours (largeur / hauteur), 0 s'il n'est pas encore connu.
+@property (nonatomic, readonly) float aspectRatio;
+/// Résolution (×1 à ×4) et lissage des bords.
+- (void)setImageScale:(int)scale smoothing:(BOOL)smoothing;
+/// Capture l'image suivante en PNG (bloquant, ≤ 1 s, jeu en marche seulement).
+- (BOOL)captureScreenToPath:(NSString *)path;
+/// Mémoire rapide disponible ; `largestBlockGB` : plus grand bloc d'adresses libre mesuré.
+- (BOOL)fastmemAvailableWithLargestBlock:(float *)largestBlockGB;
 /// Sauvegarde et chargement rapides : bloquants, hors du thread principal.
 - (BOOL)saveStateToPath:(NSString *)path;
 - (BOOL)loadStateFromPath:(NSString *)path;

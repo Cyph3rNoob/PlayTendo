@@ -48,6 +48,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private var thread: Thread?
     /// Moteur autonome (PS2, GameCube/Wii) : choisi au démarrage (thread principal), jamais changé ensuite.
     private var external: ExternalEngine?
+    /// Wii : commandes envoyées à la Wiimote + Nunchuk plutôt qu'à la manette GameCube (thread principal).
+    private var wiimote = false
 
     private let condition = NSCondition()
     private var pendingCommands: [() -> Void] = []
@@ -87,6 +89,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             return
         }
         self.external = external
+        (external as? PTDolphinEngine)?.setWiimote(wiimote)
         engineView = external?.renderView
         let thread = Thread {
             if let external { self.runExternal(external) } else { self.run() }
@@ -157,6 +160,21 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     private static func applyPS2Image(to engine: PTPS2Engine?) {
         engine?.setImageUpscale(PS2Settings.resolution.rawValue, smoothing: PS2Settings.smoothing == .on)
+    }
+
+    /// GameCube/Wii : applique la résolution et le lissage choisis dans le menu pause (DolphinSettings).
+    func applyDolphinImage() {
+        perform { [self] in Self.applyDolphinImage(to: external as? PTDolphinEngine) }
+    }
+
+    private static func applyDolphinImage(to engine: PTDolphinEngine?) {
+        engine?.setImageScale(Int32(DolphinSettings.resolution.rawValue), smoothing: DolphinSettings.smoothing == .on)
+    }
+
+    /// Wii : commandes vers la Wiimote + Nunchuk (vrai) ou vers la manette GameCube. Avant ou pendant la partie.
+    func setWiimote(_ enabled: Bool) {
+        wiimote = enabled
+        (external as? PTDolphinEngine)?.setWiimote(enabled)
     }
 
     func saveState() {
@@ -268,8 +286,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         core?.setAnalogStick(stick, x: Self.axis(x), y: Self.axis(y), port: port)
     }
 
-    /// Position normalisée (0…1) dans l'image du jeu.
+    /// Position normalisée (0…1) dans l'image du jeu. Wiimote : le pointeur reste où le doigt l'a laissé.
     func setPointer(x: CGFloat, y: CGFloat, pressed: Bool) {
+        if let external {
+            (external as? PTDolphinEngine)?.setPointerX(Float(x * 2 - 1), y: Float(y * 2 - 1))
+            return
+        }
         let px = Int16(max(-32767, min(32767, (x * 2 - 1) * 32767)))
         let py = Int16(max(-32767, min(32767, (y * 2 - 1) * 32767)))
         core?.setPointerX(px, y: py, pressed: pressed)
@@ -507,6 +529,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                                               gameCubeSaveDirectory: Paths.saveDirectory(for: .gameCube).path,
                                               wiiSaveDirectory: Paths.saveDirectory(for: .wii).path)
         PTLogLine("GameCube/Wii : moteur chargé (journal du moteur : Application Support/Systeme/Dolphin/Logs/dolphin.log)")
+        var largestBlock: Float = 0
+        let fastmem = engine.fastmemAvailable(withLargestBlock: &largestBlock)
+        PTLogLine(String(format: "GameCube/Wii : mémoire rapide %@ (plus grand bloc d'adresses libre : %.1f Go)",
+                         fastmem ? "oui" : "non", largestBlock))
         return engine
     }
 
@@ -525,6 +551,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         } else {
             releasePS2Memory()
             PTLogLine("\(name) : lancement de \(game.url.lastPathComponent)")
+            Self.applyDolphinImage(to: engine as? PTDolphinEngine)
         }
 
         // La vue Metal doit être à l'écran, à sa taille, avant le démarrage : le moteur y crée son image.
@@ -544,6 +571,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var seenActivity = false  // le thread de la console a pris la demande
         var enginePaused = false
         var failure: String?
+        var aspect: CGFloat = 4.0 / 3.0
 
         while true {
             condition.lock()
@@ -584,8 +612,16 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 break
             }
             if paused != enginePaused {
+                // Image de la vignette « Continuer » prise juste avant la pause (GameCube/Wii : en marche seulement).
+                if paused { engine.prepareSnapshot() }
                 engine.setPaused(paused)
                 enginePaused = paused
+            }
+            // Format de l'image (16:9 dans la plupart des jeux Wii) : l'écran de jeu prend la bonne place.
+            if let ratio = engine.imageAspectRatio, abs(ratio - aspect) > 0.01 {
+                aspect = ratio
+                PTLogLine(String(format: "%@ : image au format %.2f", name, ratio))
+                DispatchQueue.main.async { self.aspectRatio = ratio }
             }
         }
 

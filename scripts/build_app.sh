@@ -1,6 +1,7 @@
 #!/bin/zsh
-# Compile l'app PlayTendo pour iPhone et fabrique le fichier PlayTendo.ipa
-# (non signé : AltStore s'occupe de la signature à l'installation).
+# Compile l'app PlayTendo pour iPhone et fabrique le fichier PlayTendo.ipa. AltStore la signe à
+# l'installation ; elle porte seulement une signature locale (« ad hoc ») qui contient ses droits
+# (app/PlayTendo.entitlements), qu'AltStore reprend.
 set -e
 set -o pipefail
 
@@ -29,6 +30,13 @@ echo ">>> Fabrication du fichier d'installation…"
 rm -rf "$ROOT/build/ipa"
 mkdir -p "$ROOT/build/ipa/Payload"
 cp -R "$APP" "$ROOT/build/ipa/Payload/"
+# Signature locale : les moteurs d'abord (codesign refuse une app dont le contenu n'est pas signé), puis l'app
+# avec ses droits.
+PAYLOAD_APP="$ROOT/build/ipa/Payload/PlayTendo.app"
+for fw in "$PAYLOAD_APP"/Frameworks/*.framework; do
+  codesign --force --sign - --timestamp=none "$fw" >> "$LOG" 2>&1
+done
+codesign --force --sign - --timestamp=none --entitlements "$ROOT/app/PlayTendo.entitlements" "$PAYLOAD_APP" >> "$LOG" 2>&1
 rm -f "$ROOT/PlayTendo.ipa"
 (cd "$ROOT/build/ipa" && zip -qry "$ROOT/PlayTendo.ipa" Payload)
 echo "=== OK : $ROOT/PlayTendo.ipa ($(du -h "$ROOT/PlayTendo.ipa" | cut -f1 | tr -d ' ')) ==="

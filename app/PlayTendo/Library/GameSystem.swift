@@ -17,25 +17,32 @@ enum ControlScheme {
     case psp
     case playStation2
     case gameCube
+    /// Wii : Wiimote + Nunchuk (le choix « GameCube » d'un jeu Wii prend `gameCube`).
+    case wiimote
 
     var hasShoulders: Bool { ![.nes, .gameBoy].contains(self) }
     var hasSecondShoulders: Bool { self == .playStation || self == .playStation2 }
     var hasFourFaceButtons: Bool { [.snes, .nintendoDS, .playStation, .psp, .playStation2].contains(self) }
     var usesPlayStationSymbols: Bool { [.playStation, .psp, .playStation2].contains(self) }
     var usesTouchScreen: Bool { self == .nintendoDS }
-    /// Stick analogique virtuel (N64, PSP, PS2, GameCube).
-    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube].contains(self) }
+    /// Stick analogique virtuel (N64, PSP, PS2, GameCube, Nunchuk de la Wii).
+    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote].contains(self) }
     /// Second stick (droit) : PS2, stick C de la GameCube.
     var hasRightStick: Bool { self == .playStation2 || self == .gameCube }
-    /// À gauche, le stick en haut et une petite croix dessous (N64, GameCube) ; sinon l'inverse.
-    var stickAboveDPad: Bool { self == .nintendo64 || self == .gameCube }
+    /// À gauche, le stick en haut et une petite croix dessous (N64, GameCube, Wii) ; sinon l'inverse.
+    var stickAboveDPad: Bool { [.nintendo64, .gameCube, .wiimote].contains(self) }
     var hasSelect: Bool { self != .nintendo64 && self != .gameCube }
     /// N64 : gâchette Z et boutons C jaunes (envoyés au stick analogique droit).
     var isNintendo64: Bool { self == .nintendo64 }
     /// GameCube (et Wii, avec la manette GameCube) : gros A vert, B rouge, X et Y, gâchettes L, R et Z.
     var isGameCube: Bool { self == .gameCube }
+    /// Wiimote + Nunchuk : A, B, 1, 2, −, HOME, +, croix ; C et Z du Nunchuk, « secouer » ; on vise en touchant
+    /// l'image du jeu.
+    var isWiimote: Bool { self == .wiimote }
+    /// Toucher l'image du jeu sert de pointeur (Wiimote). La DS a son propre écran tactile (`usesTouchScreen`).
+    var usesPointer: Bool { self == .wiimote }
     /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
-    var canFillScreen: Bool { [.psp, .playStation2, .gameCube].contains(self) }
+    var canFillScreen: Bool { [.psp, .playStation2, .gameCube, .wiimote].contains(self) }
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {
@@ -184,8 +191,10 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psx: .playStation
         case .psp: .psp
         case .ps2: .playStation2
-        // Wii : la manette GameCube (port 1), que beaucoup de jeux Wii acceptent (Smash Bros. Brawl…).
-        case .gameCube, .wii: .gameCube
+        case .gameCube: .gameCube
+        // Wii : Wiimote + Nunchuk par défaut ; la manette GameCube se choisit par jeu dans le menu pause
+        // (`DolphinSettings.controller(for:)`).
+        case .wii: .wiimote
         }
     }
 

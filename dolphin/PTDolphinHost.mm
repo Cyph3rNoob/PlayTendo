@@ -12,13 +12,20 @@
 #import <MetalKit/MetalKit.h>
 #import <UIKit/UIKit.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
 #include <dlfcn.h>
+#include <initializer_list>
 #include <mach/mach.h>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
+#include "Common/Logging/Log.h"
 #include "Common/MemoryUtil.h"
 #include "Common/MsgHandler.h"
 #include "Common/WindowSystemInfo.h"
@@ -40,8 +47,10 @@
 #include "InputCommon/ControllerInterface/iOS/StateManager.h"
 #include "InputCommon/InputConfig.h"
 #include "UICommon/UICommon.h"
+#include "VideoCommon/FrameDumper.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/VideoConfig.h"
+#include "VideoCommon/VideoEvents.h"
 
 #include "HostQueue.h"
 
@@ -69,6 +78,12 @@ static PTDolphinView* s_view;
 static CGFloat s_scale = 2;
 static std::mutex s_errorMutex;
 static std::string s_lastError;
+/// Format de l'image du jeu (largeur / hauteur), relevé à chaque image par Dolphin ; 0 = pas encore connu.
+static std::atomic<float> s_aspectRatio{0};
+static Common::EventHook s_presentHook;
+/// Mémoire rapide : disponible, et plus grand bloc d'adresses libre mesuré au démarrage (en Go).
+static bool s_fastmem = false;
+static float s_largestBlockGB = 0;
 
 // MARK: - Erreurs
 
@@ -112,26 +127,66 @@ static void PTDolphinWriteLoggerConfig()
 }
 
 /// Profils tactiles de DolphiniOS (Sys/Profiles/…/Touchscreen.ini) : manette GameCube 1 et télécommande Wii 1
-/// lues sur les « appareils » tactiles iOS/0 et iOS/4, que PlayTendo remplit (PTDolphinSetButton/Stick).
-static void PTDolphinImportProfile(InputConfig* config)
+/// lues sur les « appareils » tactiles iOS/0 et iOS/4, que PlayTendo remplit (PTDolphinSetButton/Stick/Pointer).
+/// Wiimote : sans les capteurs de mouvement de l'iPhone (DolphiniOS les lit, pas PlayTendo) — branchés mais
+/// jamais remplis, ils diraient au jeu que la télécommande tombe et figeraient le pointeur.
+static void PTDolphinImportProfile(InputConfig* config, bool wiimote)
 {
   ControllerEmu::EmulatedController* controller = config->GetController(0);
   Common::IniFile ini;
   ini.Load(config->GetSysProfileDirectoryPath() + "Touchscreen.ini");
-  controller->LoadConfig(ini.GetOrCreateSection("Profile"));
+  Common::IniFile::Section* profile = ini.GetOrCreateSection("Profile");
+  if (wiimote)
+  {
+    std::vector<std::string> motion;
+    for (const auto& [key, value] : profile->GetValues())
+    {
+      if (key.starts_with("IMU") || key.starts_with("Nunchuk/IMU"))
+        motion.push_back(key);
+    }
+    for (const std::string& key : motion)
+      profile->Delete(key);
+  }
+  controller->LoadConfig(profile);
   controller->UpdateReferences(g_controller_interface);
   config->SaveConfig();
 }
 
-/// Fastmem : Dolphin veut 16 Go d'adresses d'un seul bloc (sans quoi il émule plus lentement la mémoire).
-static bool PTDolphinFastmemAvailable()
+static bool PTDolphinCanReserve(vm_size_t size)
 {
-  constexpr vm_size_t size = 0x400000000;
   vm_address_t address = 0;
   if (vm_allocate(mach_task_self(), &address, size, VM_FLAGS_ANYWHERE) != KERN_SUCCESS)
     return false;
   vm_deallocate(mach_task_self(), address, size);
   return true;
+}
+
+/// Plus grand bloc d'adresses libre (réservé puis rendu aussitôt, sans mémoire réelle), à 256 Mo près.
+static vm_size_t PTDolphinLargestFreeBlock()
+{
+  vm_size_t low = 0;
+  vm_size_t high = 64ull << 30;
+  while (high - low > (256ull << 20))
+  {
+    const vm_size_t middle = (low + (high - low) / 2) & ~vm_size_t(0xFFFF);
+    if (PTDolphinCanReserve(middle))
+      low = middle;
+    else
+      high = middle;
+  }
+  return low;
+}
+
+/// Fastmem : Dolphin veut un bloc d'adresses d'un seul tenant (8 Go sur iPhone, voir la retouche de Memmap.cpp
+/// dans scripts/patch_dolphin.py) ; sans lui, il émule la mémoire de la console plus lentement.
+static bool PTDolphinFastmemAvailable()
+{
+#if defined(__aarch64__)
+  constexpr vm_size_t size = 0x200000000;
+#else
+  constexpr vm_size_t size = 0x380000000;
+#endif
+  return PTDolphinCanReserve(size);
 }
 
 PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir, const char* wiiSaveDir)
@@ -150,6 +205,9 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
   [session setActive:YES error:nil];
 
   const bool fastmem = PTDolphinFastmemAvailable();
+  const vm_size_t largest = PTDolphinLargestFreeBlock();
+  s_fastmem = fastmem;
+  s_largestBlockGB = static_cast<float>(largest) / float(1ull << 30);
   DOLHostQueueRunSync(^{
     UICommon::SetUserDirectory(user);
     UICommon::CreateDirectories();
@@ -160,6 +218,8 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
     Config::SetBase(Config::MAIN_GFX_BACKEND, "Metal");
     Config::SetBase(Config::MAIN_USE_GAME_COVERS, false);
     Config::SetBase(Config::MAIN_CONFIRM_ON_STOP, false);
+    // Pas de messages de Dolphin sur l'image (en anglais : « Saved state… », « Screenshot saved… »).
+    Config::SetBase(Config::MAIN_OSD_MESSAGES, false);
     Config::SetBase(Config::MAIN_FASTMEM, fastmem);
     Config::SetBase(Config::MAIN_FASTMEM_ARENA, fastmem);
     // Sauvegardes visibles dans Fichiers : cartes mémoire GameCube (un fichier .gci par sauvegarde, dans un
@@ -170,13 +230,23 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
     WindowSystemInfo wsi;
     wsi.type = WindowSystemType::iOS;
     UICommon::InitControllers(wsi);
-    PTDolphinImportProfile(Pad::GetConfig());
-    PTDolphinImportProfile(Wiimote::GetConfig());
+    PTDolphinImportProfile(Pad::GetConfig(), false);
+    PTDolphinImportProfile(Wiimote::GetConfig(), true);
 
     // N'envoie rien (statistiques désactivées) mais doit être fait avant tout jeu Wii (DolphiniOS).
     DolphinAnalytics::Instance().ReportDolphinStart("ios");
     Config::Save();
+    NOTICE_LOG_FMT(CORE, "[PlayTendo] Mémoire rapide (fastmem) : {} — plus grand bloc d'adresses libre : {:.2f} Go",
+                   fastmem ? "oui" : "non", static_cast<double>(largest) / double(1ull << 30));
   });
+
+  // Format de l'image (4:3, 16:9…), pour que PlayTendo donne au jeu la bonne place à l'écran.
+  s_presentHook = AfterPresentEvent::Register(
+      [](PresentInfo&) {
+        if (g_presenter)
+          s_aspectRatio = g_presenter->CalculateDrawAspectRatio();
+      },
+      "PlayTendo");
 
   // Mémoire du turbo : la réserve JIT de l'app (PTJIT.m), exportée par l'exécutable de PlayTendo.
   auto jitAlloc = reinterpret_cast<void* (*)(size_t, void**)>(dlsym(RTLD_DEFAULT, "PTJITAlloc"));
@@ -226,6 +296,7 @@ PTDOLPHIN_EXPORT bool PTDolphinBoot(const char* path, bool jit)
     Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, jit ? VertexLoaderType::Native : VertexLoaderType::Software);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, 1.0f);
     NSLog(@"[PlayTendo] Démarrage GameCube/Wii %s", jit ? "avec JIT" : "sans JIT (interpréteur)");
+    s_aspectRatio = 0;
 
     WindowSystemInfo wsi;
     wsi.type = WindowSystemType::iOS;
@@ -289,44 +360,200 @@ PTDOLPHIN_EXPORT void PTDolphinSetTurbo(bool enabled)
 
 // MARK: - Commandes
 
-static void PTDolphinSetTrigger(ButtonType trigger, bool pressed)
+// Les boutons arrivent avec les numéros RetroPad de PlayTendo (par position, comme ses manettes) : ceux enfoncés
+// sont gardés ici, puis traduits pour la manette GameCube 1 (appareil tactile iOS/0) ou pour la Wiimote 1 avec
+// son Nunchuk (iOS/4). Un même bouton de la console peut venir de deux boutons RetroPad.
+static constexpr int kPad = 0;
+static constexpr int kWiimote = 4;
+static std::mutex s_inputMutex;
+static uint32_t s_pressed = 0;  // un bit par bouton RetroPad
+static bool s_wiimoteMode = false;
+static bool s_pointerStickActive = false;
+
+static bool PTDolphinHeld(std::initializer_list<int> buttons)
 {
-  StateManager::GetInstance()->SetAxisValue(0, trigger, pressed ? 1.0f : 0.0f);
+  for (int button : buttons)
+  {
+    if (s_pressed & (1u << button))
+      return true;
+  }
+  return false;
+}
+
+/// Manette GameCube : bas = A (le gros bouton vert), gauche = B, droite = X, haut = Y ; R1 = Z ; L1/L2 =
+/// gâchette L, R2 = gâchette R (pressées à fond).
+static void PTDolphinApplyPad()
+{
+  StateManager* state = StateManager::GetInstance();
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_A, PTDolphinHeld({0}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_B, PTDolphinHeld({1}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_X, PTDolphinHeld({8}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_Y, PTDolphinHeld({9}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_START, PTDolphinHeld({3}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_Z, PTDolphinHeld({11}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_UP, PTDolphinHeld({4}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_DOWN, PTDolphinHeld({5}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_LEFT, PTDolphinHeld({6}));
+  state->SetButtonPressed(kPad, ButtonType::BUTTON_RIGHT, PTDolphinHeld({7}));
+  state->SetAxisValue(kPad, ButtonType::TRIGGER_L, PTDolphinHeld({10, 12}) ? 1.0f : 0.0f);
+  state->SetAxisValue(kPad, ButtonType::TRIGGER_R, PTDolphinHeld({13}) ? 1.0f : 0.0f);
+}
+
+/// Wiimote + Nunchuk : bas = A, droite et R2 = B (la gâchette), gauche = 1, haut = 2, Start = +, Select = −,
+/// R3 = Home ; L1 = C et L2 = Z (Nunchuk) ; R1 = secouer la télécommande.
+static void PTDolphinApplyWiimote()
+{
+  StateManager* state = StateManager::GetInstance();
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_A, PTDolphinHeld({0}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_B, PTDolphinHeld({8, 13}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_1, PTDolphinHeld({1}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_2, PTDolphinHeld({9}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_PLUS, PTDolphinHeld({3}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_MINUS, PTDolphinHeld({2}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_HOME, PTDolphinHeld({15}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_UP, PTDolphinHeld({4}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_DOWN, PTDolphinHeld({5}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_LEFT, PTDolphinHeld({6}));
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_RIGHT, PTDolphinHeld({7}));
+  state->SetButtonPressed(kWiimote, ButtonType::NUNCHUK_BUTTON_C, PTDolphinHeld({10}));
+  state->SetButtonPressed(kWiimote, ButtonType::NUNCHUK_BUTTON_Z, PTDolphinHeld({12}));
+  const bool shake = PTDolphinHeld({11});
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_SHAKE_X, shake);
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_SHAKE_Y, shake);
+  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_SHAKE_Z, shake);
+}
+
+/// Une valeur par direction (négative vers le haut et la gauche), comme les sticks tactiles de DolphiniOS.
+static void PTDolphinSetAxes(int controller, ButtonType up, ButtonType down, ButtonType left, ButtonType right,
+                             float x, float y)
+{
+  StateManager* state = StateManager::GetInstance();
+  state->SetAxisValue(controller, up, std::min(y, 0.0f));
+  state->SetAxisValue(controller, down, std::max(y, 0.0f));
+  state->SetAxisValue(controller, left, std::min(x, 0.0f));
+  state->SetAxisValue(controller, right, std::max(x, 0.0f));
+}
+
+static void PTDolphinSetPointerAxes(float x, float y)
+{
+  PTDolphinSetAxes(kWiimote, ButtonType::WIIMOTE_IR_UP, ButtonType::WIIMOTE_IR_DOWN, ButtonType::WIIMOTE_IR_LEFT,
+                   ButtonType::WIIMOTE_IR_RIGHT, std::clamp(x, -1.0f, 1.0f), std::clamp(y, -1.0f, 1.0f));
+}
+
+/// Relâche tout, sur les deux manettes (le pointeur revient au centre).
+static void PTDolphinReleaseAll()
+{
+  s_pressed = 0;
+  s_pointerStickActive = false;
+  PTDolphinApplyPad();
+  PTDolphinApplyWiimote();
+  PTDolphinSetAxes(kPad, ButtonType::STICK_MAIN_UP, ButtonType::STICK_MAIN_DOWN, ButtonType::STICK_MAIN_LEFT,
+                   ButtonType::STICK_MAIN_RIGHT, 0, 0);
+  PTDolphinSetAxes(kPad, ButtonType::STICK_C_UP, ButtonType::STICK_C_DOWN, ButtonType::STICK_C_LEFT,
+                   ButtonType::STICK_C_RIGHT, 0, 0);
+  PTDolphinSetAxes(kWiimote, ButtonType::NUNCHUK_STICK_UP, ButtonType::NUNCHUK_STICK_DOWN,
+                   ButtonType::NUNCHUK_STICK_LEFT, ButtonType::NUNCHUK_STICK_RIGHT, 0, 0);
+  PTDolphinSetPointerAxes(0, 0);
+}
+
+PTDOLPHIN_EXPORT void PTDolphinSetWiimote(bool enabled)
+{
+  std::lock_guard<std::mutex> lock(s_inputMutex);
+  s_wiimoteMode = enabled;
+  PTDolphinReleaseAll();
 }
 
 PTDOLPHIN_EXPORT void PTDolphinSetButton(int retroPadButton, bool pressed)
 {
-  // Par position, comme les manettes de PlayTendo : bas = A (le gros bouton vert), gauche = B, droite = X,
-  // haut = Y ; R1 = Z ; L1/L2 = gâchette L, R2 = gâchette R.
-  StateManager* state = StateManager::GetInstance();
-  switch (retroPadButton)
-  {
-  case 0: state->SetButtonPressed(0, ButtonType::BUTTON_A, pressed); break;      // B (bas)
-  case 1: state->SetButtonPressed(0, ButtonType::BUTTON_B, pressed); break;      // Y (gauche)
-  case 3: state->SetButtonPressed(0, ButtonType::BUTTON_START, pressed); break;  // Start
-  case 4: state->SetButtonPressed(0, ButtonType::BUTTON_UP, pressed); break;
-  case 5: state->SetButtonPressed(0, ButtonType::BUTTON_DOWN, pressed); break;
-  case 6: state->SetButtonPressed(0, ButtonType::BUTTON_LEFT, pressed); break;
-  case 7: state->SetButtonPressed(0, ButtonType::BUTTON_RIGHT, pressed); break;
-  case 8: state->SetButtonPressed(0, ButtonType::BUTTON_X, pressed); break;      // A (droite)
-  case 9: state->SetButtonPressed(0, ButtonType::BUTTON_Y, pressed); break;      // X (haut)
-  case 11: state->SetButtonPressed(0, ButtonType::BUTTON_Z, pressed); break;     // R1
-  case 10:                                                                       // L1
-  case 12: PTDolphinSetTrigger(ButtonType::TRIGGER_L, pressed); break;           // L2
-  case 13: PTDolphinSetTrigger(ButtonType::TRIGGER_R, pressed); break;           // R2
-  default: break;
-  }
+  if (retroPadButton < 0 || retroPadButton >= 16)
+    return;
+  std::lock_guard<std::mutex> lock(s_inputMutex);
+  if (pressed)
+    s_pressed |= 1u << retroPadButton;
+  else
+    s_pressed &= ~(1u << retroPadButton);
+  if (s_wiimoteMode)
+    PTDolphinApplyWiimote();
+  else
+    PTDolphinApplyPad();
 }
 
 PTDOLPHIN_EXPORT void PTDolphinSetStick(int stick, float x, float y)
 {
-  // Comme les sticks tactiles de DolphiniOS : une valeur par direction (négative vers le haut et la gauche).
-  StateManager* state = StateManager::GetInstance();
-  const bool main = stick == 0;
-  state->SetAxisValue(0, main ? ButtonType::STICK_MAIN_UP : ButtonType::STICK_C_UP, std::min(y, 0.0f));
-  state->SetAxisValue(0, main ? ButtonType::STICK_MAIN_DOWN : ButtonType::STICK_C_DOWN, std::max(y, 0.0f));
-  state->SetAxisValue(0, main ? ButtonType::STICK_MAIN_LEFT : ButtonType::STICK_C_LEFT, std::min(x, 0.0f));
-  state->SetAxisValue(0, main ? ButtonType::STICK_MAIN_RIGHT : ButtonType::STICK_C_RIGHT, std::max(x, 0.0f));
+  std::lock_guard<std::mutex> lock(s_inputMutex);
+  if (!s_wiimoteMode)
+  {
+    if (stick == 0)
+      PTDolphinSetAxes(kPad, ButtonType::STICK_MAIN_UP, ButtonType::STICK_MAIN_DOWN, ButtonType::STICK_MAIN_LEFT,
+                       ButtonType::STICK_MAIN_RIGHT, x, y);
+    else
+      PTDolphinSetAxes(kPad, ButtonType::STICK_C_UP, ButtonType::STICK_C_DOWN, ButtonType::STICK_C_LEFT,
+                       ButtonType::STICK_C_RIGHT, x, y);
+    return;
+  }
+  if (stick == 0)
+  {
+    PTDolphinSetAxes(kWiimote, ButtonType::NUNCHUK_STICK_UP, ButtonType::NUNCHUK_STICK_DOWN,
+                     ButtonType::NUNCHUK_STICK_LEFT, ButtonType::NUNCHUK_STICK_RIGHT, x, y);
+    return;
+  }
+  // Stick droit d'une manette : il vise. Au repos (petite zone morte), le pointeur revient une seule fois au
+  // centre, pour ne pas gêner la visée au doigt.
+  if (std::hypot(x, y) > 0.15f)
+  {
+    s_pointerStickActive = true;
+    PTDolphinSetPointerAxes(x, y);
+  }
+  else if (s_pointerStickActive)
+  {
+    s_pointerStickActive = false;
+    PTDolphinSetPointerAxes(0, 0);
+  }
+}
+
+PTDOLPHIN_EXPORT void PTDolphinSetPointer(float x, float y)
+{
+  std::lock_guard<std::mutex> lock(s_inputMutex);
+  PTDolphinSetPointerAxes(x, y);
+}
+
+// MARK: - Image
+
+PTDOLPHIN_EXPORT float PTDolphinGetAspectRatio(void)
+{
+  return s_aspectRatio.load();
+}
+
+PTDOLPHIN_EXPORT void PTDolphinSetImageOptions(int scale, bool smoothing)
+{
+  const int efbScale = std::clamp(scale, 1, 4);
+  // Lissage = filtre FXAA de Dolphin (Sys/Shaders/FXAA.glsl), appliqué à l'image finale. Pas de MSAA : ses
+  // textures « multi-échantillons en tableau » sont refusées par le Metal du simulateur (abandon du moteur).
+  DOLHostQueueRunSync(^{
+    Config::SetBase(Config::GFX_EFB_SCALE, efbScale);
+    Config::SetBase(Config::GFX_MSAA, 1u);
+    Config::SetBase(Config::GFX_SSAA, false);
+    Config::SetBase(Config::GFX_ENHANCE_POST_SHADER, std::string(smoothing ? "FXAA" : ""));
+  });
+}
+
+PTDOLPHIN_EXPORT bool PTDolphinCaptureScreen(const char* path)
+{
+  if (!path)
+    return false;
+  const std::string file = path;
+  File::Delete(file);
+  if (Core::GetState(Core::System::GetInstance()) != Core::State::Running || !g_frame_dumper)
+    return false;
+  g_frame_dumper->SaveScreenshotAndWait(file, std::chrono::milliseconds(1000));
+  return File::Exists(file);
+}
+
+PTDOLPHIN_EXPORT bool PTDolphinFastmemStatus(float* largestBlockGB)
+{
+  if (largestBlockGB)
+    *largestBlockGB = s_largestBlockGB;
+  return s_fastmem;
 }
 
 // MARK: - Sauvegardes rapides

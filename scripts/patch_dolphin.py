@@ -7,11 +7,15 @@ Appelé par build_dolphin.sh. Une retouche déjà faite est sautée : relancer l
    (le cœur Dolphin, sans l'interface de DolphiniOS) reçoit le pilote dolphin/PTDolphinHost.mm.
 2. FileUtil.cpp : le dossier Sys de Dolphin est cherché à côté du moteur (DolphinCore.framework/Sys) et non
    dans l'app.
-4. MTLUtil.mm : au simulateur seulement, pas de lecture de l'image en cours dans les shaders (« framebuffer
-   fetch ») : son Metal se dit « GPU Apple » mais ne la fait pas, et des surfaces sortaient sans texture.
 3. MemoryUtil_iOS_LuckTXM.cpp : la mémoire du turbo (JIT) est prise dans la réserve de PlayTendo (PTJIT.m),
    préparée en un seul passage de StikDebug pour toutes les consoles, au lieu de la demander au débogueur
    (« brk #0x69 », il serait déjà parti).
+4. MTLUtil.mm : au simulateur seulement, pas de lecture de l'image en cours dans les shaders (« framebuffer
+   fetch ») : son Metal se dit « GPU Apple » mais ne la fait pas, et des surfaces sortaient sans texture.
+5. Memmap.cpp : sur iPhone, la « mémoire rapide » (fastmem) réserve 8 Go d'adresses au lieu de 14 : les zones de
+   garde de 2 Go ne servent qu'au recompilateur x86-64 (le commentaire de Dolphin le dit), et iOS limite les
+   adresses d'une app sans le droit « extended-virtual-addressing » (réservé aux comptes développeur payants).
+6. FrameDumper.h : capture d'écran attendue (`SaveScreenshotAndWait`), pour la vignette « Continuer ».
 """
 import os
 import sys
@@ -116,6 +120,31 @@ patch("Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp", [
      "      s_pt_free(static_cast<u8*>(ptr) + g_rw_region_diff);\n"
      "    return;\n"
      "  }\n\n"),
+])
+
+patch("Source/Core/Core/HW/Memmap.cpp", [
+    ("  constexpr size_t guard_size = 0x8000'0000;\n",
+     "#if defined(IPHONEOS) && defined(_M_ARM_64)\n"
+     "  // PlayTendo : le recompilateur ARM64 calcule toujours base + adresse sur 32 bits (voir plus haut) : pas\n"
+     "  // besoin de zones de garde, et iOS n'accorde pas 14 Go d'adresses d'un bloc à une app ordinaire.\n"
+     "  constexpr size_t guard_size = 0;\n"
+     "#else\n"
+     "  constexpr size_t guard_size = 0x8000'0000;\n"
+     "#endif\n"),
+])
+
+patch("Source/Core/VideoCommon/FrameDumper.h", [
+    ("  void SaveScreenshot(std::string filename);\n",
+     "  void SaveScreenshot(std::string filename);\n"
+     "\n"
+     "  // PlayTendo : demande une capture (prise à l'image suivante) et attend qu'elle soit écrite. Faux si le\n"
+     "  // délai passe (jeu en pause ou sans nouvelle image).\n"
+     "  bool SaveScreenshotAndWait(std::string filename, std::chrono::milliseconds timeout)\n"
+     "  {\n"
+     "    m_screenshot_completed.Reset();\n"
+     "    SaveScreenshot(std::move(filename));\n"
+     "    return m_screenshot_completed.WaitFor(timeout);\n"
+     "  }\n"),
 ])
 
 patch("Source/Core/VideoBackends/Metal/MTLUtil.mm", [

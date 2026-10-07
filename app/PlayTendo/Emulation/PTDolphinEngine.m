@@ -5,7 +5,8 @@
 #define PT_DOLPHIN_FUNCTIONS(X) \
     X(PTDolphinSetup) X(PTDolphinBoot) X(PTDolphinGetState) X(PTDolphinSetPaused) X(PTDolphinStop) \
     X(PTDolphinReset) X(PTDolphinSetTurbo) X(PTDolphinSetButton) X(PTDolphinSetStick) X(PTDolphinSaveState) \
-    X(PTDolphinLoadState) X(PTDolphinCopyLastError)
+    X(PTDolphinLoadState) X(PTDolphinCopyLastError) X(PTDolphinSetWiimote) X(PTDolphinSetPointer) \
+    X(PTDolphinGetAspectRatio) X(PTDolphinSetImageOptions) X(PTDolphinCaptureScreen) X(PTDolphinFastmemStatus)
 
 typedef struct {
 #define PT_FIELD(name) __typeof__(&name) name;
@@ -87,6 +88,30 @@ static PTDolphinEngine *loadedEngine;
 
 - (void)setStick:(int)stick x:(float)x y:(float)y {
     _fn.PTDolphinSetStick(stick, x, y);
+}
+
+- (void)setWiimote:(BOOL)enabled {
+    _fn.PTDolphinSetWiimote(enabled);
+}
+
+- (void)setPointerX:(float)x y:(float)y {
+    _fn.PTDolphinSetPointer(x, y);
+}
+
+- (float)aspectRatio {
+    return _fn.PTDolphinGetAspectRatio();
+}
+
+- (void)setImageScale:(int)scale smoothing:(BOOL)smoothing {
+    _fn.PTDolphinSetImageOptions(scale, smoothing);
+}
+
+- (BOOL)captureScreenToPath:(NSString *)path {
+    return _fn.PTDolphinCaptureScreen(path.fileSystemRepresentation);
+}
+
+- (BOOL)fastmemAvailableWithLargestBlock:(float *)largestBlockGB {
+    return _fn.PTDolphinFastmemStatus(largestBlockGB);
 }
 
 - (BOOL)saveStateToPath:(NSString *)path {

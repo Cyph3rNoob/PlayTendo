@@ -103,7 +103,11 @@ struct ControlLayout: Equatable {
         let menuSize: CGFloat = 38
         let dualScreen = scheme.usesTouchScreen
 
-        let narrowShoulders = scheme.hasSecondShoulders || scheme.isNintendo64 || scheme.isGameCube
+        let narrowShoulders = scheme.hasSecondShoulders || scheme.isNintendo64 || scheme.isGameCube || scheme.isWiimote
+        // Petits boutons du bas : SELECT et START, ou − HOME + pour la Wiimote.
+        let smallButtons: [(PTButton, String)] = scheme.isWiimote
+            ? [(.select, "−"), (.r3, "HOME"), (.start, "+")]
+            : scheme.hasSelect ? [(.select, "SELECT"), (.start, "START")] : [(.start, "START")]
         let shoulderSize = CGSize(width: narrowShoulders ? 70 : 92, height: 38)
         let smallSize = CGSize(width: 78, height: 30)
         var cluster: CGFloat
@@ -159,16 +163,15 @@ struct ControlLayout: Equatable {
                                                                width: menuSize, height: menuSize), label: ""))
             layout.addShoulders(scheme: scheme, size: shoulderSize, top: topRow,
                                 left: area.minX + 14, right: area.maxX - 14, stacked: false)
-            if scheme.hasSelect {
-                layout.controls.append(PlacedControl(element: .small(.select),
-                                                     frame: CGRect(x: area.midX - 8 - smallSize.width, y: bottomRow,
-                                                                   width: smallSize.width, height: smallSize.height),
-                                                     label: "SELECT"))
+            // Centrés, 16 points entre deux.
+            let rowWidth = CGFloat(smallButtons.count) * smallSize.width + CGFloat(smallButtons.count - 1) * 16
+            for (index, (button, label)) in smallButtons.enumerated() {
+                let x = area.midX - rowWidth / 2 + CGFloat(index) * (smallSize.width + 16)
+                layout.controls.append(PlacedControl(element: .small(button),
+                                                     frame: CGRect(x: x, y: bottomRow, width: smallSize.width,
+                                                                   height: smallSize.height),
+                                                     label: label))
             }
-            layout.controls.append(PlacedControl(element: .small(.start),
-                                                 frame: CGRect(x: scheme.hasSelect ? area.midX + 8 : area.midX - smallSize.width / 2,
-                                                               y: bottomRow, width: smallSize.width, height: smallSize.height),
-                                                 label: "START"))
         } else {
             cluster = max(110, min(dualScreen || scheme.canFillScreen ? 150 : 168, usable.height * 0.42))
             if dualScreen {
@@ -206,7 +209,7 @@ struct ControlLayout: Equatable {
                 }
                 // Sous les gâchettes de gauche (L, et Z pour la N64), au-dessus de SELECT.
                 let gap: CGFloat = 8
-                let leftShoulderRows: CGFloat = scheme.hasSecondShoulders || scheme.isNintendo64 ? 2 : 1
+                let leftShoulderRows: CGFloat = scheme.hasSecondShoulders || scheme.isNintendo64 || scheme.isWiimote ? 2 : 1
                 let columnTop = usable.minY + 10 + leftShoulderRows * shoulderSize.height + (leftShoulderRows - 1) * 8 + 8
                 let columnBottom = usable.maxY - 6 - (scheme.hasSelect ? smallSize.height + 6 : 0)
                 cluster = max(90, min(cluster, (columnBottom - columnTop - gap) / (1 + secondaryRatio)))
@@ -231,23 +234,26 @@ struct ControlLayout: Equatable {
             layout.addShoulders(scheme: scheme, size: shoulderSize, top: usable.minY + 10,
                                 left: usable.minX + 6, right: usable.maxX - 6, stacked: true)
             let smallY = usable.maxY - smallSize.height - 6
-            if scheme.hasSelect {
-                layout.controls.append(PlacedControl(element: .small(.select),
-                                                     frame: CGRect(x: dpadCenter.x - smallSize.width / 2, y: smallY,
-                                                                   width: smallSize.width, height: smallSize.height),
-                                                     label: "SELECT"))
+            // SELECT (ou −) sous la croix, START (ou +) sous les boutons ; HOME à droite du bouton menu.
+            for (button, label) in smallButtons {
+                let x: CGFloat = switch button {
+                case .select: dpadCenter.x - smallSize.width / 2
+                case .r3: bounds.midX + menuSize / 2 + 12
+                default: faceCenter.x - smallSize.width / 2
+                }
+                layout.controls.append(PlacedControl(element: .small(button),
+                                                     frame: CGRect(x: x, y: smallY, width: smallSize.width,
+                                                                   height: smallSize.height),
+                                                     label: label))
             }
-            layout.controls.append(PlacedControl(element: .small(.start),
-                                                 frame: CGRect(x: faceCenter.x - smallSize.width / 2, y: smallY,
-                                                               width: smallSize.width, height: smallSize.height),
-                                                 label: "START"))
             layout.controls.append(PlacedControl(element: .menu,
                                                  frame: CGRect(x: bounds.midX - menuSize / 2, y: usable.maxY - menuSize - 4,
                                                                width: menuSize, height: menuSize), label: ""))
         }
 
         if layout.screens.isEmpty {
-            layout.screens = [ScreenPlacement(frame: layout.gameRect, source: fullImage, isTouch: false)]
+            // Wiimote : toucher l'image vise (pointeur), comme l'écran tactile de la DS.
+            layout.screens = [ScreenPlacement(frame: layout.gameRect, source: fullImage, isTouch: scheme.usesPointer)]
         }
         func square(_ center: CGPoint, _ size: CGFloat) -> CGRect {
             CGRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size)
@@ -315,6 +321,22 @@ struct ControlLayout: Equatable {
     private mutating func addShoulders(scheme: ControlScheme, size: CGSize, top: CGFloat,
                                        left: CGFloat, right: CGFloat, stacked: Bool) {
         guard scheme.hasShoulders else { return }
+        if scheme.isWiimote {
+            // Nunchuk : la gâchette Z et le bouton C à gauche (C à côté de Z, dessous en paysage), envoyés sur L2
+            // et L1 ; « secouer » la télécommande à droite, sur R1.
+            controls.append(PlacedControl(element: .shoulder(.l2),
+                                          frame: CGRect(x: left, y: top, width: size.width, height: size.height),
+                                          label: "Z"))
+            let c = stacked
+                ? CGRect(x: left, y: top + size.height + 8, width: size.width, height: size.height)
+                : CGRect(x: left + size.width + 8, y: top, width: size.width, height: size.height)
+            controls.append(PlacedControl(element: .shoulder(.l), frame: c, label: "C"))
+            let shakeWidth = size.width + 34
+            controls.append(PlacedControl(element: .shoulder(.r),
+                                          frame: CGRect(x: right - shakeWidth, y: top, width: shakeWidth, height: size.height),
+                                          label: "SECOUER"))
+            return
+        }
         if scheme.isGameCube {
             // Gâchettes L et R (envoyées sur L2/R2, comme les gâchettes d'une manette), et Z à côté de R
             // (sous R en paysage), envoyé sur R1.
@@ -371,6 +393,13 @@ struct ControlLayout: Equatable {
             place(.y, -0.29, 0.27, size * 0.12, "B")
             place(.a, 0.31, -0.08, size * 0.12, "X")
             place(.x, -0.06, -0.29, size * 0.12, "Y")
+        } else if scheme.isWiimote {
+            // Le gros A au centre, B (la gâchette, sous l'index) en bas à gauche, 1 et 2 en bas à droite, comme sur
+            // la télécommande. Sur le RetroPad (par position) : A = B (bas), B = A (droite), 1 = Y, 2 = X.
+            place(.b, 0, -0.06, size * 0.19, "A")
+            place(.a, -0.30, 0.22, size * 0.13, "B")
+            place(.y, 0.06, 0.32, size * 0.11, "1")
+            place(.x, 0.33, 0.19, size * 0.11, "2")
         } else if scheme.isNintendo64 {
             // Comme sur la manette : A (gros) en bas, B à sa gauche, les quatre boutons C en losange
             // en haut à droite. Sur le RetroPad, A N64 = B et B N64 = Y.

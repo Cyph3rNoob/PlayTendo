@@ -331,7 +331,10 @@ final class TouchControlsView: UIView {
             case .stick: drawStick(control.frame)
             case .rightStick: drawStick(control.frame, tint: scheme.isGameCube ? Self.cStickYellow : nil)
             case .shoulder(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: 12, fontSize: 15)
-            case .small(let button): drawPill(control, pressed: pressed.contains(.button(button)), radius: control.frame.height / 2, fontSize: 11)
+            case .small(let button):
+                // « − » et « + » de la Wiimote : un seul signe, écrit plus gros.
+                drawPill(control, pressed: pressed.contains(.button(button)), radius: control.frame.height / 2,
+                         fontSize: control.label.count == 1 ? 18 : 11)
             case .menu: drawMenu(control.frame)
             }
         }

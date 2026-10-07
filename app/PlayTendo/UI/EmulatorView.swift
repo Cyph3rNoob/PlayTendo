@@ -12,6 +12,8 @@ struct EmulatorView: View {
     @State private var screensSwapped: Bool
     @State private var touchSize: DSTouchSize
     @State private var fillScreen: Bool
+    /// Wii : Wiimote + Nunchuk ou manette GameCube (choix retenu par jeu).
+    @State private var wiiController: DolphinSettings.WiiController
 
     init(game: Game) {
         self.game = game
@@ -20,6 +22,13 @@ struct EmulatorView: View {
         let savedSize = UserDefaults.standard.string(forKey: Self.touchSizeKey) ?? ""
         _touchSize = State(initialValue: DSTouchSize(rawValue: savedSize) ?? .medium)
         _fillScreen = State(initialValue: UserDefaults.standard.object(forKey: Self.fillScreenKey) as? Bool ?? true)
+        _wiiController = State(initialValue: DolphinSettings.controller(for: game))
+    }
+
+    /// Commandes affichées : celles de la console, ou pour un jeu Wii la manette choisie.
+    private var controls: ControlScheme {
+        guard game.system == .wii else { return game.system.controls }
+        return wiiController == .wiimote ? .wiimote : .gameCube
     }
 
     private static let touchSizeKey = "tailleEcranTactileDS"
@@ -52,8 +61,9 @@ struct EmulatorView: View {
             gamepad.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
             gamepad.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: x, y: y) }
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
-            gamepad.stickMovesDPad = !game.system.controls.hasAnalogStick
+            gamepad.stickMovesDPad = !controls.hasAnalogStick
             UIApplication.shared.isIdleTimerDisabled = true
+            session.setWiimote(controls.isWiimote)
             session.start()
         }
         .onDisappear {
@@ -87,7 +97,7 @@ struct EmulatorView: View {
         ZStack {
             Color.black
             screens(layout)
-            TouchControls(layout: layout, scheme: game.system.controls, session: session, onMenu: openMenu,
+            TouchControls(layout: layout, scheme: controls, session: session, onMenu: openMenu,
                           onTouchDown: { gamepad.deactivate() })
             if session.state == .loading {
                 ProgressView()
@@ -109,8 +119,7 @@ struct EmulatorView: View {
 
     /// Place des écrans et des boutons selon l'orientation, la manette et les réglages.
     private func makeLayout(bounds: CGRect) -> ControlLayout {
-        let controls = game.system.controls
-        return ControlLayout.make(scheme: controls, aspect: session.aspectRatio,
+        ControlLayout.make(scheme: controls, aspect: session.aspectRatio,
                                   bounds: bounds, safe: Self.safeAreaInsets(),
                                   controllerConnected: gamepad.isConnected,
                                   hideTouchControls: gamepad.isActive,
@@ -138,7 +147,6 @@ struct EmulatorView: View {
     }
 
     private func pauseMenu(landscape: Bool) -> some View {
-        let controls = game.system.controls
         let swap: (() -> Void)? = controls.usesTouchScreen ? { swapScreens() } : nil
         return PauseMenu(session: session,
                          compact: landscape,
@@ -149,6 +157,8 @@ struct EmulatorView: View {
                          onTouchSize: { nextTouchSize() },
                          imageSizeLabel: controls.canFillScreen && landscape ? (fillScreen ? "Plein écran" : "Réduite") : nil,
                          onImageSize: { toggleFillScreen() },
+                         controllerLabel: game.system == .wii ? wiiController.label : nil,
+                         onController: { switchWiiController() },
                          onQuit: { quit() })
     }
 
@@ -175,6 +185,15 @@ struct EmulatorView: View {
     private func toggleFillScreen() {
         fillScreen.toggle()
         UserDefaults.standard.set(fillScreen, forKey: Self.fillScreenKey)
+        closeMenu()
+    }
+
+    /// Wii : passe de la Wiimote à la manette GameCube ou l'inverse (choix retenu pour ce jeu).
+    private func switchWiiController() {
+        wiiController = wiiController.other
+        DolphinSettings.setController(wiiController, for: game)
+        session.clearInput()
+        session.setWiimote(wiiController == .wiimote)
         closeMenu()
     }
 
@@ -220,6 +239,9 @@ private struct PauseMenu: View {
     /// PSP et PS2 en paysage : taille actuelle de l'image (nil = réglage masqué).
     let imageSizeLabel: String?
     let onImageSize: () -> Void
+    /// Wii : manette en cours (nil = réglage masqué).
+    let controllerLabel: String?
+    let onController: () -> Void
     let onQuit: () -> Void
 
     /// PSP : résolution et lissage des textures, choisis directement (gardés pour tous les jeux PSP).
@@ -228,8 +250,12 @@ private struct PauseMenu: View {
     /// PS2 : résolution et lissage des bords (gardés pour tous les jeux PS2).
     @AppStorage(PS2Settings.resolutionKey) private var ps2Resolution = PS2Settings.Resolution.x1.rawValue
     @AppStorage(PS2Settings.smoothingKey) private var ps2Smoothing = PS2Settings.Smoothing.off.rawValue
+    /// GameCube et Wii : résolution et lissage des bords (gardés pour tous leurs jeux).
+    @AppStorage(DolphinSettings.resolutionKey) private var dolphinResolution = DolphinSettings.Resolution.x1.rawValue
+    @AppStorage(DolphinSettings.smoothingKey) private var dolphinSmoothing = DolphinSettings.Smoothing.off.rawValue
 
-    private var hasImageSettings: Bool { session.game.system == .psp || session.game.system == .ps2 }
+    private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
+    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii].contains(session.game.system) }
 
     private struct Item: Identifiable {
         let title: String
@@ -271,6 +297,9 @@ private struct PauseMenu: View {
         if let imageSizeLabel {
             items.append(Item(title: "Image : \(imageSizeLabel)", icon: "arrow.up.left.and.arrow.down.right",
                               action: onImageSize))
+        }
+        if let controllerLabel {
+            items.append(Item(title: "Manette : \(controllerLabel)", icon: "gamecontroller", action: onController))
         }
         return items
     }
@@ -346,7 +375,20 @@ private struct PauseMenu: View {
 
     /// Résolution et lissage : tous les choix visibles, un toucher suffit. Appliqués à la reprise du jeu.
     @ViewBuilder private var imageSettings: some View {
-        if session.game.system == .ps2 {
+        if isDolphin {
+            imageSettings(
+                resolution: NeonSegments(title: "RÉSOLUTION",
+                                         detail: (DolphinSettings.Resolution(rawValue: dolphinResolution) ?? .x1).detail,
+                                         options: DolphinSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: dolphinResolution) { value in
+                    choose { dolphinResolution = value }
+                },
+                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                                        options: DolphinSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
+                                        selection: dolphinSmoothing) { value in
+                    choose { dolphinSmoothing = value }
+                })
+        } else if session.game.system == .ps2 {
             imageSettings(
                 resolution: NeonSegments(title: "RÉSOLUTION",
                                          detail: (PS2Settings.Resolution(rawValue: ps2Resolution) ?? .x1).detail,
@@ -395,7 +437,9 @@ private struct PauseMenu: View {
     private func choose(_ change: () -> Void) {
         change()
         UISelectionFeedbackGenerator().selectionChanged()
-        if session.game.system == .ps2 {
+        if isDolphin {
+            session.applyDolphinImage()
+        } else if session.game.system == .ps2 {
             session.applyPS2Image()
         } else {
             session.applyOptions(PSPSettings.coreOptions)
