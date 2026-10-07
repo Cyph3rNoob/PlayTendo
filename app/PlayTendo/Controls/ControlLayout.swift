@@ -104,6 +104,9 @@ struct ControlLayout: Equatable {
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
         let portrait = bounds.height >= bounds.width
+        // Grand écran (iPad, ou fenêtre assez grande sur iPad ; un iPhone fait au plus 440 points de large) : la place
+        // ne manque pas autour de l'image.
+        let roomy = min(bounds.width, bounds.height) >= 500
         let menuSize: CGFloat = 38
         let dualScreen = scheme.usesTouchScreen
 
@@ -185,18 +188,24 @@ struct ControlLayout: Equatable {
                 layout.placeDualScreens(in: usable, portrait: false, maxStackHeight: 0, centered: true, dual: dual,
                                         scheme: scheme)
             } else {
-                var height = fillScreen ? bounds.height : usable.height
+                // Grand écran : l'image laisse en bas la place du bouton menu.
+                let menuRoom: CGFloat = roomy && !fillScreen ? menuSize + 8 : 0
+                var height = fillScreen ? bounds.height : usable.height - menuRoom
                 var width = height * aspect
                 // Consoles à stick : une bande d'au moins 128 points de chaque côté pour les commandes
-                // (en plein écran, seulement l'encoche à éviter).
-                let side = fillScreen ? max(safe.left, safe.right)
+                // (en plein écran, seulement l'encoche à éviter). Grand écran : presque carré, l'image y est limitée
+                // par la largeur ; la bande est alors assez large pour que les commandes ne débordent pas dessus.
+                var side = fillScreen ? max(safe.left, safe.right)
                     : analog ? max(150, max(safe.left, safe.right) + 128) : 150
+                if roomy && !fillScreen {
+                    side = max(side, max(safe.left, safe.right) + cluster + 16)
+                }
                 let maxWidth = bounds.width - 2 * side
                 if width > maxWidth {
                     width = maxWidth
                     height = width / aspect
                 }
-                let centerY = fillScreen ? bounds.midY : usable.midY
+                let centerY = fillScreen ? bounds.midY : usable.midY - menuRoom / 2
                 layout.gameRect = CGRect(x: bounds.midX - width / 2, y: centerY - height / 2,
                                          width: width, height: height)
             }
