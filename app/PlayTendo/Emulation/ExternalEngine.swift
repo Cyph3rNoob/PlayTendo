@@ -5,7 +5,7 @@ enum ExternalEngineState {
     case stopped, starting, running, paused
 }
 
-/// Moteur qui cadence, dessine et joue le son lui-même (PS2, GameCube/Wii) : la session le pilote seulement
+/// Moteur qui cadence, dessine et joue le son lui-même (PS2, GameCube/Wii, PS Vita) : la session le pilote seulement
 /// (`EmulatorSession.runExternal`). Chargé à la première partie, gardé jusqu'à la fermeture de l'app.
 protocol ExternalEngine: AnyObject {
     var renderView: UIView { get }
@@ -93,4 +93,30 @@ extension PTDolphinEngine: ExternalEngine {
         let ratio = aspectRatio
         return ratio > 0.5 && ratio < 4 ? CGFloat(ratio) : nil
     }
+}
+
+extension PTVitaEngine: ExternalEngine {
+    var engineState: ExternalEngineState {
+        switch state {
+        case PTVitaStateRunning: .running
+        case PTVitaStatePaused: .paused
+        case PTVitaStateStarting: .starting
+        default: .stopped
+        }
+    }
+
+    /// Le jeu est d'abord installé dans la mémoire de la console (EmulatorSession.prepareVita) : `path` est alors son
+    /// identifiant (« PCSA00011 »). Pas de JIT à choisir : Vita3K n'a que le recompilateur.
+    func boot(path: String, jit: Bool) -> Bool { bootTitle(path) }
+    /// La Vita n'a pas de bouton « recommencer ».
+    func reset() {}
+    /// Pas d'avance rapide dans Vita3K.
+    func setTurbo(_ enabled: Bool) {}
+    /// Vita3K n'a pas de sauvegarde rapide : seules les sauvegardes des jeux existent.
+    func saveState(toPath path: String) -> Bool { false }
+    func loadState(fromPath path: String) -> Bool { false }
+    func snapshot() -> UIImage? { nil }
+    func prepareSnapshot() {}
+    /// Écran de la Vita : 960 × 544.
+    var imageAspectRatio: CGFloat? { 960.0 / 544.0 }
 }

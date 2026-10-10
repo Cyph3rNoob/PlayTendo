@@ -22,18 +22,20 @@ enum ControlScheme {
     case gameCube
     /// Wii : Wiimote + Nunchuk (le choix « GameCube » d'un jeu Wii prend `gameCube`).
     case wiimote
+    /// PS Vita : comme la PSP avec un stick droit ; toucher l'image = écran tactile avant.
+    case psVita
 
     var hasShoulders: Bool { ![.nes, .gameBoy].contains(self) }
     var hasSecondShoulders: Bool { [.playStation, .playStation2, .nintendo3DS].contains(self) }
-    var hasFourFaceButtons: Bool { [.snes, .nintendoDS, .nintendo3DS, .playStation, .psp, .playStation2].contains(self) }
-    var usesPlayStationSymbols: Bool { [.playStation, .psp, .playStation2].contains(self) }
+    var hasFourFaceButtons: Bool { [.snes, .nintendoDS, .nintendo3DS, .playStation, .psp, .playStation2, .psVita].contains(self) }
+    var usesPlayStationSymbols: Bool { [.playStation, .psp, .playStation2, .psVita].contains(self) }
     var usesTouchScreen: Bool { self == .nintendoDS || self == .nintendo3DS }
     /// 3DS : écran du haut en 5:3 (400×240), celui du bas en 4:3 (320×240), centré sous lui dans l'image du moteur.
     var isNintendo3DS: Bool { self == .nintendo3DS }
-    /// Stick analogique virtuel (N64, PSP, PS2, GameCube, Nunchuk de la Wii).
-    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote, .nintendo3DS].contains(self) }
-    /// Second stick (droit) : PS2, stick C de la GameCube et de la New 3DS.
-    var hasRightStick: Bool { [.playStation2, .gameCube, .nintendo3DS].contains(self) }
+    /// Stick analogique virtuel (N64, PSP, PS2, GameCube, Nunchuk de la Wii, PS Vita).
+    var hasAnalogStick: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote, .nintendo3DS, .psVita].contains(self) }
+    /// Second stick (droit) : PS2, PS Vita, stick C de la GameCube et de la New 3DS.
+    var hasRightStick: Bool { [.playStation2, .gameCube, .nintendo3DS, .psVita].contains(self) }
     /// À gauche, le stick en haut et une petite croix dessous (N64, GameCube, Wii, 3DS) ; sinon l'inverse.
     var stickAboveDPad: Bool { [.nintendo64, .gameCube, .wiimote, .nintendo3DS].contains(self) }
     var hasSelect: Bool { self != .nintendo64 && self != .gameCube }
@@ -44,10 +46,11 @@ enum ControlScheme {
     /// Wiimote + Nunchuk : A, B, 1, 2, −, HOME, +, croix ; C et Z du Nunchuk, « secouer » ; on vise en touchant
     /// l'image du jeu.
     var isWiimote: Bool { self == .wiimote }
-    /// Toucher l'image du jeu sert de pointeur (Wiimote). La DS a son propre écran tactile (`usesTouchScreen`).
-    var usesPointer: Bool { self == .wiimote }
+    /// Toucher l'image du jeu sert de pointeur (Wiimote) ou d'écran tactile avant (PS Vita). La DS a son propre écran
+    /// tactile (`usesTouchScreen`).
+    var usesPointer: Bool { self == .wiimote || self == .psVita }
     /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
-    var canFillScreen: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote].contains(self) }
+    var canFillScreen: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote, .psVita].contains(self) }
 
     /// Manette Nintendo (Switch Pro, Joy-Con) : boutons de l'app faits par ses A, B, X, Y. Par défaut ceux à la même
     /// place (les bonnes lettres sur NES, Super Nintendo, Game Boy, DS, 3DS ; la croix en bas sur les consoles Sony).
@@ -73,7 +76,7 @@ struct NintendoLetters: Equatable {
 }
 
 enum GameSystem: String, CaseIterable, Identifiable, Codable {
-    case nes, snes, n64, gb, gbc, gba, nds, n3ds, psx, psp, ps2, gameCube, wii
+    case nes, snes, n64, gb, gbc, gba, nds, n3ds, psx, psp, ps2, gameCube, wii, vita
 
     var id: String { rawValue }
 
@@ -92,6 +95,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .ps2: "PlayStation 2"
         case .gameCube: "GameCube"
         case .wii: "Wii"
+        case .vita: "PlayStation Vita"
         }
     }
 
@@ -110,10 +114,11 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .ps2: "PS2"
         case .gameCube: "GC"
         case .wii: "Wii"
+        case .vita: "Vita"
         }
     }
 
-    var brand: Brand { [.psx, .psp, .ps2].contains(self) ? .sony : .nintendo }
+    var brand: Brand { [.psx, .psp, .ps2, .vita].contains(self) ? .sony : .nintendo }
 
     /// Extensions affichées dans la bibliothèque. Certaines servent à plusieurs consoles (« .iso » : PS1, PSP,
     /// PS2, GameCube, Wii ; « .chd » : PS1, PS2 ; « .cso » : PSP, PS2 ; « .rvz »… : GameCube, Wii) :
@@ -134,6 +139,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .ps2: ["iso", "chd", "cso"]
         case .gameCube: ["iso", "gcm", "rvz", "wia", "ciso", "gcz"]
         case .wii: ["iso", "wbfs", "rvz", "wia", "ciso", "gcz"]
+        // Archive .vpk ; un dossier extrait d'une Vita (avec sce_sys/param.sfo) est aussi un jeu (GameLibrary).
+        case .vita: ["vpk"]
         }
     }
 
@@ -159,6 +166,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psp: "ppsspp"
         case .ps2: "PS2Core"
         case .gameCube, .wii: "DolphinCore"
+        case .vita: "VitaCore"
         }
     }
 
@@ -174,6 +182,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .psp: "PPSSPP"
         case .ps2: "ARMSX2 (PCSX2)"
         case .gameCube, .wii: "DolphiniOS (Dolphin)"
+        case .vita: "Vita3K"
         }
     }
 
@@ -193,6 +202,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .ps2: "Sony - PlayStation 2"
         case .gameCube: "Nintendo - GameCube"
         case .wii: "Nintendo - Wii"
+        case .vita: "Sony - PlayStation Vita"
         }
     }
 
@@ -212,6 +222,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         case .ps2: "PS2"
         case .gameCube: "GameCube"
         case .wii: "Wii"
+        case .vita: "Vita"
         }
     }
 
@@ -231,6 +242,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         // Wii : Wiimote + Nunchuk par défaut ; la manette GameCube se choisit par jeu dans le menu pause
         // (`DolphinSettings.controller(for:)`).
         case .wii: .wiimote
+        case .vita: .psVita
         }
     }
 
@@ -295,7 +307,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
 
     /// Ordre d'affichage dans la bibliothèque et la présentation (choisi par l'utilisateur le 2026-10-07) : Nintendo de
     /// salon, portables Nintendo, puis Sony.
-    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .ps2, .psp]
+    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .ps2, .psp, .vita]
 
     /// Bibliothèque et présentation : le Game Boy et la Game Boy Color forment une seule catégorie « GB/C » (demandé
     /// le 2026-10-07). Pour le moteur, les sauvegardes, la reconnaissance et les jaquettes, ce restent deux consoles.

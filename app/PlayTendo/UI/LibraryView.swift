@@ -77,7 +77,10 @@ struct LibraryView: View {
         .alert("Mode turbo non activé", isPresented: Binding(get: { jitFailure != nil }, set: { if !$0 { jitFailure = nil } }),
                presenting: jitFailure) { failure in
             Button("Réessayer") { play(failure.game) }
-            Button("Jouer sans JIT") { launch(failure.game) }
+            // La PS Vita ne peut pas tourner sans (Vita3K n'a pas d'interpréteur).
+            if !JITManager.requires(failure.game.system) {
+                Button("Jouer sans JIT") { launch(failure.game) }
+            }
             Button("Annuler", role: .cancel) {}
         } message: { failure in
             Text(failure.message)
@@ -125,7 +128,9 @@ struct LibraryView: View {
             } catch {
                 if waitingForJIT == game {
                     waitingForJIT = nil
-                    let slow = [.ps2, .gameCube, .wii, .n3ds].contains(game.system)
+                    let slow = JITManager.requires(game.system)
+                        ? "\n\nSans turbo, la \(game.system.name) ne peut pas démarrer."
+                        : [.ps2, .gameCube, .wii, .n3ds].contains(game.system)
                         ? "\n\nSans turbo, la \(game.system.name) est très lente (injouable)." : ""
                     jitFailure = JITFailure(game: game, message: error.localizedDescription + slow)
                 }
@@ -571,7 +576,7 @@ private struct EmptyLibraryView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii]) { SystemBadge(system: $0) } }
                 HStack(spacing: 8) { ForEach([GameSystem.gb, .gba, .nds, .n3ds]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.psx, .ps2, .psp]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.psx, .ps2, .psp, .vita]) { SystemBadge(system: $0) } }
             }
             .padding(.top, 10)
         }

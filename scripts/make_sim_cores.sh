@@ -5,11 +5,12 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK_VERSION="$(xcrun --sdk iphonesimulator --show-sdk-version)"
 # PS2Core et DolphinCore ne sont pas concernés : build_ps2.sh et build_dolphin.sh les compilent directement pour
-# le simulateur (avec des réglages propres au simulateur).
+# le simulateur (avec des réglages propres au simulateur). VitaCore (PS Vita) n'existe pas pour le simulateur : son
+# affichage passe par MoltenVK, qui y plante.
 mkdir -p "$ROOT/cores/sim"
 for fw in "$ROOT"/cores/ios/*.framework; do
   name="$(basename "$fw" .framework)"
-  [ "$name" = PS2Core ] || [ "$name" = DolphinCore ] && continue
+  [ "$name" = PS2Core ] || [ "$name" = DolphinCore ] || [ "$name" = VitaCore ] && continue
   out="$ROOT/cores/sim/$name.framework"
   rm -rf "$out"
   mkdir -p "$out"

@@ -2,3 +2,4 @@
 #import "PTJIT.h"
 #import "PTPS2Engine.h"
 #import "PTDolphinEngine.h"
+#import "PTVitaEngine.h"

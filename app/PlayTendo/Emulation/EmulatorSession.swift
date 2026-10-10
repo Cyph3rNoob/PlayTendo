@@ -3,8 +3,8 @@ import UIKit
 
 /// Fait tourner un jeu : charge le moteur, cadence les images, le son et gère les sauvegardes.
 /// Le moteur vit sur son propre thread ; l'interface lui envoie des commandes.
-/// La PS2 et la GameCube/Wii ont leur propre moteur (`ExternalEngine`) qui cadence, dessine et joue le son
-/// lui-même : la session le pilote seulement (voir `runExternal`).
+/// La PS2, la GameCube/Wii et la PS Vita ont leur propre moteur (`ExternalEngine`) qui cadence, dessine et joue le
+/// son lui-même : la session le pilote seulement (voir `runExternal`).
 ///
 /// Partage entre threads (d'où `@unchecked Sendable`) : les propriétés publiées ne changent que sur le
 /// thread principal ; commandes, pause et réglages passent par `condition` ; le moteur par `coreLock` ;
@@ -32,6 +32,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var diskInfo: DiskInfo?
     @Published private(set) var isFastForwarding = false
     @Published var toast: String?
+    /// Étape longue en cours pendant le chargement (installation du firmware ou d'un jeu PS Vita), montrée sous la roue.
+    @Published private(set) var loadingDetail: String?
+    /// PS Vita : précision du rendu de la partie en cours (le réglage choisi ne vaut qu'au prochain lancement).
+    @Published private(set) var vitaAccuracy: VitaSettings.Accuracy?
     /// PS2, GameCube/Wii : vue Metal où le moteur dessine, placée par l'écran de jeu.
     @Published private(set) var engineView: UIView?
 
@@ -88,6 +92,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             switch game.system {
             case .ps2: external = try Self.loadPS2Engine()
             case .gameCube, .wii: external = try Self.loadDolphinEngine()
+            case .vita: external = try Self.loadVitaEngine()
             default: break
             }
         } catch {
@@ -306,6 +311,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     func setPointer(x: CGFloat, y: CGFloat, pressed: Bool) {
         if let external {
             (external as? PTDolphinEngine)?.setPointerX(Float(x * 2 - 1), y: Float(y * 2 - 1))
+            // PS Vita : écran tactile avant (le doigt se lève quand `pressed` passe à faux).
+            (external as? PTVitaEngine)?.touchAt(x: Float(x), y: Float(y), pressed: pressed)
             return
         }
         let px = Int16(max(-32767, min(32767, (x * 2 - 1) * 32767)))
@@ -318,6 +325,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             for button in 0..<16 { external.setButton(button, pressed: false) }
             external.setStick(0, x: 0, y: 0)
             external.setStick(1, x: 0, y: 0)
+            (external as? PTVitaEngine)?.touchAt(x: 0, y: 0, pressed: false)
             return
         }
         core?.clearInput()
@@ -594,7 +602,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
-    // MARK: Moteurs autonomes (PS2, GameCube/Wii)
+    // MARK: Moteurs autonomes (PS2, GameCube/Wii, PS Vita)
 
     /// Charge le moteur PS2 à la première partie PS2 (thread principal), puis le garde.
     private static func loadPS2Engine() throws -> PTPS2Engine {
@@ -628,10 +636,98 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         return engine
     }
 
-    /// Pilote une partie PS2 ou GameCube/Wii : démarrage, pause, commandes du menu et arrêt. Le moteur a ses
+    /// Charge le moteur PS Vita à la première partie Vita (thread principal), puis le garde. Il n'existe que pour
+    /// iPhone et iPad (son affichage passe par MoltenVK, qui ne marche pas au simulateur).
+    private static func loadVitaEngine() throws -> PTVitaEngine {
+        if let engine = PTVitaEngine.loaded { return engine }
+        guard let frameworks = Bundle.main.privateFrameworksPath,
+              FileManager.default.fileExists(atPath: "\(frameworks)/VitaCore.framework/VitaCore") else {
+            throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey:
+                "La PS Vita n'est pas dans cette version de l'app (elle marche sur iPhone et iPad, pas au simulateur)."])
+        }
+        Paths.prepareVitaEngine()
+        let engine = try PTVitaEngine.load(withFrameworkPath: "\(frameworks)/VitaCore.framework/VitaCore",
+                                           storageDirectory: Paths.vitaEngine.path)
+        PTLogLine("Vita : moteur chargé (journal du moteur : Application Support/Systeme/Vita/vita3k.log)")
+        return engine
+    }
+
+    /// PS Vita : installe la première fois le firmware (fichiers .PUP du dossier BIOS : PSVUPDAT.PUP, et les polices
+    /// PSP2UPDAT.PUP si elles y sont), puis le jeu dans la mémoire de la console (copié et, pour un jeu du commerce,
+    /// déchiffré avec sa licence). Renvoie l'identifiant du jeu à démarrer, ou nil (l'erreur est déjà affichée).
+    private func prepareVita(_ vita: PTVitaEngine) -> String? {
+        // Vita3K n'a pas d'interpréteur : sans la réserve JIT de l'app, aucun jeu ne peut tourner.
+        guard PTJITIsActive() else {
+            fail("La PS Vita a besoin du mode turbo : sans lui, aucun jeu ne peut démarrer. Vérifie StikDebug et "
+                 + "LocalDevVPN (roue dentée de la bibliothèque), puis relance le jeu.")
+            return nil
+        }
+        let clock = MachClock()
+        if !vita.hasFirmware || !vita.hasFonts {
+            let files = VitaGame.firmwareFiles()
+            var tried = Set<URL>()
+            let install = { (file: URL) in
+                tried.insert(file)
+                let label = file.lastPathComponent.uppercased().contains("PSP2UPDAT")
+                    ? "Installation des polices de la PS Vita" : "Installation du firmware de la PS Vita"
+                self.setLoadingDetail("\(label)…")
+                let start = clock.now
+                if let version = vita.installFirmware(atPath: file.path, progress: { [weak self] progress in
+                    self?.setLoadingDetail("\(label)… \(Int(progress * 100)) %")
+                }) {
+                    VitaGame.markInstalled(file)
+                    PTLogLine(String(format: "Vita : %@ installé (version %@) en %.0f s", file.lastPathComponent, version,
+                                     clock.now - start))
+                } else {
+                    PTLogLine("Vita : \(file.lastPathComponent) non installé (\(vita.lastError() ?? "raison inconnue"))")
+                }
+            }
+            for file in files where !vita.hasFirmware { install(file) }
+            // Polices : seulement les .PUP jamais installés (PSVUPDAT.PUP ne les a pas, inutile de le refaire).
+            for file in files where !vita.hasFonts && !tried.contains(file) && !VitaGame.wasInstalled(file) { install(file) }
+            guard vita.hasFirmware else {
+                setLoadingDetail(nil)
+                fail("Firmware PS Vita introuvable. Copie le fichier PSVUPDAT.PUP (la mise à jour officielle de la console) "
+                     + "dans le dossier BIOS de PlayTendo, avec l'app Fichiers.")
+                return nil
+            }
+            if !vita.hasFonts {
+                PTLogLine("Vita : polices de la console absentes (PSP2UPDAT.PUP) : certains jeux peuvent ne pas afficher leurs textes")
+            }
+        }
+        guard let titleID = VitaGame.titleID(of: game.url) else {
+            setLoadingDetail(nil)
+            fail("Ce jeu PS Vita est illisible : son fichier sce_sys/param.sfo est introuvable.")
+            return nil
+        }
+        if vita.isGameInstalled(titleID) {
+            setLoadingDetail(nil)
+            return titleID
+        }
+        setLoadingDetail("Installation du jeu (une seule fois)…")
+        let start = clock.now
+        guard let installed = vita.installGame(atPath: game.url.path, progress: { [weak self] progress in
+            self?.setLoadingDetail("Installation du jeu (une seule fois)… \(Int(progress * 100)) %")
+        }) else {
+            setLoadingDetail(nil)
+            fail(vita.lastError() ?? "Le jeu n'a pas pu être installé.")
+            return nil
+        }
+        PTLogLine(String(format: "Vita : jeu %@ installé en %.0f s (%@)", installed, clock.now - start, game.url.lastPathComponent))
+        setLoadingDetail(nil)
+        return installed
+    }
+
+    private func setLoadingDetail(_ text: String?) {
+        DispatchQueue.main.async { self.loadingDetail = text }
+    }
+
+    /// Pilote une partie PS2, GameCube/Wii ou PS Vita : démarrage, pause, commandes du menu et arrêt. Le moteur a ses
     /// propres threads ; celui-ci se contente de suivre son état et de lui passer les commandes.
     private func runExternal(_ engine: ExternalEngine) {
         let name = game.system.shortName
+        // Ce que le moteur démarre : le fichier du jeu, ou l'identifiant d'un jeu PS Vita installé.
+        var bootPath = game.url.path
         if let ps2 = engine as? PTPS2Engine {
             guard let bios = ps2.pickBIOS() else {
                 fail("Aucun BIOS PS2 trouvé. Copie le BIOS de ta PS2 (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier "
@@ -640,6 +736,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
             PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
             Self.applyPS2Image(to: ps2)
+        } else if let vita = engine as? PTVitaEngine {
+            releasePS2Memory()
+            PTLogLine("Vita : lancement de \(game.url.lastPathComponent)")
+            guard let titleID = prepareVita(vita) else { return }
+            bootPath = titleID
+            let accuracy = VitaSettings.accuracy
+            vita.setHighAccuracy(accuracy == .high)
+            PTLogLine("Vita : précision du rendu \(accuracy == .high ? "haute" : "normale")")
+            DispatchQueue.main.async { self.vitaAccuracy = accuracy }
         } else {
             releasePS2Memory()
             PTLogLine("\(name) : lancement de \(game.url.lastPathComponent)")
@@ -660,7 +765,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.02)
         }
         let jitFailures = PTJITFailureCount()
-        guard engine.boot(path: game.url.path, jit: PTJITIsActive()) else {
+        guard engine.boot(path: bootPath, jit: PTJITIsActive()) else {
             fail(engine.lastError() ?? "Le jeu n'a pas pu démarrer.")
             return
         }

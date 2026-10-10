@@ -22,12 +22,20 @@ final class GameLibrary: ObservableObject {
 
     nonisolated private static func scan(_ root: URL) -> [Game] {
         let manager = FileManager.default
-        guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey],
+        guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
                                                   options: [.skipsHiddenFiles]) else { return [] }
         var files: [URL] = []
+        var vitaFolders: [URL] = []
         for case let url as URL in enumerator {
-            if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
-                if moveIfPS2BIOS(url) { continue }
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
+            if values?.isDirectory == true {
+                // Jeu PS Vita extrait de la console (« PCSA00011 », avec sce_sys/param.sfo) : le dossier entier est le jeu.
+                if VitaGame.isGameFolder(url) {
+                    vitaFolders.append(url)
+                    enumerator.skipDescendants()
+                }
+            } else if values?.isRegularFile == true {
+                if moveIfPS2BIOS(url) || moveIfVitaFirmware(url) { continue }
                 files.append(url)
             }
         }
@@ -38,12 +46,13 @@ final class GameLibrary: ObservableObject {
             for entry in referencedFiles(of: playlist) { hidden.insert(entry.path) }
         }
 
-        return files.compactMap { url -> Game? in
+        let found = files.compactMap { url -> Game? in
             guard let system = GameSystem.detect(url),
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
             return Game(url: url, system: system)
         }
-        .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return (found + vitaFolders.map { Game(url: $0, system: .vita) })
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
     // MARK: Import
@@ -123,12 +132,31 @@ final class GameLibrary: ObservableObject {
         }
     }
 
+    /// Un fichier de mise à jour PS Vita (.PUP) arrivé dans Jeux est rangé dans BIOS, où le moteur le cherche.
+    @discardableResult
+    nonisolated private static func moveIfVitaFirmware(_ url: URL) -> Bool {
+        guard url.pathExtension.lowercased() == "pup", VitaGame.isFirmware(url) else { return false }
+        let target = Paths.bios.appendingPathComponent(url.lastPathComponent)
+        let manager = FileManager.default
+        try? manager.removeItem(at: target)
+        do {
+            try manager.moveItem(at: url, to: target)
+            PTLogLine("Firmware PS Vita rangé dans BIOS : \(url.lastPathComponent)")
+            return true
+        } catch {
+            PTLogLine("Firmware PS Vita \(url.lastPathComponent) : rangement impossible (\(error.localizedDescription))")
+            return false
+        }
+    }
+
     nonisolated private static func destination(forFileNamed name: String) -> URL? {
         let lower = name.lowercased()
         if GameSystem.biosFileNames.contains(lower) {
             return Paths.bios.appendingPathComponent(lower)
         }
         let ext = (lower as NSString).pathExtension
+        // Firmware PS Vita (PSVUPDAT.PUP, polices PSP2UPDAT.PUP) : nom gardé tel quel.
+        if ext == "pup" { return Paths.bios.appendingPathComponent(name) }
         // BIOS PS2 au format « .ROM0 » (les « .BIN » sont reconnus à leur contenu, après la copie).
         if ext == "rom0" { return Paths.bios.appendingPathComponent(name) }
         guard GameSystem.forExtension(ext) != nil || GameSystem.companionExtensions.contains(ext) else { return nil }

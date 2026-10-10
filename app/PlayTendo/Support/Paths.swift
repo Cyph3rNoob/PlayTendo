@@ -63,6 +63,23 @@ enum Paths {
     static let dolphinEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Systeme/Dolphin", isDirectory: true)
 
+    /// Dossier interne du moteur PS Vita : la mémoire de la console (`vita/` : firmware, jeux installés et
+    /// déchiffrés dans ux0/app, sauvegardes des jeux dans ux0/user), réglages, caches et journal `vita3k.log`.
+    static let vitaEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Systeme/Vita", isDirectory: true)
+
+    /// Les jeux installés (des Go) et les caches ne vont pas dans la sauvegarde iCloud de l'iPhone : ils se
+    /// réinstallent depuis Jeux. Les sauvegardes des jeux, elles, y restent.
+    static func prepareVitaEngine() {
+        for relative in ["vita/ux0/app", "vita/ux0/patch", "vita/ux0/addcont", "cache"] {
+            var folder = vitaEngine.appendingPathComponent(relative, isDirectory: true)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? folder.setResourceValues(values)
+        }
+    }
+
     /// Dossier « sauvegardes » donné au moteur. Pour la PSP, c'est la carte mémoire entière : la
     /// console y range ses sauvegardes dans PSP/SAVEDATA, comme sur une vraie carte. (Un dossier
     /// nommé « PSP » faisait passer PPSSPP dans un mode de compatibilité qui crée les dossiers de
@@ -122,6 +139,9 @@ enum Paths {
       PlayStation Portable .iso .cso .pbp
       GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
       Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
+      PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa
+        licence sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk.
+        Installé une fois dans PlayTendo au premier lancement (prévois la place d'une copie).
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)
@@ -130,6 +150,8 @@ enum Paths {
       Game Boy Advance : gba_bios.bin
       PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo
         (« SCPH-70004… », n'importe quel nom, PlayTendo le reconnaît)
+      PlayStation Vita (obligatoire) : PSVUPDAT.PUP, la mise à jour officielle de la console,
+        et si possible ses polices PSP2UPDAT.PUP
 
     Sauvegardes
       Les sauvegardes de tes jeux. Copie ce dossier pour les mettre à l'abri.

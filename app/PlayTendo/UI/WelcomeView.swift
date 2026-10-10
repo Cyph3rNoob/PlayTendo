@@ -70,7 +70,7 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            Text("13 CONSOLES")
+            Text("\(GameSystem.displayOrder.count) CONSOLES")
                 .font(.orbitron(12, weight: 800))
                 .tracking(2)
                 .foregroundStyle(Neon.dim)
@@ -114,7 +114,7 @@ struct WelcomeView: View {
     private var turbo: some View {
         WelcomeCard {
             WelcomeTitle(icon: "bolt.fill", title: "MODE TURBO", color: Neon.violet)
-            WelcomeLine(icon: "bolt", text: "Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent.")
+            WelcomeLine(icon: "bolt", text: "Obligatoire pour la PS Vita, indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent.")
             WelcomeLine(icon: "square.stack.3d.up", text: "Il faut deux apps à part : StikDebug et LocalDevVPN.")
             WelcomeLine(icon: "arrow.triangle.2.circlepath",
                         text: "Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo : StikDebug s'ouvre quelques secondes puis te ramène ici.")

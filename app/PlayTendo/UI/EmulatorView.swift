@@ -107,9 +107,19 @@ struct EmulatorView: View {
             TouchControls(layout: layout, scheme: controls, session: session, onMenu: openMenu,
                           onTouchDown: { gamepad.deactivate() })
             if session.state == .loading {
-                ProgressView()
-                    .tint(.white)
-                    .scaleEffect(1.4)
+                VStack(spacing: 22) {
+                    ProgressView()
+                        .tint(.white)
+                        .scaleEffect(1.4)
+                    // Étape longue (installation du firmware ou d'un jeu PS Vita).
+                    if let detail = session.loadingDetail {
+                        Text(detail)
+                            .font(Neon.mono(13, weight: .semibold))
+                            .foregroundStyle(Neon.text)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                }
             }
             if showingMenu {
                 pauseMenu(landscape: landscape)
@@ -267,6 +277,7 @@ private struct PauseMenu: View {
     /// 3DS : résolution et lissage des textures (gardés pour tous ses jeux).
     @AppStorage(N3DSSettings.resolutionKey) private var n3dsResolution = N3DSSettings.Resolution.x1.rawValue
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
+    @AppStorage(VitaSettings.accuracyKey) private var vitaAccuracy = VitaSettings.Accuracy.normal.rawValue
     /// N64 et PS1 : résolution et lissage (gardés pour tous leurs jeux).
     @AppStorage(N64Settings.resolutionKey) private var n64Resolution = N64Settings.Resolution.x2.rawValue
     @AppStorage(N64Settings.formatKey) private var n64Format = N64Settings.Format.standard.rawValue
@@ -274,7 +285,9 @@ private struct PauseMenu: View {
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
-    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii, .n3ds, .n64, .psx].contains(session.game.system) }
+    private var hasImageSettings: Bool { [.psp, .ps2, .gameCube, .wii, .n3ds, .n64, .psx, .vita].contains(session.game.system) }
+    /// Vita3K n'a ni sauvegarde rapide, ni avance rapide, ni « recommencer » : seules les sauvegardes des jeux existent.
+    private var hasEngineExtras: Bool { session.game.system != .vita }
 
     private struct Item: Identifiable {
         let title: String
@@ -286,21 +299,24 @@ private struct PauseMenu: View {
     }
 
     private var items: [Item] {
-        var items = [
-            Item(title: "Sauvegarder", icon: "square.and.arrow.down") {
-                session.saveState()
-                onResume()
-            },
-            Item(title: "Charger", icon: "clock.arrow.circlepath", enabled: session.hasSaveState) {
-                session.loadState()
-                onResume()
-            },
-            Item(title: session.isFastForwarding ? "Vitesse normale" : "Avance rapide ×3",
-                 icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill") {
-                session.toggleFastForward()
-                onResume()
-            },
-        ]
+        var items: [Item] = []
+        if hasEngineExtras {
+            items += [
+                Item(title: "Sauvegarder", icon: "square.and.arrow.down") {
+                    session.saveState()
+                    onResume()
+                },
+                Item(title: "Charger", icon: "clock.arrow.circlepath", enabled: session.hasSaveState) {
+                    session.loadState()
+                    onResume()
+                },
+                Item(title: session.isFastForwarding ? "Vitesse normale" : "Avance rapide ×3",
+                     icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill") {
+                    session.toggleFastForward()
+                    onResume()
+                },
+            ]
+        }
         if let disk = session.diskInfo {
             items.append(Item(title: "Changer de disque (\(disk.current)/\(disk.count))", icon: "opticaldisc") {
                 session.nextDisk()
@@ -324,10 +340,9 @@ private struct PauseMenu: View {
     }
 
     private var endItems: [Item] {
-        [
-            Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset),
-            Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit),
-        ]
+        let quit = Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit)
+        guard hasEngineExtras else { return [quit] }
+        return [Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset), quit]
     }
 
     var body: some View {
@@ -345,11 +360,15 @@ private struct PauseMenu: View {
                     if hasImageSettings { imageSettings }
                     grid(endItems)
                 } else {
-                    HStack(spacing: 10) {
-                        button(items[0])
-                        button(items[1])
+                    if hasEngineExtras {
+                        HStack(spacing: 10) {
+                            button(items[0])
+                            button(items[1])
+                        }
+                        ForEach(items.dropFirst(2)) { button($0) }
+                    } else {
+                        ForEach(items) { button($0) }
                     }
-                    ForEach(items.dropFirst(2)) { button($0) }
                     if hasImageSettings { imageSettings }
                     ForEach(endItems) { button($0) }
                 }
@@ -447,6 +466,16 @@ private struct PauseMenu: View {
                                         selection: n3dsSmoothing) { value in
                     choose { n3dsSmoothing = value }
                 })
+        } else if session.game.system == .vita {
+            // Vita3K ne lit la précision qu'au lancement du jeu (et n'a pas de sauvegarde rapide pour le relancer).
+            imageSettings(
+                resolution: NeonSegments(title: "PRÉCISION",
+                                         detail: session.vitaAccuracy.map { $0.rawValue != vitaAccuracy } == true
+                                            ? "au prochain lancement" : nil,
+                                         options: VitaSettings.Accuracy.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: vitaAccuracy) { value in
+                    choose { vitaAccuracy = value }
+                })
         } else if session.game.system == .ps2 {
             imageSettings(
                 resolution: NeonSegments(title: "RÉSOLUTION",
@@ -484,21 +513,22 @@ private struct PauseMenu: View {
         }
     }
 
-    /// `smoothing` : second réglage (le format pour la N64) ; `format` : troisième (PS2).
+    /// `resolution` : premier réglage (la précision pour la PS Vita, seule) ; `smoothing` : second (le format pour la
+    /// N64) ; `format` : troisième (PS2).
     @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
-                                            smoothing smoothingPicker: NeonSegments,
+                                            smoothing smoothingPicker: NeonSegments? = nil,
                                             format formatPicker: NeonSegments? = nil) -> some View {
         if compact {
             HStack(alignment: .top, spacing: 14) {
                 resolutionPicker
-                smoothingPicker
+                if let smoothingPicker { smoothingPicker }
                 if let formatPicker { formatPicker }
             }
             .padding(.vertical, 2)
         } else {
             VStack(spacing: 10) {
                 resolutionPicker
-                smoothingPicker
+                if let smoothingPicker { smoothingPicker }
                 if let formatPicker { formatPicker }
             }
             .padding(.vertical, 4)
@@ -519,6 +549,8 @@ private struct PauseMenu: View {
             session.applyOptions(PS1Settings.coreOptions)
         } else if session.game.system == .ps2 {
             session.applyPS2Image()
+        } else if session.game.system == .vita {
+            // Retenue pour le prochain lancement (EmulatorSession la donne au moteur avant chaque démarrage).
         } else {
             session.applyOptions(PSPSettings.coreOptions)
         }

@@ -21,10 +21,11 @@ struct AboutView: View {
         Engine(name: "mGBA", version: "0.10.5", consoles: "Game Boy, Game Boy Color, Game Boy Advance", license: "MPL-2.0"),
         Engine(name: "melonDS DS", version: "1.4.0", consoles: "Nintendo DS", license: "GPL-3.0"),
         Engine(name: "Azahar", version: "2126.1.2", consoles: "Nintendo 3DS", license: "GPL-2.0+"),
-        Engine(name: "MoltenVK", version: "1.4.2", consoles: "Affichage de la 3DS (Vulkan vers Metal)", license: "Apache-2.0"),
+        Engine(name: "MoltenVK", version: "1.4.2", consoles: "Affichage de la 3DS et de la PS Vita (Vulkan vers Metal)", license: "Apache-2.0"),
         Engine(name: "PCSX-ReARMed", version: "r26", consoles: "PlayStation", license: "GPL-2.0"),
         Engine(name: "PPSSPP", version: "1.20.4", consoles: "PlayStation Portable", license: "GPL-2.0+"),
         Engine(name: "ARMSX2 (PCSX2)", version: "iOS 2.6.0", consoles: "PlayStation 2", license: "GPL-3.0"),
+        Engine(name: "Vita3K", version: "build 4135 (681f695)", consoles: "PlayStation Vita", license: "GPL-2.0+"),
     ]
 
     /// Formats acceptés, console par console (dans l'ordre de la bibliothèque).
@@ -40,6 +41,7 @@ struct AboutView: View {
         ("PlayStation", ".cue + .bin, .chd, .pbp"),
         ("PlayStation 2", ".iso .chd .cso"),
         ("PlayStation Portable", ".iso .cso .pbp"),
+        ("PlayStation Vita", "dossier extrait de la console, .vpk"),
     ]
 
     private var appVersion: String {
@@ -81,12 +83,14 @@ struct AboutView: View {
                 Section("BIOS") {
                     Label("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) dans le dossier BIOS.",
                           systemImage: "exclamationmark.circle")
+                    Label("PlayStation Vita : obligatoire. PSVUPDAT.PUP (mise à jour officielle de la console), et si possible ses polices PSP2UPDAT.PUP, dans le dossier BIOS.",
+                          systemImage: "exclamationmark.circle")
                     Label("PlayStation, DS, GBA : facultatifs. Les autres consoles n'en ont pas besoin.",
                           systemImage: "cpu")
                 }
 
                 Section("Mode turbo") {
-                    Label("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP.",
+                    Label("Obligatoire pour la PS Vita ; indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP.",
                           systemImage: "bolt.fill")
                     // Liens : site officiel de StikDebug (celui de son dépôt GitHub) et page App Store de LocalDevVPN
                     // (vérifiés le 2026-10-07).
@@ -99,7 +103,7 @@ struct AboutView: View {
 
                 Section("Sauvegardes") {
                     Label("Dans le jeu : enregistrées toutes seules dans le dossier Sauvegardes.", systemImage: "externaldrive")
-                    Label("Rapides : menu pause › Sauvegarder / Charger (une par jeu).", systemImage: "clock.arrow.circlepath")
+                    Label("Rapides : menu pause › Sauvegarder / Charger (une par jeu ; pas sur PS Vita).", systemImage: "clock.arrow.circlepath")
                     Label("Mise à jour : installe la nouvelle version par-dessus. Supprimer l'app efface jeux et sauvegardes.",
                           systemImage: "arrow.down.app")
                 }

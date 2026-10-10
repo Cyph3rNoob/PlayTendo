@@ -39,6 +39,7 @@ extension GameSystem {
         case .ps2: Color(red: 0.36, green: 0.44, blue: 1.0)
         case .gameCube: Color(red: 0.62, green: 0.40, blue: 1.0)
         case .wii: Color(red: 0.80, green: 0.86, blue: 0.92)
+        case .vita: Color(red: 0.50, green: 0.70, blue: 1.0)
         }
     }
 }

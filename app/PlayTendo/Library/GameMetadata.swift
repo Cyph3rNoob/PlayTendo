@@ -93,8 +93,20 @@ final class GameMetadata: ObservableObject {
                 let size = Int64(values?.fileSize ?? 0)
                 let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
                 if !force, let info = known[game.key], info.size == size, info.modified == modified { continue }
-                let keys = GameIdentifier.keys(for: game.url, system: game.system)
-                let name = GameDatabase.shared(for: game.system)?.identify(keys: keys, fileName: game.baseName)
+                let name: String?
+                if game.system == .vita {
+                    // PS Vita : pas de base de jeux ; le nom vient de la fiche du jeu (param.sfo) et son icône sert
+                    // de jaquette.
+                    name = VitaGame.title(of: game.url)
+                    if let name, let icon = VitaGame.icon(of: game.url) {
+                        let file = Self.coverURL(name: name, system: game.system)
+                        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? icon.write(to: file, options: .atomic)
+                    }
+                } else {
+                    let keys = GameIdentifier.keys(for: game.url, system: game.system)
+                    name = GameDatabase.shared(for: game.system)?.identify(keys: keys, fileName: game.baseName)
+                }
                 PTLogLine("Jeu reconnu : \(game.url.lastPathComponent) → \(name ?? "inconnu")")
                 found[game.key] = Info(name: name, size: size, modified: modified, coverMissing: nil)
             }
