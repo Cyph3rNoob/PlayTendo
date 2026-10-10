@@ -1,3 +1,5 @@
+// PS Vita : compilé seulement avec PLAYTENDO_VITA (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).
+#if PLAYTENDO_VITA
 import Foundation
 
 /// Jeux PS Vita : un dossier extrait d'une Vita (« PCSA00011 », avec sce_sys/param.sfo ; un jeu du commerce garde sa
@@ -196,3 +198,4 @@ enum VitaGame {
         try? (list + firmwareKey(url) + "\n").write(to: installedListURL, atomically: true, encoding: .utf8)
     }
 }
+#endif

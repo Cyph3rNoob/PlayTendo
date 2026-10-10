@@ -25,19 +25,25 @@ final class GameLibrary: ObservableObject {
         guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
                                                   options: [.skipsHiddenFiles]) else { return [] }
         var files: [URL] = []
+#if PLAYTENDO_VITA
         var vitaFolders: [URL] = []
+#endif
         for case let url as URL in enumerator {
             let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
-            if values?.isDirectory == true {
-                // Jeu PS Vita extrait de la console (« PCSA00011 », avec sce_sys/param.sfo) : le dossier entier est le jeu.
-                if VitaGame.isGameFolder(url) {
-                    vitaFolders.append(url)
-                    enumerator.skipDescendants()
-                }
-            } else if values?.isRegularFile == true {
-                if moveIfPS2BIOS(url) || moveIfVitaFirmware(url) { continue }
+            if values?.isRegularFile == true {
+                if moveIfPS2BIOS(url) { continue }
+#if PLAYTENDO_VITA
+                if moveIfVitaFirmware(url) { continue }
+#endif
                 files.append(url)
             }
+#if PLAYTENDO_VITA
+            // Jeu PS Vita extrait de la console (« PCSA00011 », avec sce_sys/param.sfo) : le dossier entier est le jeu.
+            if values?.isDirectory == true, VitaGame.isGameFolder(url) {
+                vitaFolders.append(url)
+                enumerator.skipDescendants()
+            }
+#endif
         }
 
         // Les .cue listés dans un .m3u ne sont pas affichés séparément.
@@ -51,14 +57,18 @@ final class GameLibrary: ObservableObject {
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
             return Game(url: url, system: system)
         }
+#if PLAYTENDO_VITA
         // PS Vita : les jeux installés dont l'original n'est plus dans Jeux (retiré après l'installation).
         let vitaOriginals = vitaFolders + files.filter { $0.pathExtension.lowercased() == "vpk" }
         let originalIDs = Set(vitaOriginals.compactMap(VitaGame.titleID(of:)))
         let installed = VitaGame.installedGames().filter { url in
             VitaGame.titleID(of: url).map { !originalIDs.contains($0) } ?? false
         }
-        return (found + (vitaFolders + installed).map { Game(url: $0, system: .vita) })
-            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let all = found + (vitaFolders + installed).map { Game(url: $0, system: .vita) }
+#else
+        let all = found
+#endif
+        return all.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
     // MARK: Import
@@ -138,6 +148,7 @@ final class GameLibrary: ObservableObject {
         }
     }
 
+#if PLAYTENDO_VITA
     /// Un fichier de mise à jour PS Vita (.PUP) arrivé dans Jeux est rangé dans BIOS, où le moteur le cherche.
     @discardableResult
     nonisolated private static func moveIfVitaFirmware(_ url: URL) -> Bool {
@@ -154,6 +165,7 @@ final class GameLibrary: ObservableObject {
             return false
         }
     }
+#endif
 
     nonisolated private static func destination(forFileNamed name: String) -> URL? {
         let lower = name.lowercased()
@@ -161,8 +173,10 @@ final class GameLibrary: ObservableObject {
             return Paths.bios.appendingPathComponent(lower)
         }
         let ext = (lower as NSString).pathExtension
+#if PLAYTENDO_VITA
         // Firmware PS Vita (PSVUPDAT.PUP, polices PSP2UPDAT.PUP) : nom gardé tel quel.
         if ext == "pup" { return Paths.bios.appendingPathComponent(name) }
+#endif
         // BIOS PS2 au format « .ROM0 » (les « .BIN » sont reconnus à leur contenu, après la copie).
         if ext == "rom0" { return Paths.bios.appendingPathComponent(name) }
         guard GameSystem.forExtension(ext) != nil || GameSystem.companionExtensions.contains(ext) else { return nil }
@@ -193,15 +207,19 @@ final class GameLibrary: ObservableObject {
     /// Supprime le jeu avec ses fichiers associés (pistes .bin d'un .cue, disques d'un .m3u). Un jeu PS Vita est
     /// aussi désinstallé de la mémoire de la console. Les sauvegardes sont conservées.
     func delete(_ game: Game) {
+#if PLAYTENDO_VITA
         if game.system == .vita, let titleID = VitaGame.titleID(of: game.url) {
             VitaGame.uninstall(titleID: titleID)
         }
+#endif
         for file in Self.files(of: game) {
             try? FileManager.default.removeItem(at: file)
         }
+#if PLAYTENDO_VITA
         if game.system == .vita {
             VitaGame.removeEmptyAppFolder(containing: game.url)
         }
+#endif
         games.removeAll { $0.id == game.id }
     }
 

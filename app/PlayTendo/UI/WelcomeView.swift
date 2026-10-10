@@ -114,7 +114,11 @@ struct WelcomeView: View {
     private var turbo: some View {
         WelcomeCard {
             WelcomeTitle(icon: "bolt.fill", title: "MODE TURBO", color: Neon.violet)
+#if PLAYTENDO_VITA
             WelcomeLine(icon: "bolt", text: "Obligatoire pour la PS Vita, indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent.")
+#else
+            WelcomeLine(icon: "bolt", text: "Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent.")
+#endif
             WelcomeLine(icon: "square.stack.3d.up", text: "Il faut deux apps à part : StikDebug et LocalDevVPN.")
             WelcomeLine(icon: "arrow.triangle.2.circlepath",
                         text: "Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo : StikDebug s'ouvre quelques secondes puis te ramène ici.")

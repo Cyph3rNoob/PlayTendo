@@ -20,7 +20,40 @@ enum Paths {
         if (try? String(contentsOf: readme, encoding: .utf8)) != readmeText {
             try? readmeText.write(to: readme, atomically: true, encoding: .utf8)
         }
+#if !PLAYTENDO_VITA
+        removeVitaLeftovers()
+#endif
     }
+
+#if !PLAYTENDO_VITA
+    /// PS Vita mise de côté (2026-10-10, rendu de Vita3K trop abîmé sur les puces Apple) : ce qu'une version précédente
+    /// de l'app avait installé (jeux, sauvegardes, firmware, réglages et journal du moteur, icônes) est effacé, à sa
+    /// demande. Ne trouve plus rien une fois fait.
+    private static func removeVitaLeftovers() {
+        let manager = FileManager.default
+        let support = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let folders = [support.appendingPathComponent("Systeme/Vita"), support.appendingPathComponent("Jaquettes/Vita"),
+                       thumbnails.appendingPathComponent("Vita"), states.appendingPathComponent("Vita"),
+                       saves.appendingPathComponent("Vita")]
+        var freed: Int64 = 0
+        for folder in folders where manager.fileExists(atPath: folder.path) {
+            let files = manager.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey])
+            while let file = files?.nextObject() as? URL {
+                freed += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            }
+            do {
+                try manager.removeItem(at: folder)
+            } catch {
+                PTLogLine("PS Vita : \(folder.lastPathComponent) impossible à effacer (\(error.localizedDescription))")
+            }
+        }
+        UserDefaults.standard.removeObject(forKey: "precisionVita")
+        if freed > 0 {
+            PTLogLine(String(format: "PS Vita retirée de l'app : jeux installés et sauvegardes effacés (%.2f Go libérés)",
+                             Double(freed) / 1e9))
+        }
+    }
+#endif
 
     /// Dossier « système » donné au moteur : les BIOS de l'utilisateur, sauf pour la PSP dont le
     /// moteur range ses propres fichiers (embarqués dans l'app) dans un dossier interne.
@@ -63,6 +96,7 @@ enum Paths {
     static let dolphinEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Systeme/Dolphin", isDirectory: true)
 
+#if PLAYTENDO_VITA
     /// Dossier interne du moteur PS Vita : la mémoire de la console (`vita/` : firmware, jeux installés et
     /// déchiffrés dans ux0/app, sauvegardes des jeux dans ux0/user), réglages, caches et journal `vita3k.log`.
     static let vitaEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -80,6 +114,7 @@ enum Paths {
             try? folder.setResourceValues(values)
         }
     }
+#endif
 
     /// Dossier « sauvegardes » donné au moteur. Pour la PSP, c'est la carte mémoire entière : la
     /// console y range ses sauvegardes dans PSP/SAVEDATA, comme sur une vraie carte. (Un dossier
@@ -140,10 +175,8 @@ enum Paths {
       PlayStation Portable .iso .cso .pbp
       GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
       Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
-      PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa
-        licence sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk.
-        Installé dans PlayTendo au premier lancement, puis retiré de ce dossier : garde ton
-        original ailleurs (prévois la place d'une copie le temps de l'installation).
+
+    """ + readmeVitaGames + """
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)
@@ -152,8 +185,8 @@ enum Paths {
       Game Boy Advance : gba_bios.bin
       PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo
         (« SCPH-70004… », n'importe quel nom, PlayTendo le reconnaît)
-      PlayStation Vita (obligatoire) : PSVUPDAT.PUP, la mise à jour officielle de la console,
-        et si possible ses polices PSP2UPDAT.PUP
+
+    """ + readmeVitaBIOS + """
 
     Sauvegardes
       Les sauvegardes de tes jeux. Copie ce dossier pour les mettre à l'abri.
@@ -162,4 +195,22 @@ enum Paths {
       Le journal technique de l'app, utile en cas de problème.
       Journal-precedent.txt : celui de la session d'avant.
     """
+
+#if PLAYTENDO_VITA
+    private static let readmeVitaGames = """
+      PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa
+        licence sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk.
+        Installé dans PlayTendo au premier lancement, puis retiré de ce dossier : garde ton
+        original ailleurs (prévois la place d'une copie le temps de l'installation).
+
+    """
+    private static let readmeVitaBIOS = """
+      PlayStation Vita (obligatoire) : PSVUPDAT.PUP, la mise à jour officielle de la console,
+        et si possible ses polices PSP2UPDAT.PUP
+
+    """
+#else
+    private static let readmeVitaGames = ""
+    private static let readmeVitaBIOS = ""
+#endif
 }

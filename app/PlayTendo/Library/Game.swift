@@ -13,13 +13,17 @@ struct Game: Identifiable, Hashable {
         let path = url.resolvingSymlinksInPath().path
         if path.hasPrefix(root + "/") {
             key = String(path.dropFirst(root.count + 1))
-        } else if system == .vita && VitaGame.isInstalledCopy(url) {
+            return
+        }
+#if PLAYTENDO_VITA
+        if system == .vita && VitaGame.isInstalledCopy(url) {
             // Jeu PS Vita installé, dont l'original a quitté Jeux : même clé que le dossier « app/PCSA00011 » extrait
             // d'une Vita (la partie reste dans « Continuer »).
             key = "app/" + url.lastPathComponent
-        } else {
-            key = url.lastPathComponent
+            return
         }
+#endif
+        key = url.lastPathComponent
     }
 
     var id: String { url.path }

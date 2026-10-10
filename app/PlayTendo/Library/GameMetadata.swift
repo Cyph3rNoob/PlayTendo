@@ -38,6 +38,12 @@ final class GameMetadata: ObservableObject {
 
     func officialName(for game: Game) -> String? { infos[game.key]?.name }
 
+    /// Nom officiel d'après la base de la console (identifiants lus dans le jeu, sinon nom du fichier).
+    nonisolated private static func identify(_ game: Game) -> String? {
+        let keys = GameIdentifier.keys(for: game.url, system: game.system)
+        return GameDatabase.shared(for: game.system)?.identify(keys: keys, fileName: game.baseName)
+    }
+
     func coverRevision(for game: Game) -> Int { coverRevisions[game.key] ?? 0 }
 
     func display(for game: Game) -> GameDisplay { GameDisplay(game: game, officialName: officialName(for: game)) }
@@ -94,6 +100,7 @@ final class GameMetadata: ObservableObject {
                 let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
                 if !force, let info = known[game.key], info.size == size, info.modified == modified { continue }
                 let name: String?
+#if PLAYTENDO_VITA
                 if game.system == .vita {
                     // PS Vita : pas de base de jeux ; le nom vient de la fiche du jeu (param.sfo) et son icône sert
                     // de jaquette.
@@ -104,9 +111,11 @@ final class GameMetadata: ObservableObject {
                         try? icon.write(to: file, options: .atomic)
                     }
                 } else {
-                    let keys = GameIdentifier.keys(for: game.url, system: game.system)
-                    name = GameDatabase.shared(for: game.system)?.identify(keys: keys, fileName: game.baseName)
+                    name = Self.identify(game)
                 }
+#else
+                name = Self.identify(game)
+#endif
                 PTLogLine("Jeu reconnu : \(game.url.lastPathComponent) → \(name ?? "inconnu")")
                 found[game.key] = Info(name: name, size: size, modified: modified, coverMissing: nil)
             }

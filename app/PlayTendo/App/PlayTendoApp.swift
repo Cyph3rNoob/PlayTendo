@@ -10,10 +10,11 @@ struct PlayTendoApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        Paths.prepare()
+        // Journal d'abord : la préparation des dossiers peut y écrire (effacement des données de la PS Vita).
         PTLogSetFile(Paths.logFile.path)
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         PTLogLine("PlayTendo \(version) démarré — iOS \(UIDevice.current.systemVersion)")
+        Paths.prepare()
         BootSound.prepare()
     }
 

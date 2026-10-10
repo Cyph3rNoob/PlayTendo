@@ -34,8 +34,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published var toast: String?
     /// Étape longue en cours pendant le chargement (installation du firmware ou d'un jeu PS Vita), montrée sous la roue.
     @Published private(set) var loadingDetail: String?
+#if PLAYTENDO_VITA
     /// PS Vita : précision du rendu de la partie en cours (le réglage choisi ne vaut qu'au prochain lancement).
     @Published private(set) var vitaAccuracy: VitaSettings.Accuracy?
+#endif
     /// PS2, GameCube/Wii : vue Metal où le moteur dessine, placée par l'écran de jeu.
     @Published private(set) var engineView: UIView?
 
@@ -92,7 +94,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             switch game.system {
             case .ps2: external = try Self.loadPS2Engine()
             case .gameCube, .wii: external = try Self.loadDolphinEngine()
+#if PLAYTENDO_VITA
             case .vita: external = try Self.loadVitaEngine()
+#endif
             default: break
             }
         } catch {
@@ -311,8 +315,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     func setPointer(x: CGFloat, y: CGFloat, pressed: Bool) {
         if let external {
             (external as? PTDolphinEngine)?.setPointerX(Float(x * 2 - 1), y: Float(y * 2 - 1))
+#if PLAYTENDO_VITA
             // PS Vita : écran tactile avant (le doigt se lève quand `pressed` passe à faux).
             (external as? PTVitaEngine)?.touchAt(x: Float(x), y: Float(y), pressed: pressed)
+#endif
             return
         }
         let px = Int16(max(-32767, min(32767, (x * 2 - 1) * 32767)))
@@ -325,7 +331,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             for button in 0..<16 { external.setButton(button, pressed: false) }
             external.setStick(0, x: 0, y: 0)
             external.setStick(1, x: 0, y: 0)
+#if PLAYTENDO_VITA
             (external as? PTVitaEngine)?.touchAt(x: 0, y: 0, pressed: false)
+#endif
             return
         }
         core?.clearInput()
@@ -636,6 +644,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         return engine
     }
 
+#if PLAYTENDO_VITA
     /// Charge le moteur PS Vita à la première partie Vita (thread principal), puis le garde. Il n'existe que pour
     /// iPhone et iPad (son affichage passe par MoltenVK, qui ne marche pas au simulateur).
     private static func loadVitaEngine() throws -> PTVitaEngine {
@@ -721,17 +730,49 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         VitaGame.removeOriginal(game.url, titleID: installed)
         return installed
     }
+#endif
 
     private func setLoadingDetail(_ text: String?) {
         DispatchQueue.main.async { self.loadingDetail = text }
     }
 
+    /// GameCube/Wii : vérifie la place du recompilateur et règle l'image avant le démarrage. Faux si le jeu ne peut pas
+    /// démarrer (l'erreur est déjà affichée).
+    private func prepareDolphin(_ engine: ExternalEngine) -> Bool {
+        PTLogLine("\(game.system.shortName) : lancement de \(game.url.lastPathComponent)")
+        // Le recompilateur de Dolphin prend 256 Mo d'un seul tenant (TOTAL_CODE_SIZE, JitArm64/Jit.cpp) : sans
+        // cette place, il écrirait son code dans le vide et l'app planterait.
+        if PTJITIsActive() && PTJITLargestFree() < 256 << 20 {
+            fail("La \(game.system.name) ne peut pas démarrer : \(Self.jitFullMessage)")
+            return false
+        }
+        Self.applyDolphinImage(to: engine as? PTDolphinEngine)
+        return true
+    }
+
+#if PLAYTENDO_VITA
+    /// PS Vita : installe ce qu'il faut puis règle la précision. Renvoie l'identifiant du jeu à démarrer, ou nil.
+    private func vitaBootTitle(_ vita: PTVitaEngine) -> String? {
+        PTLogLine("Vita : lancement de \(game.url.lastPathComponent)")
+        guard let titleID = prepareVita(vita) else { return nil }
+        let accuracy = VitaSettings.accuracy
+        vita.setHighAccuracy(accuracy == .high)
+        PTLogLine("Vita : précision du rendu \(accuracy == .high ? "haute" : "normale")")
+        DispatchQueue.main.async { self.vitaAccuracy = accuracy }
+        return titleID
+    }
+#endif
+
     /// Pilote une partie PS2, GameCube/Wii ou PS Vita : démarrage, pause, commandes du menu et arrêt. Le moteur a ses
     /// propres threads ; celui-ci se contente de suivre son état et de lui passer les commandes.
     private func runExternal(_ engine: ExternalEngine) {
         let name = game.system.shortName
+#if PLAYTENDO_VITA
         // Ce que le moteur démarre : le fichier du jeu, ou l'identifiant d'un jeu PS Vita installé.
         var bootPath = game.url.path
+#else
+        let bootPath = game.url.path
+#endif
         if let ps2 = engine as? PTPS2Engine {
             guard let bios = ps2.pickBIOS() else {
                 fail("Aucun BIOS PS2 trouvé. Copie le BIOS de ta PS2 (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier "
@@ -740,25 +781,18 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
             PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
             Self.applyPS2Image(to: ps2)
-        } else if let vita = engine as? PTVitaEngine {
-            releasePS2Memory()
-            PTLogLine("Vita : lancement de \(game.url.lastPathComponent)")
-            guard let titleID = prepareVita(vita) else { return }
-            bootPath = titleID
-            let accuracy = VitaSettings.accuracy
-            vita.setHighAccuracy(accuracy == .high)
-            PTLogLine("Vita : précision du rendu \(accuracy == .high ? "haute" : "normale")")
-            DispatchQueue.main.async { self.vitaAccuracy = accuracy }
         } else {
             releasePS2Memory()
-            PTLogLine("\(name) : lancement de \(game.url.lastPathComponent)")
-            // Le recompilateur de Dolphin prend 256 Mo d'un seul tenant (TOTAL_CODE_SIZE, JitArm64/Jit.cpp) : sans
-            // cette place, il écrirait son code dans le vide et l'app planterait.
-            if PTJITIsActive() && PTJITLargestFree() < 256 << 20 {
-                fail("La \(game.system.name) ne peut pas démarrer : \(Self.jitFullMessage)")
+#if PLAYTENDO_VITA
+            if let vita = engine as? PTVitaEngine {
+                guard let titleID = vitaBootTitle(vita) else { return }
+                bootPath = titleID
+            } else if !prepareDolphin(engine) {
                 return
             }
-            Self.applyDolphinImage(to: engine as? PTDolphinEngine)
+#else
+            guard prepareDolphin(engine) else { return }
+#endif
         }
 
         // La vue Metal doit être à l'écran, à sa taille, avant le démarrage : le moteur y crée son image.

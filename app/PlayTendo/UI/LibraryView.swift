@@ -54,7 +54,7 @@ struct LibraryView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { library.importFiles(urls) }
         }
-        // Au retour d'une partie : un jeu PS Vita installé a pu quitter Jeux (sa copie installée le remplace).
+        // Au retour d'une partie (un jeu PS Vita installé a pu quitter Jeux : sa copie installée le remplace).
         .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
             EmulatorView(game: game)
         }
@@ -577,7 +577,7 @@ private struct EmptyLibraryView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii]) { SystemBadge(system: $0) } }
                 HStack(spacing: 8) { ForEach([GameSystem.gb, .gba, .nds, .n3ds]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.psx, .ps2, .psp, .vita]) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach(GameSystem.displayOrder.filter { $0.brand == .sony }) { SystemBadge(system: $0) } }
             }
             .padding(.top, 10)
         }

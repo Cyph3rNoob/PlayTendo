@@ -1,3 +1,5 @@
+// PS Vita : compilé seulement avec PLAYTENDO_VITA (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).
+#if PLAYTENDO_VITA
 #import "PTVitaEngine.h"
 #import <dlfcn.h>
 
@@ -146,3 +148,4 @@ static void PTVitaReportProgress(float progress, void *context) {
 }
 
 @end
+#endif

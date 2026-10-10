@@ -10,6 +10,15 @@ BUILD="$ROOT/build/xcode"
 LOG="$ROOT/build/logs/app.log"
 mkdir -p "$ROOT/build/logs"
 
+# PS Vita, mise de côté le 2026-10-10 : seulement avec PLAYTENDO_VITA=1 (son moteur se compile d'abord avec
+# scripts/build_vita3k.sh). Sans elle, ni son code ni VitaCore.framework n'entrent dans l'app.
+VITA_SETTINGS=()
+if [ "${PLAYTENDO_VITA:-0}" = "1" ]; then
+  VITA_SETTINGS=('SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) PLAYTENDO_VITA'
+                 'GCC_PREPROCESSOR_DEFINITIONS=$(inherited) PLAYTENDO_VITA=1')
+  echo ">>> Avec la PS Vita"
+fi
+
 APP="$BUILD/Release-iphoneos/PlayTendo.app"
 # Repart d'une app vide : Xcode ne retire pas les fichiers d'une ancienne compilation (une extension
 # supprimée du projet restait dans PlugIns et se retrouvait dans l'IPA).
@@ -18,7 +27,7 @@ rm -rf "$APP"
 echo ">>> Compilation de l'app…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target PlayTendo -configuration Release -sdk iphoneos \
     SYMROOT="$BUILD" OBJROOT="$BUILD/obj" \
-    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" "${VITA_SETTINGS[@]}" \
     build > "$LOG" 2>&1; then
   echo "!!! ECHEC — erreurs :"
   grep -E "error:" "$LOG" | sort -u | head -40

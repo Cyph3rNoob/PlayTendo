@@ -95,6 +95,7 @@ extension PTDolphinEngine: ExternalEngine {
     }
 }
 
+#if PLAYTENDO_VITA
 extension PTVitaEngine: ExternalEngine {
     var engineState: ExternalEngineState {
         switch state {
@@ -120,3 +121,4 @@ extension PTVitaEngine: ExternalEngine {
     /// Écran de la Vita : 960 × 544.
     var imageAspectRatio: CGFloat? { 960.0 / 544.0 }
 }
+#endif

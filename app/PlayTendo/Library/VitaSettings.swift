@@ -1,3 +1,5 @@
+// PS Vita : compilé seulement avec PLAYTENDO_VITA (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).
+#if PLAYTENDO_VITA
 import Foundation
 
 /// Réglages de la PS Vita, communs à tous les jeux : choisis dans le menu pause, appliqués au prochain lancement d'un jeu
@@ -19,3 +21,4 @@ enum VitaSettings {
         Accuracy(rawValue: UserDefaults.standard.integer(forKey: accuracyKey)) ?? .normal
     }
 }
+#endif
