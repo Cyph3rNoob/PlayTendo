@@ -56,6 +56,9 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     /// Ce qui a été affiché la dernière fois : sans changement, inutile de redessiner.
     private var drawnSize = CGSize.zero
     private var drawnSource = CGRect.null
+    /// Image reçue mais pas encore affichée (écran pas prêt au moment où elle est arrivée) : affichée au tour suivant,
+    /// même si le jeu s'est mis en pause entre-temps.
+    private var frameNotShown = false
 
     init(frameBuffer: FrameBuffer) {
         self.frameBuffer = frameBuffer
@@ -84,10 +87,11 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        let updated = uploadLatestFrame()
+        if uploadLatestFrame() { frameNotShown = true }
         // Rien de nouveau (jeu en pause, même image, jeu à 30 images/s) : l'écran garde l'image déjà
         // affichée, sans réveiller la puce graphique.
-        guard updated || view.drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing else { return }
+        guard frameNotShown || view.drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing
+        else { return }
         guard let queue, let pipeline, let sampler,
               let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
@@ -129,6 +133,7 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         drawnSize = view.drawableSize
         drawnSource = source
         drawnSmoothing = smoothing
+        frameNotShown = false
     }
 
     /// Passe FXAA : la partie affichée de l'image, à sa taille d'origine, lissée dans une image intermédiaire.

@@ -21,6 +21,8 @@ final class GameMetadata: ObservableObject {
 
     private var running = false
     private var queued: [Game]?
+    /// Jeux de la file à reconnaître de nouveau même sans changement (« Actualiser la jaquette »).
+    private var queuedForced = Set<String>()
 
     private static let infosFile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Bibliotheque/infos.json")
@@ -32,6 +34,30 @@ final class GameMetadata: ObservableObject {
             infos = saved
         }
         lastPlayed = UserDefaults.standard.dictionary(forKey: Self.lastPlayedKey) as? [String: Double] ?? [:]
+        forgetMissingGames()
+    }
+
+    /// Les fiches et dates de partie des jeux qui ne sont plus dans Jeux (supprimés, déplacés, renommés) sont oubliées.
+    /// Rien n'est oublié si aucun jeu connu n'est trouvé (dossier Jeux illisible à ce moment-là, par prudence).
+    private func forgetMissingGames() {
+        let manager = FileManager.default
+        func exists(_ key: String) -> Bool {
+#if PLAYTENDO_VITA
+            // Jeu PS Vita installé dont l'original a quitté Jeux : sa clé ne correspond à aucun fichier de Jeux.
+            if key.hasPrefix("app/") { return true }
+#endif
+            return manager.fileExists(atPath: Paths.games.appendingPathComponent(key).path)
+        }
+        let keys = Set(infos.keys).union(lastPlayed.keys)
+        let missing = keys.filter { !exists($0) }
+        guard !missing.isEmpty, missing.count < keys.count else { return }
+        for key in missing {
+            infos[key] = nil
+            lastPlayed[key] = nil
+        }
+        save()
+        UserDefaults.standard.set(lastPlayed, forKey: Self.lastPlayedKey)
+        PTLogLine("Bibliothèque : \(missing.count) fiche(s) de jeux disparus oubliée(s)")
     }
 
     // MARK: Lecture
@@ -84,10 +110,16 @@ final class GameMetadata: ObservableObject {
         update([game], force: true)
     }
 
-    /// Reconnaît les nouveaux jeux puis télécharge les jaquettes manquantes, en arrière-plan.
+    /// Reconnaît les nouveaux jeux puis télécharge les jaquettes manquantes, en arrière-plan. `force` : reconnus de
+    /// nouveau même sans changement.
     func update(_ games: [Game], force: Bool = false) {
+        update(games, forced: force ? Set(games.map(\.key)) : [])
+    }
+
+    private func update(_ games: [Game], forced: Set<String>) {
         if running {
             queued = (queued ?? []) + games
+            queuedForced.formUnion(forced)
             return
         }
         running = true
@@ -98,7 +130,9 @@ final class GameMetadata: ObservableObject {
                 let values = try? game.url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
                 let size = Int64(values?.fileSize ?? 0)
                 let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
-                if !force, let info = known[game.key], info.size == size, info.modified == modified { continue }
+                if !forced.contains(game.key), let info = known[game.key], info.size == size, info.modified == modified {
+                    continue
+                }
                 let name: String?
 #if PLAYTENDO_VITA
                 if game.system == .vita {
@@ -134,8 +168,10 @@ final class GameMetadata: ObservableObject {
     private func finish() {
         running = false
         if let next = queued {
+            let forced = queuedForced
             queued = nil
-            update(next)
+            queuedForced = []
+            update(next, forced: forced)
         }
     }
 

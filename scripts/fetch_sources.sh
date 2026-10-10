@@ -31,6 +31,9 @@ clone melonds-ds   https://github.com/JesseTG/melonds-ds   v1.4.0
 clone pcsx_rearmed https://github.com/libretro/pcsx_rearmed r26l
 # Phase 2
 clone ppsspp       https://github.com/hrydgard/ppsspp      v1.20.4
+# Phase 3 : PS2. ARMSX2, dernière version iOS stable (les « 2.8.x » sont pour Android, les « nightly » des
+# préversions) ; PlayTendo en compile le cœur avec son pilote ps2/PTPS2Host.mm (scripts/build_ps2.sh).
+clone armsx2       https://github.com/ARMSX2/ARMSX2.git    iOSv2.6.0
 # Mupen64Plus-Next n'a pas de version numérotée : version figée le 2026-10-05 (accord de l'utilisateur).
 clone_commit mupen64plus-nx https://github.com/libretro/mupen64plus-libretro-nx 12edd2c74a517ff86dfa8cfc71ad75e4c10486d5
 # Phase 3 : GameCube/Wii. DolphiniOS n'existe qu'en bêta (exception acceptée par l'utilisateur). Sans les
@@ -81,55 +84,60 @@ else
   echo "OK  MoltenVK deja present"
 fi
 
-# PS Vita : Vita3K n'a pas de version numérotée (seulement des versions automatiques en continu) : version figée le
-# 2026-10-07 (build 4135, accord de l'utilisateur). Sans les sous-modules propres à Android (libadrenotools), à
-# Windows (dirent) et à l'interface PC (nativefiledialog-extended).
-VITA3K_COMMIT=681f695bbc752df38fbb4053473f352de6c8643f
-if [ ! -d vita3k ]; then
-  echo ""
-  echo ">>> vita3k (commit $VITA3K_COMMIT, build 4135)"
-  mkdir vita3k.tmp && cd vita3k.tmp
-  git init -q && git remote add origin https://github.com/Vita3K/Vita3K
-  git fetch --depth 1 --progress origin "$VITA3K_COMMIT" && git checkout -q FETCH_HEAD
-  git -c submodule."external/libadrenotools".update=none -c submodule."external/dirent".update=none \
-    -c submodule."external/nativefiledialog-extended".update=none \
-    submodule update --init --recursive --depth 1 --progress
-  cd .. && mv vita3k.tmp vita3k
-else
-  echo "OK  vita3k deja present"
-fi
-
-# OpenSSL (Apache-2.0) : Vita3K déchiffre les paquets et les jeux Vita avec. Code source officiel, vérifié par
-# l'empreinte SHA-256 publiée avec lui.
-OPENSSL_VERSION=4.0.3
-if [ ! -d openssl ]; then
-  echo ""
-  echo ">>> openssl (version $OPENSSL_VERSION, 55 Mo)"
-  base="https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION"
-  curl -fL --progress-bar "$base/openssl-$OPENSSL_VERSION.tar.gz" -o openssl.tar.gz
-  expected=$(curl -fsL "$base/openssl-$OPENSSL_VERSION.tar.gz.sha256" | awk '{print $1}')
-  actual=$(shasum -a 256 openssl.tar.gz | awk '{print $1}')
-  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
-    echo "!!! openssl : empreinte SHA-256 différente de celle publiée ($actual / $expected)"
-    rm -f openssl.tar.gz
-    exit 1
+# PS Vita (mise de côté le 2026-10-10) : seulement avec PLAYTENDO_VITA=1, comme scripts/build_app.sh.
+if [ "${PLAYTENDO_VITA:-0}" = "1" ]; then
+  # PS Vita : Vita3K n'a pas de version numérotée (seulement des versions automatiques en continu) : version figée le
+  # 2026-10-07 (build 4135, accord de l'utilisateur). Sans les sous-modules propres à Android (libadrenotools), à
+  # Windows (dirent) et à l'interface PC (nativefiledialog-extended).
+  VITA3K_COMMIT=681f695bbc752df38fbb4053473f352de6c8643f
+  if [ ! -d vita3k ]; then
+    echo ""
+    echo ">>> vita3k (commit $VITA3K_COMMIT, build 4135)"
+    mkdir vita3k.tmp && cd vita3k.tmp
+    git init -q && git remote add origin https://github.com/Vita3K/Vita3K
+    git fetch --depth 1 --progress origin "$VITA3K_COMMIT" && git checkout -q FETCH_HEAD
+    git -c submodule."external/libadrenotools".update=none -c submodule."external/dirent".update=none \
+      -c submodule."external/nativefiledialog-extended".update=none \
+      submodule update --init --recursive --depth 1 --progress
+    cd .. && mv vita3k.tmp vita3k
+  else
+    echo "OK  vita3k deja present"
   fi
-  echo "OK  empreinte SHA-256 vérifiée"
-  rm -rf openssl.tmp && mkdir openssl.tmp && tar -xzf openssl.tar.gz -C openssl.tmp && rm openssl.tar.gz
-  mv openssl.tmp/*(/) openssl && rmdir openssl.tmp
-else
-  echo "OK  openssl deja present"
-fi
 
-# Programme libre pour un premier essai de la PS Vita : « Hello World » de xerpi (53 Ko).
-mkdir -p homebrew
-if [ ! -s homebrew/vitahelloworld.vpk ]; then
-  echo ""
-  echo ">>> vitahelloworld 1.0 (53 Ko)"
-  curl -fL --progress-bar https://github.com/xerpi/vitahelloworld/releases/download/1.0/vitahelloworld.vpk \
-    -o homebrew/vitahelloworld.vpk
+  # OpenSSL (Apache-2.0) : Vita3K déchiffre les paquets et les jeux Vita avec. Code source officiel, vérifié par
+  # l'empreinte SHA-256 publiée avec lui.
+  OPENSSL_VERSION=4.0.3
+  if [ ! -d openssl ]; then
+    echo ""
+    echo ">>> openssl (version $OPENSSL_VERSION, 55 Mo)"
+    base="https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION"
+    curl -fL --progress-bar "$base/openssl-$OPENSSL_VERSION.tar.gz" -o openssl.tar.gz
+    expected=$(curl -fsL "$base/openssl-$OPENSSL_VERSION.tar.gz.sha256" | awk '{print $1}')
+    actual=$(shasum -a 256 openssl.tar.gz | awk '{print $1}')
+    if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+      echo "!!! openssl : empreinte SHA-256 différente de celle publiée ($actual / $expected)"
+      rm -f openssl.tar.gz
+      exit 1
+    fi
+    echo "OK  empreinte SHA-256 vérifiée"
+    rm -rf openssl.tmp && mkdir openssl.tmp && tar -xzf openssl.tar.gz -C openssl.tmp && rm openssl.tar.gz
+    mv openssl.tmp/*(/) openssl && rmdir openssl.tmp
+  else
+    echo "OK  openssl deja present"
+  fi
+
+  # Programme libre pour un premier essai de la PS Vita : « Hello World » de xerpi (53 Ko).
+  mkdir -p homebrew
+  if [ ! -s homebrew/vitahelloworld.vpk ]; then
+    echo ""
+    echo ">>> vitahelloworld 1.0 (53 Ko)"
+    curl -fL --progress-bar https://github.com/xerpi/vitahelloworld/releases/download/1.0/vitahelloworld.vpk \
+      -o homebrew/vitahelloworld.vpk
+  else
+    echo "OK  vitahelloworld deja present"
+  fi
 else
-  echo "OK  vitahelloworld deja present"
+  echo "--  PS Vita mise de côté : Vita3K, OpenSSL et Hello World non téléchargés (PLAYTENDO_VITA=1 pour les avoir)"
 fi
 
 # Bibliothèque : base libretro (No-Intro / Redump) pour reconnaître les jeux.

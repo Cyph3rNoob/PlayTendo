@@ -18,6 +18,7 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.playtendo.game</string>
+				<string>public.iso-image</string>
 				<string>public.zip-archive</string>
 			</array>
 		</dict>
@@ -98,16 +99,35 @@
 				<array>
 					<string>nes</string>
 					<string>fds</string>
+					<string>unf</string>
+					<string>unif</string>
 					<string>sfc</string>
 					<string>smc</string>
+					<string>n64</string>
+					<string>z64</string>
+					<string>v64</string>
 					<string>gb</string>
 					<string>gbc</string>
 					<string>gba</string>
 					<string>nds</string>
+					<string>3ds</string>
+					<string>cci</string>
+					<string>cxi</string>
+					<string>3dsx</string>
+					<string>zcci</string>
+					<string>zcxi</string>
+					<string>z3dsx</string>
 					<string>chd</string>
 					<string>pbp</string>
 					<string>cue</string>
 					<string>m3u</string>
+					<string>cso</string>
+					<string>gcm</string>
+					<string>rvz</string>
+					<string>wia</string>
+					<string>wbfs</string>
+					<string>ciso</string>
+					<string>gcz</string>
 				</array>
 			</dict>
 		</dict>

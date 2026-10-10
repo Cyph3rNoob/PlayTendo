@@ -68,6 +68,8 @@ final class GameLibrary: ObservableObject {
 #else
         let all = found
 #endif
+        // Noms des sauvegardes, avant que les jeux soient affichés (deux jeux du même nom dans deux dossiers).
+        Paths.assignFileNames(to: all)
         return all.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
@@ -76,27 +78,33 @@ final class GameLibrary: ObservableObject {
     func importFiles(_ urls: [URL]) {
         Task.detached(priority: .userInitiated) {
             var imported = 0
+            var present = 0
             var skipped: [String] = []
             for url in urls {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 do {
-                    let count = try Self.importFile(url)
-                    if count == 0 { skipped.append(url.lastPathComponent) }
-                    imported += count
+                    switch try Self.importFile(url) {
+                    case .added(let count): imported += count
+                    case .alreadyThere: present += 1
+                    case .unsupported: skipped.append(url.lastPathComponent)
+                    }
                 } catch {
                     PTLogLine("Import impossible de \(url.lastPathComponent) : \(error.localizedDescription)")
                     skipped.append(url.lastPathComponent)
                 }
             }
-            let summary: String
-            if imported > 0 && skipped.isEmpty {
-                summary = imported == 1 ? "1 fichier ajouté" : "\(imported) fichiers ajoutés"
-            } else if imported > 0 {
-                summary = "\(imported) ajouté(s), \(skipped.count) ignoré(s) (format non reconnu)"
-            } else {
-                summary = "Aucun fichier reconnu"
+            var parts: [String] = []
+            if imported > 0 { parts.append(imported == 1 ? "1 fichier ajouté" : "\(imported) fichiers ajoutés") }
+            if present > 0 {
+                parts.append(imported == 0 && skipped.isEmpty ? "Déjà dans la bibliothèque"
+                             : present == 1 ? "1 déjà présent" : "\(present) déjà présents")
             }
+            if !skipped.isEmpty {
+                parts.append(imported == 0 && present == 0 ? "Aucun fichier reconnu"
+                             : "\(skipped.count) ignoré(s) (format non reconnu)")
+            }
+            let summary = parts.isEmpty ? "Aucun fichier reconnu" : parts.joined(separator: ", ")
             await MainActor.run {
                 self.message = summary
                 self.refresh()
@@ -104,8 +112,15 @@ final class GameLibrary: ObservableObject {
         }
     }
 
-    /// Copie un fichier dans Jeux (ou BIOS), en décompressant les .zip. Renvoie le nombre de fichiers ajoutés.
-    nonisolated private static func importFile(_ url: URL) throws -> Int {
+    private enum ImportResult {
+        case added(Int)
+        /// Déjà dans Jeux (ou BIOS), sous-dossiers compris : rien n'est copié.
+        case alreadyThere
+        case unsupported
+    }
+
+    /// Copie un fichier dans Jeux (ou BIOS), en décompressant les .zip.
+    nonisolated private static func importFile(_ url: URL) throws -> ImportResult {
         let ext = url.pathExtension.lowercased()
         if ext == "zip" {
             let archive = try ZipArchive(url: url)
@@ -118,17 +133,18 @@ final class GameLibrary: ObservableObject {
                 moveIfPS2BIOS(target)
                 count += 1
             }
-            return count
+            return count > 0 ? .added(count) : .unsupported
         }
-        guard let destination = destination(forFileNamed: url.lastPathComponent) else { return 0 }
-        let manager = FileManager.default
-        if url.standardizedFileURL.deletingLastPathComponent() == destination.deletingLastPathComponent() {
-            return 0
+        guard let destination = destination(forFileNamed: url.lastPathComponent) else { return .unsupported }
+        // Comparaison des chemins réels : l'app Fichiers peut donner « /private/var/… » pour « /var/… ».
+        let folder = destination.deletingLastPathComponent().resolvingSymlinksInPath().path + "/"
+        if url.resolvingSymlinksInPath().path.hasPrefix(folder) {
+            return .alreadyThere
         }
         let target = uniqueURL(destination)
-        try manager.copyItem(at: url, to: target)
+        try FileManager.default.copyItem(at: url, to: target)
         moveIfPS2BIOS(target)
-        return 1
+        return .added(1)
     }
 
     /// Un BIOS PS2 (nom variable, reconnu à son contenu) arrivé dans Jeux est rangé dans BIOS.

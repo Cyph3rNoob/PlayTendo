@@ -566,14 +566,24 @@ PTDOLPHIN_EXPORT bool PTDolphinSaveState(const char* path)
 {
   if (!path)
     return false;
+  // Écrite à côté, puis mise à la place de l'ancienne seulement si elle est là : un échec (iPhone plein…) garde la
+  // sauvegarde rapide précédente.
   const std::string file = path;
-  File::Delete(file);
+  const std::string written = file + ".nouvelle";
+  File::Delete(written);
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
     if (Core::IsRunning(system))
-      State::SaveAs(system, file, true);
+      State::SaveAs(system, written, true);
   });
-  return File::Exists(file) && File::GetSize(file) > 0;
+  if (!File::Exists(written) || File::GetSize(written) == 0)
+  {
+    File::Delete(written);
+    std::lock_guard<std::mutex> lock(s_errorMutex);
+    s_lastError = "sauvegarde rapide non écrite";
+    return false;
+  }
+  return File::Rename(written, file);
 }
 
 PTDOLPHIN_EXPORT bool PTDolphinLoadState(const char* path)

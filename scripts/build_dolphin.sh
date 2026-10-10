@@ -55,7 +55,7 @@ echo ""
 
 # Framework : la bibliothèque du cœur + le dossier Sys de Dolphin (sans les thèmes de l'interface Qt).
 OUT="$ROOT/cores/$PLATFORM/DolphinCore.framework"
-rm -rf "$OUT"
+rm -rf "${OUT:?}"
 mkdir -p "$OUT"
 cp "$BUILD/Source/iOS/Library/libdolphin.dylib" "$OUT/DolphinCore"
 install_name_tool -id @rpath/DolphinCore.framework/DolphinCore "$OUT/DolphinCore"

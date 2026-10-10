@@ -14,6 +14,9 @@ typedef struct {
 } PTPS2Functions;
 
 static PTPS2Engine *loadedEngine;
+/// Échec après le chargement du moteur (dlopen réussi) : il ne se répare pas en cours de route. Les essais suivants
+/// renvoient la même erreur au lieu de refaire une préparation à moitié faite.
+static NSString *loadFailure;
 
 @implementation PTPS2Engine {
     PTPS2Functions _fn;
@@ -30,6 +33,7 @@ static PTPS2Engine *loadedEngine;
                                 error:(NSError **)error {
     NSAssert(NSThread.isMainThread, @"Moteur PS2 : préparation sur le thread principal");
     if (loadedEngine) return loadedEngine;
+    if (loadFailure) return [self failWithMessage:loadFailure error:error];
 
     void *handle = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
     if (!handle) {
@@ -39,16 +43,21 @@ static PTPS2Engine *loadedEngine;
     PTPS2Engine *engine = [PTPS2Engine new];
 #define PT_LOOKUP(name) \
     engine->_fn.name = (__typeof__(&name))dlsym(handle, #name); \
-    if (!engine->_fn.name) return [self failWithMessage:@"Moteur PS2 incomplet : " #name " manquant" error:error];
+    if (!engine->_fn.name) return [self failAfterLoad:@"Moteur PS2 incomplet : " #name " manquant" error:error];
     PT_PS2_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
 
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);
-    if (!view) return [self failWithMessage:@"Le moteur PS2 n'a pas pu démarrer." error:error];
+    if (!view) return [self failAfterLoad:@"Le moteur PS2 n'a pas pu démarrer." error:error];
     engine->_renderView = (__bridge UIView *)view;
     loadedEngine = engine;
     return engine;
+}
+
++ (id)failAfterLoad:(NSString *)message error:(NSError **)error {
+    loadFailure = [message stringByAppendingString:@" Relance PlayTendo pour réessayer."];
+    return [self failWithMessage:loadFailure error:error];
 }
 
 + (id)failWithMessage:(NSString *)message error:(NSError **)error {

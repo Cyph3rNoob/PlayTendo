@@ -55,6 +55,8 @@ static void PTVKSetSignalSemaphore(void *handle, VkSemaphore semaphore);
     VkCommandPool _commandPool;
     VkCommandBuffer _commandBuffer;
     VkFence _fence;
+    /// La dernière copie n'était pas finie au bout d'1 s : liste de commandes et barrière encore occupées.
+    BOOL _copyPending;
 
     // Dernière image du moteur (set_image) et ce qui va avec, gardés jusqu'à la copie.
     pthread_mutex_t _imageLock;
@@ -393,6 +395,13 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
 
 - (CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height {
     if (!_device || width == 0 || height == 0) return NULL;
+    // Copie précédente pas encore finie (puce graphique très en retard) : elle est attendue avant de reprendre sa liste
+    // de commandes et sa barrière ; toujours pas finie, cette image est sautée (l'image du moteur reste en attente).
+    if (_copyPending) {
+        if (vkWaitForFences(_device, 1, &_fence, VK_TRUE, 1000000000ull) != VK_SUCCESS) return NULL;
+        vkResetFences(_device, 1, &_fence);
+        _copyPending = NO;
+    }
     pthread_mutex_lock(&_imageLock);
     BOOL hasImage = _hasImage;
     struct retro_vulkan_image image = _image;
@@ -476,8 +485,13 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
         PTLogLine([NSString stringWithFormat:@"Vulkan : envoi de la copie impossible (%d)", result]);
         return NULL;
     }
-    // Attendue ici : l'image est complète quand l'écran la lit (une copie, très courte).
-    vkWaitForFences(_device, 1, &_fence, VK_TRUE, 1000000000ull);
+    // Attendue ici : l'image est complète quand l'écran la lit (une copie, très courte). Pas finie au bout d'1 s :
+    // l'image n'est pas montrée, et la barrière n'est remise à zéro qu'une fois la copie finie (image suivante).
+    if (vkWaitForFences(_device, 1, &_fence, VK_TRUE, 1000000000ull) != VK_SUCCESS) {
+        _copyPending = YES;
+        PTLogLine(@"Vulkan : copie de l'image pas finie au bout d'1 s (puce graphique en retard), image sautée");
+        return NULL;
+    }
     vkResetFences(_device, 1, &_fence);
     if (!_loggedFirstFrame) {
         _loggedFirstFrame = YES;
@@ -496,6 +510,7 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
         if (_fence) vkDestroyFence(_device, _fence, NULL);
         if (_commandPool) vkDestroyCommandPool(_device, _commandPool, NULL);
         _fence = VK_NULL_HANDLE;
+        _copyPending = NO;
         _commandPool = VK_NULL_HANDLE;
         if (_negotiation && _negotiation->destroy_device) _negotiation->destroy_device();
         vkDestroyDevice(_device, NULL);

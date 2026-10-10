@@ -22,7 +22,7 @@ fi
 APP="$BUILD/Release-iphoneos/PlayTendo.app"
 # Repart d'une app vide : Xcode ne retire pas les fichiers d'une ancienne compilation (une extension
 # supprimée du projet restait dans PlugIns et se retrouvait dans l'IPA).
-rm -rf "$APP"
+rm -rf "${APP:?}"
 
 echo ">>> Compilation de l'app…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target PlayTendo -configuration Release -sdk iphoneos \
@@ -36,7 +36,7 @@ fi
 grep -E "warning:" "$LOG" | grep "/app/PlayTendo/" | sort -u | head -20 || true
 
 echo ">>> Fabrication du fichier d'installation…"
-rm -rf "$ROOT/build/ipa"
+rm -rf "${ROOT:?}/build/ipa"
 mkdir -p "$ROOT/build/ipa/Payload"
 cp -R "$APP" "$ROOT/build/ipa/Payload/"
 # Signature locale : les moteurs d'abord (codesign refuse une app dont le contenu n'est pas signé), puis l'app

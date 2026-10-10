@@ -42,7 +42,7 @@ run() { # nom-du-log commande...
 wrap() { # nom chemin.dylib
   local name=$1 dylib=$2
   local fw="$OUT/$name.framework"
-  rm -rf "$fw"; mkdir -p "$fw"
+  rm -rf "${fw:?}"; mkdir -p "$fw"
   cp "$dylib" "$fw/$name"
   install_name_tool -id "@rpath/$name.framework/$name" "$fw/$name"
   strip -x "$fw/$name"
@@ -150,7 +150,7 @@ build_ppsspp() {
   # Fichiers dont le moteur a besoin (polices de la PSP, tables de calcul, réglages par jeu…),
   # embarqués dans l'app puis copiés dans <dossier système>/PPSSPP.
   local assets="$ROOT/cores/assets/PPSSPP"
-  rm -rf "$assets"; mkdir -p "$assets"
+  rm -rf "${assets:?}"; mkdir -p "$assets"
   for f in compat.ini compatvr.ini langregion.ini knownfuncs.ini redump.csv \
            ppge_atlas.zim ppge_atlas.meta flash0 vfpu; do
     cp -R "$SRC/ppsspp/assets/$f" "$assets/"

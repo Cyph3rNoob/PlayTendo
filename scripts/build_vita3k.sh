@@ -24,7 +24,7 @@ python3 "$ROOT/scripts/patch_vita3k.py" "$SRC"
 # OpenSSL : bibliothèques statiques pour iPhone (arm64), sans programmes, tests ni documentation.
 if [ ! -f "$OSSL_OUT/lib/libcrypto.a" ] || [ ! -f "$OSSL_OUT/lib/libssl.a" ]; then
   echo "=== OpenSSL pour iPhone (journal : build/openssl-ios.log) ==="
-  rm -rf "$OSSL_BUILD" "$OSSL_OUT"
+  rm -rf "${OSSL_BUILD:?}" "${OSSL_OUT:?}"
   mkdir -p "$OSSL_BUILD"
   (
     cd "$OSSL_BUILD"
@@ -75,7 +75,7 @@ DYLIB="$BUILD/lib/libVita3K.dylib"
 
 # Framework : la bibliothèque + les fichiers fixes que Vita3K lit (shaders de l'affichage, icônes, données).
 OUT="$ROOT/cores/ios/VitaCore.framework"
-rm -rf "$OUT"
+rm -rf "${OUT:?}"
 mkdir -p "$OUT"
 cp "$DYLIB" "$OUT/VitaCore"
 install_name_tool -id @rpath/VitaCore.framework/VitaCore "$OUT/VitaCore"

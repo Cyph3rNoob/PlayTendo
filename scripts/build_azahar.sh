@@ -47,7 +47,7 @@ DYLIB=$(find "$BUILD" -name "azahar_libretro.dylib" -type f | head -1)
 
 # Framework du moteur (même forme que ceux de build_cores.sh).
 FW="$OUT/azahar.framework"
-rm -rf "$FW"; mkdir -p "$FW"
+rm -rf "${FW:?}"; mkdir -p "$FW"
 cp "$DYLIB" "$FW/azahar"
 install_name_tool -id "@rpath/azahar.framework/azahar" "$FW/azahar"
 strip -x "$FW/azahar"
@@ -71,6 +71,6 @@ cat > "$FW/Info.plist" <<PLIST
 PLIST
 
 # MoltenVK 1.4.2 (version iPhone de l'archive officielle).
-rm -rf "$OUT/MoltenVK.framework"
+rm -rf "${OUT:?}/MoltenVK.framework"
 cp -R "$ROOT/sources/MoltenVK/MoltenVK/MoltenVK/dynamic/MoltenVK.xcframework/ios-arm64/MoltenVK.framework" "$OUT/"
 echo "=== azahar.framework ($(du -sh "$FW" | cut -f1)) et MoltenVK.framework ($(du -sh "$OUT/MoltenVK.framework" | cut -f1)) prêts en $((SECONDS / 60)) min ==="

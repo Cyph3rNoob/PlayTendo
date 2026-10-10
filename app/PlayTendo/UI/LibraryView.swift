@@ -54,7 +54,8 @@ struct LibraryView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { library.importFiles(urls) }
         }
-        // Au retour d'une partie (un jeu PS Vita installé a pu quitter Jeux : sa copie installée le remplace).
+        // Bibliothèque relue au retour d'une partie (app compilée avec la PS Vita : un jeu installé a pu quitter Jeux,
+        // sa copie installée le remplace).
         .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
             EmulatorView(game: game)
         }
@@ -78,7 +79,7 @@ struct LibraryView: View {
         .alert("Mode turbo non activé", isPresented: Binding(get: { jitFailure != nil }, set: { if !$0 { jitFailure = nil } }),
                presenting: jitFailure) { failure in
             Button("Réessayer") { play(failure.game) }
-            // La PS Vita ne peut pas tourner sans (Vita3K n'a pas d'interpréteur).
+            // Toujours proposé, sauf pour la PS Vita (app compilée avec elle : Vita3K n'a pas d'interpréteur).
             if !JITManager.requires(failure.game.system) {
                 Button("Jouer sans JIT") { launch(failure.game) }
             }

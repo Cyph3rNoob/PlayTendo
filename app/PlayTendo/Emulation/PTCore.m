@@ -214,6 +214,8 @@ static PTCore *gCore;
     NSMutableDictionary<NSString *, NSString *> *_optionOverrides;
     BOOL _optionsDirty;
     NSMutableDictionary<NSString *, NSData *> *_optionCStrings;
+    /// Anciennes valeurs d'un réglage changé en cours de partie : un moteur peut encore lire le pointeur donné avant.
+    NSMutableArray<NSData *> *_retiredOptionCStrings;
 
     struct retro_disk_control_ext_callback _disk;
     BOOL _hasDiskControl;
@@ -438,6 +440,7 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     _optionDefaults = [NSMutableDictionary dictionary];
     _optionValues = [NSMutableDictionary dictionary];
     _optionCStrings = [NSMutableDictionary dictionary];
+    _retiredOptionCStrings = [NSMutableArray array];
     _optionOverrides = [options mutableCopy];
     _optionsDirty = NO;
     _hasDiskControl = NO;
@@ -739,6 +742,11 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     if (!value) return NULL;
     NSMutableData *cString = [[value dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
     [cString appendBytes:"\0" length:1];
+    // Même valeur que la dernière fois : même pointeur. Sinon l'ancienne chaîne reste valable jusqu'à la fin de la
+    // partie (un moteur peut l'avoir gardée).
+    NSData *previous = _optionCStrings[name];
+    if ([previous isEqualToData:cString]) return previous.bytes;
+    if (previous) [_retiredOptionCStrings addObject:previous];
     _optionCStrings[name] = cString;
     return cString.bytes;
 }

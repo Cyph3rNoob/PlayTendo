@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Emplacements des fichiers de l'app. Tout ce qui est dans Documents est visible
 /// dans l'app Fichiers (Sur mon iPhone › PlayTendo).
@@ -145,7 +146,100 @@ enum Paths {
     }
 
     static func saveRAMFile(for game: Game) -> URL {
-        saveDirectory(for: game.system).appendingPathComponent(game.baseName + ".srm")
+        saveDirectory(for: game.system).appendingPathComponent(fileName(for: game) + ".srm")
+    }
+
+    // MARK: Nom des fichiers d'un jeu
+
+    /// Nom de la sauvegarde (.srm), de la sauvegarde rapide et de la vignette d'un jeu : le nom de son fichier, sauf si
+    /// un autre jeu de la même console, rangé ailleurs dans Jeux, l'a déjà (« EU/Zelda.gba » et « US/Zelda.gba ») :
+    /// celui arrivé en second (ou rangé plus profond) y ajoute son dossier (« Zelda (US) »). Attribués par
+    /// `assignFileNames` à chaque lecture de Jeux. Les sauvegardes que certains moteurs rangent eux-mêmes (PSP, PS2,
+    /// GameCube/Wii, 3DS…) ne sont pas concernées.
+    static func fileName(for game: Game) -> String {
+        fileNames.withLock { $0?[fileNameID(game)] } ?? game.baseName
+    }
+
+    /// « dossier de la console/chemin dans Jeux » → nom attribué ; chargé à la première lecture de Jeux.
+    private static let fileNames = OSAllocatedUnfairLock<[String: String]?>(initialState: nil)
+    private static let fileNamesKey = "nomsFichiersJeux"
+
+    private static func fileNameID(_ game: Game) -> String { "\(game.system.folderName)/\(game.key)" }
+
+    /// Donne un nom à chaque nouveau jeu. Un jeu qui n'est plus dans Jeux libère le sien : déplacé dans un autre
+    /// dossier, il le reprend, avec ses sauvegardes. Rien n'est libéré si aucun jeu connu n'est trouvé (dossier Jeux
+    /// illisible à ce moment-là, par prudence).
+    static func assignFileNames(to games: [Game]) {
+        let copies = fileNames.withLock { stored -> [(game: Game, name: String)] in
+            var copies: [(game: Game, name: String)] = []
+            let defaults = UserDefaults.standard
+            let firstTime = stored == nil && defaults.object(forKey: fileNamesKey) == nil
+            var names = stored ?? (defaults.dictionary(forKey: fileNamesKey) as? [String: String] ?? [:])
+            let before = names
+
+            let present = Set(names.keys.filter { id in
+                let key = id.drop { $0 != "/" }.dropFirst()
+                return FileManager.default.fileExists(atPath: Paths.games.appendingPathComponent(String(key)).path)
+            })
+            // Noms libérés par les jeux disparus : un jeu du même nom apparu en même temps (déplacé dans Jeux) les reprend.
+            var released: [(console: String, base: String, name: String)] = []
+            if !present.isEmpty {
+                for (id, name) in names where !present.contains(id) {
+                    let file = (String(id.drop { $0 != "/" }.dropFirst()) as NSString).lastPathComponent
+                    released.append((String(id.prefix { $0 != "/" }), (file as NSString).deletingPathExtension.lowercased(), name))
+                }
+                names = names.filter { present.contains($0.key) }
+            }
+
+            var taken: [String: Set<String>] = [:]
+            for (id, name) in names {
+                taken[String(id.prefix { $0 != "/" }), default: []].insert(name.lowercased())
+            }
+            // Les jeux rangés à la racine de Jeux d'abord : ils gardent leur nom, ceux des sous-dossiers prennent le leur.
+            let ordered = games.sorted { lhs, rhs in
+                let depths = (lhs.key.filter { $0 == "/" }.count, rhs.key.filter { $0 == "/" }.count)
+                return depths.0 != depths.1 ? depths.0 < depths.1 : lhs.key < rhs.key
+            }
+            for game in ordered where names[fileNameID(game)] == nil {
+                let console = game.system.folderName
+                var name = game.baseName
+                if let index = released.firstIndex(where: { $0.console == console && $0.base == game.baseName.lowercased()
+                                                             && !taken[console, default: []].contains($0.name.lowercased()) }) {
+                    name = released.remove(at: index).name
+                    if name != game.baseName { PTLogLine("Sauvegardes de \(game.key) : « \(name) » reprises (jeu déplacé)") }
+                } else if taken[console, default: []].contains(name.lowercased()) {
+                    let folder = game.key.split(separator: "/").dropLast().joined(separator: " - ")
+                    let base = "\(game.baseName) (\(folder.isEmpty ? "Jeux" : folder))"
+                    name = base
+                    var number = 2
+                    while taken[console, default: []].contains(name.lowercased()) {
+                        name = "\(base) \(number)"
+                        number += 1
+                    }
+                    // Mise à jour de l'app : jusque-là, ces jeux partageaient les fichiers à leur nom. Chacun garde sa
+                    // copie de la progression.
+                    if firstTime { copies.append((game, name)) }
+                    PTLogLine("Sauvegardes de \(game.key) : nommées « \(name) » (un autre jeu \(game.system.shortName) a le même nom)")
+                }
+                names[fileNameID(game)] = name
+                taken[console, default: []].insert(name.lowercased())
+            }
+            stored = names
+            if names != before || firstTime { defaults.set(names, forKey: fileNamesKey) }
+            return copies
+        }
+        for (game, name) in copies {
+            let pairs = [(saveDirectory(for: game.system), "srm"),
+                         (states.appendingPathComponent(game.system.folderName), "state"),
+                         (thumbnails.appendingPathComponent(game.system.folderName), "png")]
+            for (folder, ext) in pairs {
+                let shared = folder.appendingPathComponent("\(game.baseName).\(ext)")
+                let own = folder.appendingPathComponent("\(name).\(ext)")
+                guard FileManager.default.fileExists(atPath: shared.path),
+                      !FileManager.default.fileExists(atPath: own.path) else { continue }
+                try? FileManager.default.copyItem(at: shared, to: own)
+            }
+        }
     }
 
     static let thumbnails = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -154,13 +248,13 @@ enum Paths {
     static func thumbnailFile(for game: Game) -> URL {
         let folder = thumbnails.appendingPathComponent(game.system.folderName, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent(game.baseName + ".png")
+        return folder.appendingPathComponent(fileName(for: game) + ".png")
     }
 
     static func stateFile(for game: Game) -> URL {
         let folder = states.appendingPathComponent(game.system.folderName, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appendingPathComponent(game.baseName + ".state")
+        return folder.appendingPathComponent(fileName(for: game) + ".state")
     }
 
     private static let readmeText = """

@@ -62,7 +62,7 @@ echo ""
 
 FW="$BUILD/$CONFIG-$SDK/PS2Core.framework"
 OUT="$ROOT/cores/$PLATFORM/PS2Core.framework"
-rm -rf "$OUT"
+rm -rf "${OUT:?}"
 mkdir -p "$(dirname "$OUT")"
 cp -R "$FW" "$OUT"
 # Le moteur cherche « Metal23.metallib » dans son dossier avant tout « default.metallib » : sous ce nom,
