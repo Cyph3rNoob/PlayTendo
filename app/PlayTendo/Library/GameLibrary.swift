@@ -51,7 +51,13 @@ final class GameLibrary: ObservableObject {
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
             return Game(url: url, system: system)
         }
-        return (found + vitaFolders.map { Game(url: $0, system: .vita) })
+        // PS Vita : les jeux installés dont l'original n'est plus dans Jeux (retiré après l'installation).
+        let vitaOriginals = vitaFolders + files.filter { $0.pathExtension.lowercased() == "vpk" }
+        let originalIDs = Set(vitaOriginals.compactMap(VitaGame.titleID(of:)))
+        let installed = VitaGame.installedGames().filter { url in
+            VitaGame.titleID(of: url).map { !originalIDs.contains($0) } ?? false
+        }
+        return (found + (vitaFolders + installed).map { Game(url: $0, system: .vita) })
             .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
@@ -184,11 +190,17 @@ final class GameLibrary: ObservableObject {
 
     // MARK: Suppression
 
-    /// Supprime le jeu avec ses fichiers associés (pistes .bin d'un .cue, disques d'un .m3u).
-    /// Les sauvegardes sont conservées.
+    /// Supprime le jeu avec ses fichiers associés (pistes .bin d'un .cue, disques d'un .m3u). Un jeu PS Vita est
+    /// aussi désinstallé de la mémoire de la console. Les sauvegardes sont conservées.
     func delete(_ game: Game) {
+        if game.system == .vita, let titleID = VitaGame.titleID(of: game.url) {
+            VitaGame.uninstall(titleID: titleID)
+        }
         for file in Self.files(of: game) {
             try? FileManager.default.removeItem(at: file)
+        }
+        if game.system == .vita {
+            VitaGame.removeEmptyAppFolder(containing: game.url)
         }
         games.removeAll { $0.id == game.id }
     }

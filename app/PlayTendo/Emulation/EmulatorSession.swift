@@ -702,6 +702,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
         if vita.isGameInstalled(titleID) {
             setLoadingDetail(nil)
+            // Original remis (ou gardé d'avant) alors que le jeu est installé : doublon retiré de Jeux.
+            VitaGame.removeOriginal(game.url, titleID: titleID)
             return titleID
         }
         setLoadingDetail("Installation du jeu (une seule fois)…")
@@ -715,6 +717,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
         PTLogLine(String(format: "Vita : jeu %@ installé en %.0f s (%@)", installed, clock.now - start, game.url.lastPathComponent))
         setLoadingDetail(nil)
+        // Le jeu tourne depuis sa copie installée : l'original quitte Jeux (sinon il prendrait deux fois sa place).
+        VitaGame.removeOriginal(game.url, titleID: installed)
         return installed
     }
 

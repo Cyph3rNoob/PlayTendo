@@ -54,7 +54,8 @@ struct LibraryView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { library.importFiles(urls) }
         }
-        .fullScreenCover(item: $playing) { game in
+        // Au retour d'une partie : un jeu PS Vita installé a pu quitter Jeux (sa copie installée le remplace).
+        .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
             EmulatorView(game: game)
         }
         .sheet(isPresented: $showingAbout) {

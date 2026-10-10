@@ -68,8 +68,9 @@ enum Paths {
     static let vitaEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Systeme/Vita", isDirectory: true)
 
-    /// Les jeux installés (des Go) et les caches ne vont pas dans la sauvegarde iCloud de l'iPhone : ils se
-    /// réinstallent depuis Jeux. Les sauvegardes des jeux, elles, y restent.
+    /// Les jeux installés (des Go) et les caches ne vont pas dans la sauvegarde iCloud de l'iPhone. Leur original
+    /// quitte Jeux après l'installation : après une restauration, il faut les remettre depuis l'original gardé
+    /// ailleurs (Mac, Vita). Les sauvegardes des jeux, elles, restent dans la sauvegarde iCloud.
     static func prepareVitaEngine() {
         for relative in ["vita/ux0/app", "vita/ux0/patch", "vita/ux0/addcont", "cache"] {
             var folder = vitaEngine.appendingPathComponent(relative, isDirectory: true)
@@ -141,7 +142,8 @@ enum Paths {
       Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
       PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa
         licence sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk.
-        Installé une fois dans PlayTendo au premier lancement (prévois la place d'une copie).
+        Installé dans PlayTendo au premier lancement, puis retiré de ce dossier : garde ton
+        original ailleurs (prévois la place d'une copie le temps de l'installation).
       Les .zip sont acceptés avec le bouton « + » de l'app.
 
     BIOS (facultatif)

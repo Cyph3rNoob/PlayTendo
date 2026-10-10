@@ -24,6 +24,22 @@ l'extérieur), que l'app charge comme les moteurs PS2 et GameCube/Wii (VitaCore.
    L'effet est sauté (nullptr, comme Vita3K le prévoit), marqué pour ne pas être recompilé à chaque image.
 12. Messages de MoltenVK (renderer.cpp) : pas de couche de validation sur iPhone, mais MoltenVK donne la raison de ses
    refus par VK_EXT_debug_utils → branchée sur vita3k.log (« [PlayTendo] MoltenVK : … »).
+13. Masque de la Vita (scene.cpp) : sans l'émulation de la retouche 14 (appareil sans shader interlock), ses dessins
+   sont sautés, comme le fait le rendu OpenGL de Vita3K quand il n'a pas de tampon de masque (gl/draw.cpp).
+14. Masque de la Vita émulé en Vulkan (pochoir des menus de Minecraft : « Mask not implemented », seul le texte jaune
+   s'affichait, 2026-10-10 ; « On Vulkan the graphics don't render » sur PC), sur le modèle du rendu OpenGL :
+   - une image RGBA8 par cible de rendu (creation.cpp), remise au début de chaque scène à la valeur de fond de la
+     surface de profondeur (context.cpp, comme gl::sync_mask ; « tout visible » sans surface de profondeur) ;
+   - les dessins du masque y écrivent 0 ou 1 (spirv_recompiler.cpp, generate_update_mask_body), sans couleur, ni
+     profondeur, ni stencil (pipeline_cache.cpp) ; tous les autres shaders de pixels la lisent et jettent le pixel
+     masqué (code déjà prévu par Vita3K, `use_mask_bit`, set 1 binding 1) ;
+   - lecture et écriture dans l'ordre de rastérisation : verrou « shader interlock » sur tout le shader de pixels
+     (MoltenVK le traduit en raster order groups de Metal), d'où `use_mask_bit` = shader interlock de l'appareil ;
+   - le shader de sommets d'un dessin de masque est compilé normalement : Vita3K le compilait « en mode masque »
+     (sans position) et le rangeait dans son cache sous le seul identifiant du programme → les dessins normaux qui
+     partagent ce programme de sommets ne dessinaient plus rien (menus invisibles même sans masque) ;
+   - `use_mask_bit` entre dans la signature du cache des shaders (renderer.cpp) : les shaders déjà enregistrés,
+     dont ceux cassés par le point précédent, sont effacés au premier lancement.
 """
 import os
 import sys
@@ -480,4 +496,218 @@ patch("vita3k/renderer/src/vulkan/renderer.cpp", [
      "            LOG_INFO(\"[PlayTendo] Messages de MoltenVK branchés sur ce journal\");\n"
      "        }\n"
      "#endif\n"),
+])
+
+# 13. Sans émulation du masque (retouche 14 impossible), ses dessins sont sautés (sinon peints dans l'image).
+patch("vita3k/renderer/src/vulkan/scene.cpp", [
+    ("    Ptr<void> indices, size_t count, uint32_t instance_count, MemState &mem, const Config &config) {\n"
+     "    void *indices_ptr = indices.get(mem);\n",
+     "    Ptr<void> indices, size_t count, uint32_t instance_count, MemState &mem, const Config &config) {\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : sans émulation du masque, son dessin peindrait 0 ou 1 dans l'image (menus de Minecraft recouverts\n"
+     "    // de noir). Sauté, comme le rendu OpenGL de Vita3K sans tampon de masque.\n"
+     "    if (context.record.is_maskupdate && !context.state.features.use_mask_bit) {\n"
+     "        LOG_WARN_ONCE(\"[PlayTendo] Dessins du masque sautés (non gérés en Vulkan)\");\n"
+     "        return;\n"
+     "    }\n"
+     "#endif\n"
+     "    void *indices_ptr = indices.get(mem);\n"),
+])
+
+# 14. Masque de la Vita émulé en Vulkan (voir l'en-tête).
+patch("vita3k/renderer/include/renderer/vulkan/types.h", [
+    ("    vk::DescriptorSet rendertarget_set;\n",
+     "    vk::DescriptorSet rendertarget_set;\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : masque à remettre à sa valeur de fond au prochain début de passe (nouvelle scène).\n"
+     "    bool playtendo_mask_clear = false;\n"
+     "    float playtendo_mask_value = 1.0f;\n"
+     "#endif\n"),
+    ("    vkutil::Image depthstencil;\n",
+     "    vkutil::Image depthstencil;\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : masque de la Vita (1 = visible), lu et écrit par les shaders de pixels.\n"
+     "    vkutil::Image mask;\n"
+     "#endif\n"),
+])
+patch("vita3k/renderer/src/vulkan/creation.cpp", [
+    ("    depthstencil.init_image(vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment);\n",
+     "    depthstencil.init_image(vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment);\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : masque de la Vita, à la taille de la profondeur (doublée en MSAA 4x).\n"
+     "    if (state.features.use_mask_bit) {\n"
+     "        mask = vkutil::Image(depthstencil.width, depthstencil.height, vk::Format::eR8G8B8A8Unorm);\n"
+     "        mask.init_image(vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst);\n"
+     "    }\n"
+     "#endif\n"),
+    ("    depthstencil.transition_to_discard(cmd_buffer, vkutil::ImageLayout::DepthStencilAttachment, vkutil::ds_subresource_range);\n",
+     "    depthstencil.transition_to_discard(cmd_buffer, vkutil::ImageLayout::DepthStencilAttachment, vkutil::ds_subresource_range);\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    if (mask.image) {\n"
+     "        // tout visible au départ\n"
+     "        mask.transition_to_discard(cmd_buffer, vkutil::ImageLayout::TransferDst);\n"
+     "        const vk::ClearColorValue mask_visible{ std::array<float, 4>({ 1.0f, 1.0f, 1.0f, 1.0f }) };\n"
+     "        cmd_buffer.clearColorImage(mask.image, vk::ImageLayout::eTransferDstOptimal, mask_visible, vkutil::color_subresource_range);\n"
+     "        mask.transition_to(cmd_buffer, vkutil::ImageLayout::StorageImage);\n"
+     "    }\n"
+     "#endif\n"),
+    ("    frame.destroy_queue.add_image(render_target.depthstencil);\n",
+     "    frame.destroy_queue.add_image(render_target.depthstencil);\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    if (render_target.mask.image)\n"
+     "        frame.destroy_queue.add_image(render_target.mask);\n"
+     "#endif\n"),
+])
+patch("vita3k/renderer/src/vulkan/context.cpp", [
+    ("    context.render_target = rt;\n",
+     "    context.render_target = rt;\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : nouvelle scène → masque remis à la valeur de fond de la surface de profondeur (comme\n"
+     "    // gl::sync_mask) ; « tout visible » sans surface de profondeur (valeur alors non fiable).\n"
+     "    {\n"
+     "        const auto &ds_surface = context.record.depth_stencil_surface;\n"
+     "        const bool has_ds = ds_surface.depth_data.address() != 0 || ds_surface.stencil_data.address() != 0;\n"
+     "        context.playtendo_mask_clear = true;\n"
+     "        context.playtendo_mask_value = (!has_ds || ds_surface.mask) ? 1.0f : 0.0f;\n"
+     "    }\n"
+     "#endif\n"),
+    ("    descriptor_pool_info.setPoolSizes(pool_size);\n",
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : plus une image de stockage par jeu de descripteurs pour le masque.\n"
+     "    const std::array<vk::DescriptorPoolSize, 2> pool_sizes = { pool_size,\n"
+     "        vk::DescriptorPoolSize{ .type = vk::DescriptorType::eStorageImage, .descriptorCount = DESCRIPTOR_PACK_SIZE * MAX_FRAMES_RENDERING } };\n"
+     "    descriptor_pool_info.setPoolSizes(pool_sizes);\n"
+     "#else\n"
+     "    descriptor_pool_info.setPoolSizes(pool_size);\n"
+     "#endif\n"),
+    ("    render_cmd.beginRenderPass(curr_renderpass_info, vk::SubpassContents::eInline);\n",
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : remise du masque, hors passe de rendu, au premier début de passe de la scène.\n"
+     "    if (playtendo_mask_clear && render_target->mask.image) {\n"
+     "        playtendo_mask_clear = false;\n"
+     "        const float v = playtendo_mask_value;\n"
+     "        const vk::ClearColorValue mask_clear{ std::array<float, 4>({ v, v, v, v }) };\n"
+     "        render_target->mask.transition_to(render_cmd, vkutil::ImageLayout::TransferDst);\n"
+     "        render_cmd.clearColorImage(render_target->mask.image, vk::ImageLayout::eTransferDstOptimal, mask_clear, vkutil::color_subresource_range);\n"
+     "        render_target->mask.transition_to(render_cmd, vkutil::ImageLayout::StorageImage);\n"
+     "    }\n"
+     "#endif\n"
+     "    render_cmd.beginRenderPass(curr_renderpass_info, vk::SubpassContents::eInline);\n"),
+    ("    write_descr.setImageInfo(descr_color_info);\n    state.device.updateDescriptorSets(write_descr, {});\n}\n",
+     "    write_descr.setImageInfo(descr_color_info);\n"
+     "    state.device.updateDescriptorSets(write_descr, {});\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : masque de la cible de rendu (set 1, binding 1).\n"
+     "    if (state.features.use_mask_bit && render_target->mask.view) {\n"
+     "        vk::DescriptorImageInfo descr_mask_info{\n"
+     "            .sampler = nullptr,\n"
+     "            .imageView = render_target->mask.view,\n"
+     "            .imageLayout = vk::ImageLayout::eGeneral,\n"
+     "        };\n"
+     "        vk::WriteDescriptorSet write_mask{\n"
+     "            .dstSet = rendertarget_set,\n"
+     "            .dstBinding = 1,\n"
+     "            .dstArrayElement = 0,\n"
+     "            .descriptorType = vk::DescriptorType::eStorageImage,\n"
+     "        };\n"
+     "        write_mask.setImageInfo(descr_mask_info);\n"
+     "        state.device.updateDescriptorSets(write_mask, {});\n"
+     "    }\n"
+     "#endif\n"
+     "}\n"),
+])
+patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
+    ("    if (maskupdate)\n        LOG_WARN_ONCE(\"Mask not implemented in the vulkan renderer!\");\n",
+     "    if (maskupdate && !state.features.use_mask_bit) // PlayTendo : émulé si use_mask_bit\n"
+     "        LOG_WARN_ONCE(\"Mask not implemented in the vulkan renderer!\");\n"),
+    ("    const vk::PipelineShaderStageCreateInfo vertex_shader = retrieve_shader(vertex_program_gxm.program.get(mem), vertex_program.hash, true, fragment_program_gxm.is_maskupdate, mem, hints);\n",
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : le shader de sommets d'un dessin de masque est un shader ordinaire. Compilé « en mode masque », il\n"
+     "    // n'écrivait aucune position et restait en cache sous l'identifiant du programme, cassant les autres dessins.\n"
+     "    const vk::PipelineShaderStageCreateInfo vertex_shader = retrieve_shader(vertex_program_gxm.program.get(mem), vertex_program.hash, true, false, mem, hints);\n"
+     "#else\n"
+     "    const vk::PipelineShaderStageCreateInfo vertex_shader = retrieve_shader(vertex_program_gxm.program.get(mem), vertex_program.hash, true, fragment_program_gxm.is_maskupdate, mem, hints);\n"
+     "#endif\n"),
+    ("    const vk::PipelineDepthStencilStateCreateInfo ds_info{\n",
+     "    // PlayTendo : modifiable pour les dessins du masque\n"
+     "    vk::PipelineDepthStencilStateCreateInfo ds_info{\n"),
+    ("        .back = convert_op_state(two_sided ? record.back_stencil_state_op : record.front_stencil_state_op)\n    };\n",
+     "        .back = convert_op_state(two_sided ? record.back_stencil_state_op : record.front_stencil_state_op)\n"
+     "    };\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : un dessin du masque n'écrit que le masque, sans tests de profondeur ni de stencil (gl/draw.cpp).\n"
+     "    const bool playtendo_mask_draw = fragment_program_gxm.is_maskupdate && state.features.use_mask_bit;\n"
+     "    if (playtendo_mask_draw) {\n"
+     "        ds_info.depthTestEnable = VK_FALSE;\n"
+     "        ds_info.depthWriteEnable = VK_FALSE;\n"
+     "        ds_info.stencilTestEnable = VK_FALSE;\n"
+     "    }\n"
+     "#endif\n"),
+    ("    if (is_fragment_disabled || frag_has_no_output || use_shader_interlock) {\n",
+     "#ifdef PLAYTENDO_IOS\n"
+     "    if (is_fragment_disabled || frag_has_no_output || use_shader_interlock || playtendo_mask_draw) {\n"
+     "#else\n"
+     "    if (is_fragment_disabled || frag_has_no_output || use_shader_interlock) {\n"
+     "#endif\n"),
+])
+patch("vita3k/shader/src/spirv_recompiler.cpp", [
+    ("    b.createStore(mask_v, out);\n}\n",
+     "    b.createStore(mask_v, out);\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : en Vulkan, la valeur va dans l'image du masque (set 1, binding 1) au pixel courant ; la couleur\n"
+     "    // n'est pas écrite (pipeline sans écriture de couleur).\n"
+     "    if (translate_state.is_vulkan && translate_state.mask_id != spv::NoResult && translate_state.frag_coord_id != spv::NoResult) {\n"
+     "        const spv::Id i32 = b.makeIntegerType(32, true);\n"
+     "        spv::Id coord = b.createUnaryOp(spv::OpConvertFToS, b.makeVectorType(i32, 4), b.createLoad(translate_state.frag_coord_id, spv::NoPrecision));\n"
+     "        coord = b.createOp(spv::OpVectorShuffle, b.makeVectorType(i32, 2), { { true, coord }, { true, coord }, { false, 0 }, { false, 1 } });\n"
+     "        b.createNoResultOp(spv::OpImageWrite, { b.createLoad(translate_state.mask_id, spv::NoPrecision), coord, mask_v });\n"
+     "    }\n"
+     "#endif\n"
+     "}\n"),
+    ("    std::vector<spv::Id> empty_args;\n",
+     "    std::vector<spv::Id> empty_args;\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    bool playtendo_mask_interlock = false;\n"
+     "#endif\n"),
+    ("            b.createNoResultOp(spv::OpBeginInvocationInterlockEXT);\n        }\n    }\n\n    // Generate parameters\n",
+     "            b.createNoResultOp(spv::OpBeginInvocationInterlockEXT);\n"
+     "        }\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "        // PlayTendo : masque en Vulkan, lu (tous les shaders de pixels) ou écrit (dessins du masque) dans l'ordre de\n"
+     "        // rastérisation : verrou sur tout le shader (raster order groups de Metal, par MoltenVK).\n"
+     "        else if (translation_state.is_vulkan && features.use_mask_bit) {\n"
+     "            playtendo_mask_interlock = true;\n"
+     "            b.addExecutionMode(spv_func_main, spv::ExecutionModeSampleInterlockOrderedEXT);\n"
+     "            b.addExtension(\"SPV_EXT_fragment_shader_interlock\");\n"
+     "            b.addCapability(spv::CapabilityFragmentShaderSampleInterlockEXT);\n"
+     "            b.createNoResultOp(spv::OpBeginInvocationInterlockEXT);\n"
+     "        }\n"
+     "#endif\n"
+     "    }\n"
+     "\n"
+     "    // Generate parameters\n"),
+    ("        generate_update_mask_body(b, translation_state);\n    }\n    b.leaveFunction();\n",
+     "        generate_update_mask_body(b, translation_state);\n"
+     "    }\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    if (playtendo_mask_interlock)\n"
+     "        b.createNoResultOp(spv::OpEndInvocationInterlockEXT);\n"
+     "#endif\n"
+     "    b.leaveFunction();\n"),
+])
+patch("vita3k/renderer/src/vulkan/renderer.cpp", [
+    ("    bool use_high_accuracy = cfg.current_config.high_accuracy;\n",
+     "    bool use_high_accuracy = cfg.current_config.high_accuracy;\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : masque de la Vita émulé si l'appareil a le shader interlock (lu ici avant d'être coupé en précision\n"
+     "    // normale ; l'état du rendu est recréé à chaque lancement).\n"
+     "    features.use_mask_bit = features.support_shader_interlock;\n"
+     "    LOG_INFO(\"[PlayTendo] Masque de la Vita : {}\", features.use_mask_bit ? \"émulé\" : \"non géré (pas de shader interlock)\");\n"
+     "#endif\n"),
+    ("            bool use_scaled_attributes : 1;\n",
+     "            bool use_scaled_attributes : 1;\n"
+     "            bool use_mask_bit : 1; // PlayTendo\n"),
+    ("    features_mask.use_scaled_attributes = pipeline_cache.support_scaled_vertex_attribute;\n",
+     "    features_mask.use_scaled_attributes = pipeline_cache.support_scaled_vertex_attribute;\n"
+     "    features_mask.use_mask_bit = features.use_mask_bit; // PlayTendo : shaders refaits quand le masque change\n"),
 ])

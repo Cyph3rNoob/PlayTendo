@@ -32,6 +32,89 @@ enum VitaGame {
         file("sce_sys/icon0.png", of: url)
     }
 
+    // MARK: Jeux installés
+
+    /// Jeux installés dans la mémoire de la console (ux0/app/<identifiant>). Une fois un jeu installé, son original
+    /// est retiré du dossier Jeux (demandé le 2026-10-10 : chaque jeu prenait deux fois sa place, et effacer
+    /// l'original laissait la copie installée invisible) ; la bibliothèque montre alors la copie installée.
+    static var installedAppsFolder: URL {
+        Paths.vitaEngine.appendingPathComponent("vita/ux0/app", isDirectory: true)
+    }
+
+    static func installedGames() -> [URL] {
+        let folders = (try? FileManager.default.contentsOfDirectory(at: installedAppsFolder, includingPropertiesForKeys: nil,
+                                                                    options: [.skipsHiddenFiles])) ?? []
+        return folders.filter(isGameFolder)
+    }
+
+    /// Copie installée (et non original du dossier Jeux).
+    static func isInstalledCopy(_ url: URL) -> Bool {
+        url.resolvingSymlinksInPath().path.hasPrefix(installedAppsFolder.resolvingSymlinksInPath().path + "/")
+    }
+
+    /// Désinstalle un jeu (le jeu, ses mises à jour, ses contenus additionnels et sa licence). Ses sauvegardes,
+    /// dans ux0/user, restent.
+    static func uninstall(titleID: String) {
+        guard !titleID.isEmpty, !titleID.contains("/"), !titleID.hasPrefix(".") else { return }
+        let ux0 = Paths.vitaEngine.appendingPathComponent("vita/ux0", isDirectory: true)
+        for folder in ["app", "patch", "addcont", "license"] {
+            try? FileManager.default.removeItem(at: ux0.appendingPathComponent(folder).appendingPathComponent(titleID))
+        }
+        PTLogLine("Vita : \(titleID) désinstallé (sauvegardes conservées)")
+    }
+
+    /// Retire du dossier Jeux l'original d'un jeu installé, si la copie installée est complète (au moins 90 % de
+    /// la taille de l'original : une installation interrompue garde son original). Le dossier qui le contenait
+    /// (« app » extrait d'une Vita) est retiré aussi s'il ne contient plus rien.
+    static func removeOriginal(_ original: URL, titleID: String) {
+        let manager = FileManager.default
+        let games = Paths.games.resolvingSymlinksInPath().path + "/"
+        guard original.resolvingSymlinksInPath().path.hasPrefix(games), manager.fileExists(atPath: original.path) else { return }
+        let originalSize = size(of: original)
+        let installedSize = size(of: installedAppsFolder.appendingPathComponent(titleID))
+        guard installedSize > 0, Double(installedSize) >= Double(originalSize) * 0.9 else {
+            PTLogLine(String(format: "Vita : original gardé dans Jeux, copie installée incomplète (%.2f Go sur %.2f Go)",
+                             Double(installedSize) / 1e9, Double(originalSize) / 1e9))
+            return
+        }
+        do {
+            try manager.removeItem(at: original)
+        } catch {
+            PTLogLine("Vita : original impossible à retirer de Jeux (\(error.localizedDescription))")
+            return
+        }
+        PTLogLine(String(format: "Vita : original retiré du dossier Jeux (%@, %.2f Go libérés), le jeu reste installé",
+                         original.lastPathComponent, Double(originalSize) / 1e9))
+        removeEmptyAppFolder(containing: original)
+    }
+
+    /// Dossier « app » (celui qu'on obtient en extrayant un jeu d'une Vita) resté vide dans Jeux : retiré. Les
+    /// autres dossiers, rangés par l'utilisateur, restent même vides.
+    static func removeEmptyAppFolder(containing game: URL) {
+        let parent = game.deletingLastPathComponent()
+        let games = Paths.games.resolvingSymlinksInPath().path + "/"
+        guard parent.lastPathComponent.lowercased() == "app", parent.resolvingSymlinksInPath().path.hasPrefix(games),
+              let rest = try? FileManager.default.contentsOfDirectory(atPath: parent.path),
+              rest.allSatisfy({ $0.hasPrefix(".") }) else { return }
+        try? FileManager.default.removeItem(at: parent)
+    }
+
+    /// Taille d'un fichier ou d'un dossier (somme de ses fichiers), en octets.
+    static func size(of url: URL) -> Int64 {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey]
+        if let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true {
+            return Int64(values.fileSize ?? 0)
+        }
+        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: Array(keys)) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            if let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true {
+                total += Int64(values.fileSize ?? 0)
+            }
+        }
+        return total
+    }
+
     /// Fichier du jeu : lu dans le dossier, ou extrait du .vpk.
     private static func file(_ path: String, of url: URL) -> Data? {
         if url.pathExtension.lowercased() != "vpk" {
