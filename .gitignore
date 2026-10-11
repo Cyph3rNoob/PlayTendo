@@ -2,6 +2,8 @@ build/
 sources/
 cores/macos/
 *.ipa
+# App Mac fabriquée par scripts/build_mac.sh
+PlayTendo-Mac/
 # Clés de service de l'utilisateur (masquées dans l'app à la compilation, jamais versionnées)
 secrets/
 .DS_Store

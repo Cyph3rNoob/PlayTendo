@@ -1,5 +1,5 @@
+import CoreText
 import SwiftUI
-import UIKit
 
 /// Thème de l'interface (Réglages › Thème), appliqué tout de suite : Néon (cyberpunk, d'origine), Rétro 8-bit (gris
 /// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel) ou Minimal sombre (noir pur pour
@@ -32,7 +32,12 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     func consoleColor(_ neon: Color) -> Color {
         guard self != .neon else { return neon }
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+#if os(iOS)
         UIColor(neon).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+#else
+        (NSColor(neon).usingColorSpace(.sRGB) ?? .white)
+            .getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+#endif
         return self == .retro
             ? Color(hue: hue, saturation: min(1, saturation * 1.1 + 0.15), brightness: brightness * 0.62)
             : Color(hue: hue, saturation: saturation * 0.5, brightness: min(0.82, brightness))
@@ -114,7 +119,7 @@ extension Font {
     /// Orbitron (police libre, licence OFL) ; `weight` de 400 (normal) à 900 (noir). Toujours elle, quel que soit le
     /// thème (animation de démarrage) ; ailleurs, `display`.
     static func orbitron(_ size: CGFloat, weight: CGFloat = 700) -> Font {
-        Font(UIFont.orbitron(size, weight: weight) as CTFont)
+        Font(orbitronFont(size, weight: weight))
     }
 
     /// Police des titres et boutons du thème : Orbitron (Néon), Press Start 2P (Rétro, police pixel libre OFL, plus
@@ -132,13 +137,11 @@ extension Font {
     }
 }
 
-extension UIFont {
-    static func orbitron(_ size: CGFloat, weight: CGFloat) -> UIFont {
-        // Police « variable » : la graisse se règle par l'axe « wght ».
-        let variation = UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
-        let descriptor = UIFontDescriptor(fontAttributes: [.family: "Orbitron", variation: [0x7767_6874: weight]])
-        return UIFont(descriptor: descriptor, size: size)
-    }
+/// Orbitron à la graisse voulue. Police « variable » : la graisse se règle par l'axe « wght ».
+private func orbitronFont(_ size: CGFloat, weight: CGFloat) -> CTFont {
+    let attributes: [CFString: Any] = [kCTFontFamilyNameAttribute: "Orbitron",
+                                       kCTFontVariationAttribute: [0x7767_6874: weight]]
+    return CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(attributes as CFDictionary), size, nil)
 }
 
 extension View {

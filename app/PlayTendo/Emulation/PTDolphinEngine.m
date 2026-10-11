@@ -52,7 +52,7 @@ static NSString *loadFailure;
                                             gameCubeSaveDirectory.fileSystemRepresentation,
                                             wiiSaveDirectory.fileSystemRepresentation);
     if (!view) return [self failAfterLoad:@"Le moteur GameCube/Wii n'a pas pu démarrer." error:error];
-    engine->_renderView = (__bridge UIView *)view;
+    engine->_renderView = (__bridge PTPlatformView *)view;
     loadedEngine = engine;
     return engine;
 }

@@ -1,5 +1,6 @@
 import CryptoKit
-import UIKit
+import Foundation
+import Security
 
 /// Source de secours des jaquettes : SteamGridDB (images faites par sa communauté, pour Steam), interrogée quand
 /// libretro n'a rien. Sa clé d'accès est embarquée masquée dans l'app (PTSecrets, scripts/make_secrets.py) et ne part
@@ -44,8 +45,8 @@ enum SteamGridDB {
               let imageURL = URL(string: grid.url) else { return .missing }
         do {
             let (data, response) = try await URLSession.shared.data(from: imageURL)
-            guard (response as? HTTPURLResponse)?.statusCode == 200, let image = UIImage(data: data),
-                  let jpeg = resized(image, width: 512).jpegData(compressionQuality: 0.88) else { return .offline }
+            guard (response as? HTTPURLResponse)?.statusCode == 200, let image = ImageCoding.decode(data),
+                  let jpeg = ImageCoding.jpeg(ImageCoding.resized(image, width: 512), quality: 0.88) else { return .offline }
             return .found(jpeg, gameName: game.name)
         } catch {
             return .offline
@@ -165,15 +166,5 @@ enum SteamGridDB {
         }
         guard let best, best.score >= 0.6 else { return nil }
         return best.game
-    }
-
-    private static func resized(_ image: UIImage, width: CGFloat) -> UIImage {
-        guard image.size.width > width else { return image }
-        let size = CGSize(width: width, height: (image.size.height * width / image.size.width).rounded())
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
     }
 }

@@ -1,8 +1,9 @@
 import SwiftUI
-import UIKit
 
 /// Mode turbo (JIT) : la PSP, la PS2, la GameCube/Wii et la 3DS traduisent leur code en instructions de l'iPhone au
 /// lieu de l'interpréter.
+///
+/// Sur Mac, l'app rend elle-même sa mémoire exécutable : la réserve est prête dès l'ouverture, sans rien à installer.
 ///
 /// Sur iOS 26 avec TXM (A15 et suivantes), seul un débogueur peut rendre de la mémoire exécutable.
 /// PlayTendo demande à StikDebug (adresse `stikdebug://enable-jit`) de s'attacher avec son script
@@ -90,7 +91,20 @@ final class JITManager: ObservableObject {
     nonisolated static func requires(_ system: GameSystem) -> Bool { system.isVita }
 
     var isStikDebugInstalled: Bool {
+#if os(iOS)
         UIApplication.shared.canOpenURL(URL(string: "stikdebug://")!)
+#else
+        false
+#endif
+    }
+
+    /// Le mode turbo s'active tout seul, sans app extérieure (Mac, simulateur).
+    nonisolated static var isAutomatic: Bool {
+#if os(macOS) || targetEnvironment(simulator)
+        true
+#else
+        false
+#endif
     }
 
     /// Active le JIT s'il ne l'est pas déjà. Une seule activation à la fois : un second appel attend la première.
@@ -121,8 +135,8 @@ final class JITManager: ObservableObject {
     }
 
     private func run() async throws {
-#if targetEnvironment(simulator)
-        // Pas de StikDebug dans le simulateur : même réserve, sans débogueur, pour tester les moteurs.
+#if targetEnvironment(simulator) || os(macOS)
+        // Pas de StikDebug dans le simulateur ni sur Mac : même réserve, sans débogueur.
         status = .activating(tr("Préparation de la mémoire…"))
         try await Self.preparePool(simulated: true)
 #else

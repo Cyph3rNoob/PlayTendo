@@ -44,7 +44,9 @@ struct LibraryView: View {
                 .padding(.bottom, 40)
                 .id("\(language.rawValue)-\(theme.rawValue)")
             }
+#if os(iOS)
             .scrollDismissesKeyboard(.immediately)
+#endif
             .refreshable { library.refresh() }
 
             // Fondu sombre derrière l'heure et la batterie quand les cartes défilent dessous.
@@ -61,9 +63,25 @@ struct LibraryView: View {
         }
         // Bibliothèque relue au retour d'une partie (app compilée avec la PS Vita : un jeu installé a pu quitter Jeux,
         // sa copie installée le remplace).
+#if os(iOS)
         .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
             EmulatorView(game: game)
         }
+#else
+        // Mac : jeux glissés dans la fenêtre depuis le Finder.
+        .dropDestination(for: URL.self) { urls, _ in
+            guard playing == nil, !urls.isEmpty else { return false }
+            library.importFiles(urls)
+            return true
+        }
+        // Barre des menus (PlayTendoApp) : Ajouter des jeux, Réglages.
+        .onReceive(NotificationCenter.default.publisher(for: .playTendoImportGames)) { _ in
+            if playing == nil { importing = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .playTendoShowSettings)) { _ in
+            if playing == nil { showingSettings = true }
+        }
+#endif
         .sheet(isPresented: $showingAbout) {
             AboutView()
         }
@@ -100,7 +118,11 @@ struct LibraryView: View {
             let extra = GameLibrary.files(of: game).count - 1
             let companions = extra == 1 ? tr(" avec son fichier associé")
                 : extra > 1 ? tr(" avec ses \(extra) fichiers associés") : ""
+#if os(iOS)
             Text(tr("« \(metadata.display(for: game).title) » sera supprimé de l'iPhone\(companions). Ses sauvegardes sont conservées."))
+#else
+            Text(tr("« \(metadata.display(for: game).title) » sera supprimé de ce Mac\(companions). Ses sauvegardes sont conservées."))
+#endif
         }
         .alert(library.importFailures.count == 1 ? tr("Fichier non ajouté") : tr("Fichiers non ajoutés"),
                isPresented: Binding(get: { !library.importFailures.isEmpty },
@@ -130,9 +152,24 @@ struct LibraryView: View {
         .animation(.easeInOut(duration: 0.25), value: library.importProgress == nil)
         .animation(.easeInOut(duration: 0.2), value: filter)
         .task(id: library.games) { metadata.update(library.games) }
+#if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             library.refresh()
         }
+#else
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if playing == nil { library.refresh() }
+        }
+        // Partie : par-dessus tout le reste, dans la fenêtre (Échap ouvre le menu pause).
+        .overlay {
+            if let game = playing {
+                EmulatorView(game: game) {
+                    playing = nil
+                    library.refresh()
+                }
+            }
+        }
+#endif
     }
 
     private func play(_ game: Game) {
@@ -197,7 +234,9 @@ struct LibraryView: View {
             TextField("", text: $search, prompt: Text(tr("RECHERCHER UN JEU")).foregroundStyle(Neon.dim))
                 .font(Neon.mono(14, weight: .medium))
                 .foregroundStyle(Neon.text)
+#if os(iOS)
                 .textInputAutocapitalization(.never)
+#endif
                 .autocorrectionDisabled()
                 .submitLabel(.search)
             if !search.isEmpty {
@@ -395,8 +434,8 @@ private struct CoverArt: View {
     @EnvironmentObject private var metadata: GameMetadata
     let game: Game
     let title: String
-    @State private var cover: UIImage?
-    @State private var backdrop: UIImage?
+    @State private var cover: PlatformImage?
+    @State private var backdrop: PlatformImage?
 
     var body: some View {
         ZStack {
@@ -405,7 +444,7 @@ private struct CoverArt: View {
                     Neon.coverBase
                     if let backdrop {
                         Color.clear.overlay {
-                            Image(uiImage: backdrop)
+                            Image(platformImage: backdrop)
                                 .resizable()
                                 .interpolation(.medium)
                                 .aspectRatio(contentMode: .fill)
@@ -413,7 +452,7 @@ private struct CoverArt: View {
                         }
                         .clipped()
                     }
-                    Image(uiImage: cover)
+                    Image(platformImage: cover)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .shadow(color: .black.opacity(0.6), radius: 8)
@@ -478,17 +517,17 @@ private struct GeneratedCover: View {
 private struct ContinueCard: View {
     @EnvironmentObject private var metadata: GameMetadata
     let game: Game
-    @State private var snapshot: UIImage?
-    @State private var cover: UIImage?
+    @State private var snapshot: PlatformImage?
+    @State private var cover: PlatformImage?
 
     var body: some View {
         let display = metadata.display(for: game)
         ZStack(alignment: .bottomLeading) {
             Group {
                 if let snapshot {
-                    Image(uiImage: snapshot).resizable().interpolation(.medium).aspectRatio(contentMode: .fill)
+                    Image(platformImage: snapshot).resizable().interpolation(.medium).aspectRatio(contentMode: .fill)
                 } else if let cover {
-                    Image(uiImage: cover).resizable().aspectRatio(contentMode: .fill).blur(radius: 6).opacity(0.7)
+                    Image(platformImage: cover).resizable().aspectRatio(contentMode: .fill).blur(radius: 6).opacity(0.7)
                 } else {
                     GeneratedCover(system: game.system, title: display.title)
                 }
@@ -501,7 +540,7 @@ private struct ContinueCard: View {
 
             HStack(alignment: .bottom, spacing: 10) {
                 if let cover {
-                    Image(uiImage: cover)
+                    Image(platformImage: cover)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 46, height: 62, alignment: .bottom)
@@ -572,6 +611,14 @@ private struct CardPressStyle: ButtonStyle {
 private struct EmptyLibraryView: View {
     let onImport: () -> Void
 
+    private var hint: String {
+#if os(iOS)
+        tr("Ajoute tes jeux avec le bouton ci-dessous (les .zip, .7z et .rar sont acceptés), ou dépose-les dans l'app Fichiers : **Sur mon iPhone › PlayTendo › Jeux**.")
+#else
+        tr("Ajoute tes jeux avec le bouton ci-dessous, ou glisse-les dans cette fenêtre depuis le Finder (les .zip, .7z et .rar sont acceptés).")
+#endif
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "gamecontroller.fill")
@@ -582,7 +629,7 @@ private struct EmptyLibraryView: View {
                 .font(.display(20, weight: 900))
                 .tracking(2)
                 .foregroundStyle(Neon.text)
-            Text(markdown: tr("Ajoute tes jeux avec le bouton ci-dessous (les .zip, .7z et .rar sont acceptés), ou dépose-les dans l'app Fichiers : **Sur mon iPhone › PlayTendo › Jeux**."))
+            Text(markdown: hint)
                 .font(.callout)
                 .foregroundStyle(Neon.dim)
                 .multilineTextAlignment(.center)

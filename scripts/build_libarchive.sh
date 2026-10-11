@@ -1,28 +1,37 @@
 #!/bin/zsh
 # Compile la bibliothèque d'archives de l'app : libarchive 3.8.9 (lecture des .zip, ZIP64 compris, .7z, .rar et .rar5)
-# avec liblzma de xz 5.8.4 (méthodes LZMA/LZMA2 des .7z), en bibliothèques statiques pour l'iPhone et le simulateur
-# → libs/libarchive/<ios|sim>/libarchive.a (les deux réunies) et libs/libarchive/include (archive.h, archive_entry.h).
-# zlib, bzip2 et iconv sont ceux d'iOS. Rien d'autre n'est compilé (ni outils, ni tests, ni chiffrement).
-# Sources : scripts/fetch_sources.sh. Rapide (~1 min) ; journaux : build/libarchive-<plateforme>.log
+# avec liblzma de xz 5.8.4 (méthodes LZMA/LZMA2 des .7z), en bibliothèques statiques pour l'iPhone, le simulateur et
+# le Mac → libs/libarchive/<ios|sim|mac>/libarchive.a (les deux réunies) et libs/libarchive/include (archive.h,
+# archive_entry.h). zlib, bzip2 et iconv sont ceux du système. Rien d'autre n'est compilé (ni outils, ni tests, ni
+# chiffrement). Sources : scripts/fetch_sources.sh. Rapide (~1 min) ; journaux : build/libarchive-<plateforme>.log
+#   zsh scripts/build_libarchive.sh [ios sim mac]   (sans argument : les trois)
 set -e
 setopt pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/libs/libarchive"
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
-# Même version minimale que l'app (IPHONEOS_DEPLOYMENT_TARGET du projet).
+# Mêmes versions minimales que l'app (IPHONEOS_DEPLOYMENT_TARGET et MACOSX_DEPLOYMENT_TARGET du projet).
 MIN_IOS=18.0
+MIN_MACOS=14.0
 
 mkdir -p "$ROOT/build"
-for platform in ios sim; do
-  if [ "$platform" = ios ]; then sdk=iphoneos; else sdk=iphonesimulator; fi
+if (( $# )); then PLATFORMS=("$@"); else PLATFORMS=(ios sim mac); fi
+for platform in $PLATFORMS; do
   BUILD="$ROOT/build/libarchive-$platform"
   PREFIX="$BUILD/prefix"
   LOG="$ROOT/build/libarchive-$platform.log"
   rm -rf "${BUILD:?}" && mkdir -p "$BUILD"
   : > "$LOG"
-  COMMON=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=$sdk
-          -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS -DBUILD_SHARED_LIBS=OFF
+  COMMON=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DBUILD_SHARED_LIBS=OFF
           -DCMAKE_INSTALL_PREFIX="$PREFIX")
+  case $platform in
+    ios) COMMON+=(-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS) ;;
+    sim) COMMON+=(-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS) ;;
+    # Mac : seulement les bibliothèques du système (pas celles de Homebrew, absentes chez les autres).
+    mac) COMMON+=(-DCMAKE_OSX_SYSROOT=macosx -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS
+                  "-DCMAKE_IGNORE_PREFIX_PATH=/opt/homebrew;/usr/local") ;;
+    *) echo "Plateforme inconnue : $platform (ios, sim ou mac)"; exit 1 ;;
+  esac
 
   echo "=== $platform : liblzma (xz 5.8.4) ==="
   cmake -S "$ROOT/sources/xz" -B "$BUILD/xz" "${COMMON[@]}" -DXZ_NLS=OFF -DXZ_DOC=OFF -DXZ_TOOL_XZ=OFF \
@@ -51,6 +60,5 @@ for platform in ios sim; do
 done
 
 mkdir -p "$OUT/include"
-cp "$ROOT/build/libarchive-ios/prefix/include/archive.h" "$ROOT/build/libarchive-ios/prefix/include/archive_entry.h" \
-  "$OUT/include/"
+cp "$PREFIX/include/archive.h" "$PREFIX/include/archive_entry.h" "$OUT/include/"
 echo "=== libarchive prête ==="

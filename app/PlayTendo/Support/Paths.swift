@@ -3,18 +3,31 @@ import os
 
 /// Emplacements des fichiers de l'app. Tout ce qui est dans Documents est visible
 /// dans l'app Fichiers (Sur mon iPhone › PlayTendo).
+///
+/// Sur Mac (app sans bac à sable), les mêmes dossiers sont rangés à part pour ne rien mêler aux fichiers de
+/// l'utilisateur : `documents` = ~/Library/Application Support/PlayTendo (Réglages › Dossiers l'ouvre dans le
+/// Finder), `support` = ~/Library/Application Support/com.playtendo.mac (fichiers internes).
 enum Paths {
+#if os(iOS)
     static let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    /// Fichiers internes : Application Support de l'app.
+    static let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+#else
+    static let documents = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("PlayTendo", isDirectory: true)
+    static let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.playtendo.mac", isDirectory: true)
+#endif
     static let games = documents.appendingPathComponent("Jeux", isDirectory: true)
     static let bios = documents.appendingPathComponent("BIOS", isDirectory: true)
     static let saves = documents.appendingPathComponent("Sauvegardes", isDirectory: true)
     static let logFile = documents.appendingPathComponent("Journal.txt")
 
-    static let states = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    static let states = support
         .appendingPathComponent("Etats", isDirectory: true)
 
     static func prepare() {
-        for folder in [games, bios, saves, states] {
+        for folder in [documents, games, bios, saves, states] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         writeReadme()
@@ -29,7 +42,6 @@ enum Paths {
     /// demande. Ne trouve plus rien une fois fait.
     private static func removeVitaLeftovers() {
         let manager = FileManager.default
-        let support = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let folders = [support.appendingPathComponent("Systeme/Vita"), support.appendingPathComponent("Jaquettes/Vita"),
                        thumbnails.appendingPathComponent("Vita"), states.appendingPathComponent("Vita"),
                        saves.appendingPathComponent("Vita")]
@@ -57,7 +69,7 @@ enum Paths {
     /// moteur range ses propres fichiers (embarqués dans l'app) dans un dossier interne.
     static func systemDirectory(for system: GameSystem) -> URL {
         guard system == .psp else { return bios }
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let folder = support
             .appendingPathComponent("Systeme", isDirectory: true)
         installBundledFiles(named: "PPSSPP", into: folder)
         return folder
@@ -85,19 +97,19 @@ enum Paths {
 
     /// Dossier interne du moteur PS2 (réglages, journal `logs/emulog.txt`, caches). Ses BIOS sont dans BIOS
     /// avec les autres, ses cartes mémoire dans Sauvegardes/PS2.
-    static let ps2Engine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    static let ps2Engine = support
         .appendingPathComponent("Systeme/PS2", isDirectory: true)
 
     /// Dossier interne du moteur GameCube/Wii (réglages, journal `Logs/dolphin.log`, caches). Ses sauvegardes
     /// sont dans Sauvegardes/GameCube (un fichier .gci par sauvegarde, par région) et Sauvegardes/Wii (mémoire
     /// interne de la console).
-    static let dolphinEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    static let dolphinEngine = support
         .appendingPathComponent("Systeme/Dolphin", isDirectory: true)
 
 #if PLAYTENDO_VITA
     /// Dossier interne du moteur PS Vita : la mémoire de la console (`vita/` : firmware, jeux installés et
     /// déchiffrés dans ux0/app, sauvegardes des jeux dans ux0/user), réglages, caches et journal `vita3k.log`.
-    static let vitaEngine = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    static let vitaEngine = support
         .appendingPathComponent("Systeme/Vita", isDirectory: true)
 
     /// Les jeux installés (des Go) et les caches ne vont pas dans la sauvegarde iCloud de l'iPhone. Leur original
@@ -239,7 +251,7 @@ enum Paths {
         }
     }
 
-    static let thumbnails = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    static let thumbnails = support
         .appendingPathComponent("Vignettes", isDirectory: true)
 
     static func thumbnailFile(for game: Game) -> URL {
@@ -260,7 +272,11 @@ enum Paths {
         let english = AppLanguage.isEnglish
         let file = documents.appendingPathComponent(english ? "Read Me.txt" : "Lisez-moi.txt")
         try? FileManager.default.removeItem(at: documents.appendingPathComponent(english ? "Lisez-moi.txt" : "Read Me.txt"))
+#if os(iOS)
         let text = english ? readmeTextEnglish : readmeText
+#else
+        let text = macReadme(english: english)
+#endif
         if (try? String(contentsOf: file, encoding: .utf8)) != text {
             try? text.write(to: file, atomically: true, encoding: .utf8)
         }
@@ -333,6 +349,76 @@ enum Paths {
       The app's technical log (in French), useful if something goes wrong.
       Journal-precedent.txt: the one from the previous session.
     """
+
+#if os(macOS)
+    /// Lisez-moi du Mac : seulement les consoles déjà dans l'app (elles arrivent étape par étape).
+    private static func macReadme(english: Bool) -> String {
+        let installed = { (systems: [GameSystem]) in systems.contains(where: EmulatorSession.engineInstalled) }
+        let games: [([GameSystem], String, String)] = [
+            ([.nes], "NES .nes", "NES .nes"),
+            ([.snes], "Super Nintendo .sfc .smc", "Super Nintendo .sfc .smc"),
+            ([.n64], "Nintendo 64 .z64 .n64 .v64", "Nintendo 64 .z64 .n64 .v64"),
+            ([.gb, .gbc, .gba], "Game Boy .gb · Game Boy Color .gbc · Game Boy Advance .gba",
+             "Game Boy .gb · Game Boy Color .gbc · Game Boy Advance .gba"),
+            ([.nds], "Nintendo DS .nds", "Nintendo DS .nds"),
+            ([.psx], "PlayStation .chd .pbp .m3u, ou .cue avec ses fichiers .bin",
+             "PlayStation .chd .pbp .m3u, or .cue with its .bin files"),
+            ([.ps2], "PlayStation 2 .iso .chd .cso", "PlayStation 2 .iso .chd .cso"),
+            ([.psp], "PlayStation Portable .iso .cso .pbp", "PlayStation Portable .iso .cso .pbp"),
+            ([.gameCube, .wii], "GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz",
+             "GameCube and Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz"),
+            ([.n3ds], "Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)",
+             "Nintendo 3DS .3ds .cci .cxi .3dsx (decrypted games)"),
+        ]
+        let bios: [([GameSystem], String, String)] = [
+            ([.psx], "PlayStation : scph5501.bin (ou scph1001.bin…)", "PlayStation: scph5501.bin (or scph1001.bin…)"),
+            ([.nds], "Nintendo DS : bios7.bin, bios9.bin, firmware.bin", "Nintendo DS: bios7.bin, bios9.bin, firmware.bin"),
+            ([.gba], "Game Boy Advance : gba_bios.bin", "Game Boy Advance: gba_bios.bin"),
+            ([.ps2], "PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo\n    (« SCPH-70004… », n'importe quel nom), ou Réglages › BIOS PS2 › Importer un BIOS PS2",
+             "PlayStation 2 (required): your console's BIOS, a 4 MB .bin file\n    (“SCPH-70004…”, any name), or Settings › PS2 BIOS › Import a PS2 BIOS"),
+        ]
+        let gameLines = games.filter { installed($0.0) }.map { "  " + (english ? $0.2 : $0.1) }.joined(separator: "\n")
+        let biosLines = bios.filter { installed($0.0) }.map { "  " + (english ? $0.2 : $0.1) }.joined(separator: "\n")
+        if english {
+            return """
+            PlayTendo — what goes where
+
+            Jeux (games)
+              Put your games here (you can make subfolders), or drag them into the PlayTendo window:
+            \(gameLines)
+              .zip, .7z and .rar archives are accepted with the app's “+” button or by dragging them in.
+
+            BIOS (optional)
+            \(biosLines)
+
+            Sauvegardes (saves)
+              Your games' saves. Copy this folder to keep them safe.
+
+            Journal.txt
+              The app's technical log (in French), useful if something goes wrong.
+              Journal-precedent.txt: the one from the previous session.
+            """
+        }
+        return """
+        PlayTendo — où ranger quoi
+
+        Jeux
+          Mets tes jeux ici (tu peux créer des sous-dossiers), ou glisse-les dans la fenêtre de PlayTendo :
+        \(gameLines)
+          Les archives .zip, .7z et .rar sont acceptées avec le bouton « + » de l'app ou en les glissant.
+
+        BIOS (facultatif)
+        \(biosLines)
+
+        Sauvegardes
+          Les sauvegardes de tes jeux. Copie ce dossier pour les mettre à l'abri.
+
+        Journal.txt
+          Le journal technique de l'app, utile en cas de problème.
+          Journal-precedent.txt : celui de la session d'avant.
+        """
+    }
+#endif
 
 #if PLAYTENDO_VITA
     private static let readmeVitaGamesEnglish = """

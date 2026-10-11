@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Animation de démarrage : un écran cathodique s'allume sur le logo, une étincelle jaillit entre
 /// les deux manettes, puis « PLAYTENDO » s'écrit.
@@ -21,7 +20,7 @@ struct BootView: View {
     @State private var finished = false
 
     /// Logo rangé à la racine de l'app (hors catalogue d'images, pour garder sa pleine définition).
-    private static let logo = UIImage(named: "BootLogo") ?? UIImage()
+    private static let logo = PlatformImage(named: "BootLogo") ?? PlatformImage()
     private static let title = Array("PLAYTENDO")
     private static let red = Color(red: 1.0, green: 0.12, blue: 0.16)
     private static let blue = Color(red: 0.12, green: 0.45, blue: 1.0)
@@ -41,7 +40,7 @@ struct BootView: View {
                         .shadow(color: Self.blue, radius: 16)
                         .opacity(lineOpacity)
 
-                    Image(uiImage: Self.logo)
+                    Image(platformImage: Self.logo)
                         .resizable()
                         .interpolation(.high)
                         .frame(width: logoSize, height: logoSize)
@@ -137,7 +136,9 @@ struct BootView: View {
         }
 
         // Étincelle et halos.
+#if os(iOS)
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.8)
+#endif
         sparkOpacity = 1
         withAnimation(.easeOut(duration: 0.5)) {
             spark = 1.7

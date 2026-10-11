@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Présentation de PlayTendo en 4 cartes (demandée le 2026-10-07) : montrée une fois après l'animation de démarrage
 /// (premier lancement, et à chaque nouvelle version de la présentation), et depuis « À propos ».
@@ -11,9 +10,19 @@ struct WelcomeView: View {
     let onFinish: () -> Void
 
     @State private var page = 0
-    private let pageCount = 4
+    private var pageCount: Int { showsTurbo ? 4 : 3 }
 
+#if os(iOS)
     private var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
+    private let showsTurbo = true
+#else
+    private let device = "Mac"
+    /// Sur Mac, la carte du mode turbo n'apparaît qu'avec une console qui s'en sert.
+    private let showsTurbo = GameSystem.allCases.contains { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }
+#endif
+
+    /// Consoles de l'app (sur Mac, celles déjà arrivées).
+    private let systems = GameSystem.libraryGroups.filter { $0.groupMembers.contains(where: EmulatorSession.engineInstalled) }
 
     var body: some View {
         ZStack {
@@ -30,6 +39,7 @@ struct WelcomeView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
 
+#if os(iOS)
                 TabView(selection: $page) {
                     intro.tag(0)
                     games.tag(1)
@@ -37,6 +47,19 @@ struct WelcomeView: View {
                     turbo.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+#else
+                // Mac : une carte à la fois (les points du bas permettent de revenir en arrière).
+                Group {
+                    switch page {
+                    case 0: intro
+                    case 1: games
+                    case 2: play
+                    default: turbo
+                    }
+                }
+                .id(page)
+                .transition(.opacity)
+#endif
 
                 dots.padding(.bottom, 16)
                 nextButton
@@ -52,8 +75,8 @@ struct WelcomeView: View {
     private var intro: some View {
         WelcomeCard {
             VStack(spacing: 10) {
-                if let logo = UIImage(named: "BootLogo") {
-                    Image(uiImage: logo)
+                if let logo = PlatformImage(named: "BootLogo") {
+                    Image(platformImage: logo)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 110, height: 110)
@@ -70,23 +93,31 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            Text("\(GameSystem.displayOrder.count) CONSOLES")
+            Text("\(GameSystem.displayOrder.filter(EmulatorSession.engineInstalled).count) CONSOLES")
                 .font(.display(12, weight: 800))
                 .tracking(2)
                 .foregroundStyle(Neon.dim)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 6)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 10)], spacing: 12) {
-                ForEach(GameSystem.libraryGroups) { system in
+                ForEach(systems) { system in
                     SystemBadge(system: system, size: 11)
                 }
             }
+#if os(iOS)
             WelcomeLine(icon: "sparkles",
                         text: tr("Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, PS2), 3 fois (GameCube, Wii, 3DS) ou 2 fois (PS1)."))
             WelcomeLine(icon: "rectangle.ratio.16.to.9", text: tr("L'écran large 16:9 pour la N64 et la PS2."))
+#else
+            WelcomeLine(icon: "sparkles", text: tr("Une image nette et agrandie, en fenêtre ou en plein écran."))
+#endif
             WelcomeLine(icon: "clock.arrow.circlepath",
                         text: tr("Une sauvegarde rapide à tout moment, et « Continuer » pour reprendre là où tu t'étais arrêté."))
+#if os(iOS)
             WelcomeLine(icon: "ipad.and.iphone", text: tr("Sur iPhone et iPad, avec les boutons à l'écran ou une manette."))
+#else
+            WelcomeLine(icon: "keyboard", text: tr("Au clavier ou à la manette (Switch, Xbox, PlayStation)."))
+#endif
         }
     }
 
@@ -94,19 +125,32 @@ struct WelcomeView: View {
         WelcomeCard {
             WelcomeTitle(icon: "folder.fill", title: tr("AJOUTE TES JEUX"), color: Neon.cyan)
             WelcomeLine(icon: "info.circle", text: tr("PlayTendo ne contient aucun jeu : il fait tourner les tiens."))
+#if os(iOS)
             WelcomeLine(icon: "folder", text: tr("Copie-les dans l'app Fichiers › Sur mon \(device) › PlayTendo › Jeux."))
             WelcomeLine(icon: "plus.circle", text: tr("Ou touche « + » dans la bibliothèque (les .zip, .7z et .rar marchent aussi)."))
-            WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS PS2)."))
+#else
+            WelcomeLine(icon: "folder", text: tr("Glisse-les dans la fenêtre de PlayTendo depuis le Finder."))
+            WelcomeLine(icon: "plus.circle", text: tr("Ou clique sur « + » dans la bibliothèque (les .zip, .7z et .rar marchent aussi)."))
+#endif
+            if EmulatorSession.engineInstalled(for: .ps2) {
+                WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS PS2)."))
+            }
         }
     }
 
     private var play: some View {
         WelcomeCard {
             WelcomeTitle(icon: "gamecontroller.fill", title: tr("JOUE"), color: Neon.magenta)
+#if os(iOS)
             WelcomeLine(icon: "hand.tap", text: tr("Touche un jeu pour le lancer : des boutons apparaissent à l'écran."))
             WelcomeLine(icon: "gamecontroller",
                         text: tr("Une manette Bluetooth (Switch, Xbox, PlayStation) marche aussi : les boutons de l'écran s'effacent dès que tu t'en sers."))
             WelcomeLine(icon: "pause.circle", text: tr("Le bouton menu met le jeu en pause : sauvegarde rapide, options, quitter."))
+#else
+            WelcomeLine(icon: "cursorarrow.click", text: tr("Clique sur un jeu pour le lancer ; les touches du clavier sont dans les Réglages."))
+            WelcomeLine(icon: "gamecontroller", text: tr("Une manette Bluetooth ou USB (Switch, Xbox, PlayStation) marche aussi."))
+            WelcomeLine(icon: "pause.circle", text: tr("Échap met le jeu en pause : sauvegarde rapide, options, plein écran, quitter."))
+#endif
             WelcomeLine(icon: "externaldrive", text: tr("Les sauvegardes des jeux s'enregistrent toutes seules."))
         }
     }
@@ -114,6 +158,10 @@ struct WelcomeView: View {
     private var turbo: some View {
         WelcomeCard {
             WelcomeTitle(icon: "bolt.fill", title: tr("MODE TURBO"), color: Neon.violet)
+#if os(macOS)
+            WelcomeLine(icon: "bolt", text: tr("Il accélère la PSP, la PS2, la GameCube, la Wii et la 3DS."))
+            WelcomeLine(icon: "checkmark.circle", text: tr("Sur Mac, il s'active tout seul : rien à installer."))
+#else
 #if PLAYTENDO_VITA
             WelcomeLine(icon: "bolt", text: tr("Obligatoire pour la PS Vita, indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
 #else
@@ -123,6 +171,7 @@ struct WelcomeView: View {
             WelcomeLine(icon: "arrow.triangle.2.circlepath",
                         text: tr("Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo : StikDebug s'ouvre quelques secondes puis te ramène ici."))
             WelcomeLine(icon: "gearshape", text: tr("Tout est expliqué dans la roue dentée de la bibliothèque."))
+#endif
         }
     }
 
@@ -135,6 +184,11 @@ struct WelcomeView: View {
                     .fill(index == page ? Neon.cyan : Neon.dim.opacity(0.4))
                     .frame(width: index == page ? 22 : 8, height: 8)
                     .neonGlow(index == page ? Neon.cyan : .clear, radius: 5)
+#if os(macOS)
+                    .padding(4)
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation { page = index } }
+#endif
             }
         }
         .animation(.easeInOut(duration: 0.2), value: page)

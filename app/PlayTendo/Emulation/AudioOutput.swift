@@ -24,6 +24,7 @@ final class AudioOutput {
         engine.attach(source)
         engine.connect(source, to: engine.mainMixerNode, format: format)
 
+#if os(iOS)
         interruptionObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] notification in
@@ -31,6 +32,7 @@ final class AudioOutput {
                   AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
             self?.start()
         }
+#endif
         // Écouteurs branchés ou débranchés, AirPods connectés… : iOS arrête alors le moteur audio
         // (nouvelle sortie, nouvelle fréquence) ; on le relance aussitôt.
         configurationObserver = NotificationCenter.default.addObserver(
@@ -48,11 +50,13 @@ final class AudioOutput {
     }
 
     func start() {
+#if os(iOS)
         let session = AVAudioSession.sharedInstance()
         // « ambient » : le son respecte le bouton silencieux et se mélange aux autres apps.
         try? session.setCategory(.ambient, mode: .default)
         try? session.setPreferredIOBufferDuration(0.01)
         try? session.setActive(true)
+#endif
         if !engine.isRunning {
             do {
                 try engine.start()

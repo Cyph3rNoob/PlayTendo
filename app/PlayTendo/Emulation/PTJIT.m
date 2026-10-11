@@ -224,7 +224,9 @@ bool PTJITPreparePool(size_t size, char *error, size_t errorSize) {
 }
 
 bool PTJITPrepareSimulatedPool(size_t size, char *error, size_t errorSize) {
-#if TARGET_OS_SIMULATOR
+    // Simulateur et Mac : pas de TXM, une app signée localement (sans « hardened runtime ») peut rendre sa propre
+    // mémoire exécutable. Même réserve à deux vues que sur iPhone, sans débogueur.
+#if TARGET_OS_SIMULATOR || TARGET_OS_OSX
     if (atomic_load(&gActive)) return true;
     size = PTJITRound(size);
     void *executable = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
@@ -242,11 +244,15 @@ bool PTJITPrepareSimulatedPool(size_t size, char *error, size_t errorSize) {
         PTJITSetError(error, errorSize, @"le code ne s'exécute pas correctement.");
         return false;
     }
+#if TARGET_OS_OSX
+    PTLogLine(@"JIT : réserve préparée par l'app (Mac)");
+#else
     PTLogLine(@"JIT simulé (simulateur)");
+#endif
     PTJITActivate(executable, (uint8_t *)writable, size);
     return true;
 #else
-    PTJITSetError(error, errorSize, @"réserve simulée réservée au simulateur.");
+    PTJITSetError(error, errorSize, @"réserve simulée réservée au simulateur et au Mac.");
     return false;
 #endif
 }

@@ -1,6 +1,5 @@
 import ImageIO
 import SwiftUI
-import UIKit
 
 /// Ce que l'app sait de chaque jeu au-delà du fichier : son nom officiel (reconnu dans la base),
 /// sa jaquette (téléchargée chez libretro) et la date de la dernière partie.
@@ -24,7 +23,7 @@ final class GameMetadata: ObservableObject {
     /// Jeux de la file à reconnaître de nouveau même sans changement (« Actualiser la jaquette »).
     private var queuedForced = Set<String>()
 
-    private static let infosFile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    private static let infosFile = Paths.support
         .appendingPathComponent("Bibliotheque/infos.json")
     private static let lastPlayedKey = "dernieresParties"
     private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
@@ -241,7 +240,7 @@ final class GameMetadata: ObservableObject {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 guard let http = response as? HTTPURLResponse else { return .offline }
                 if http.statusCode == 404 { continue }
-                guard http.statusCode == 200, UIImage(data: data) != nil else { return .offline }
+                guard http.statusCode == 200, ImageCoding.isImage(data) else { return .offline }
                 let file = coverURL(name: name, system: system)
                 try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try data.write(to: file, options: .atomic)
@@ -280,7 +279,7 @@ final class GameMetadata: ObservableObject {
 
     nonisolated static func coverURL(name: String, system: GameSystem) -> URL {
         let safe = String(name.map { "/:\\".contains($0) ? "_" : $0 })
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return Paths.support
             .appendingPathComponent("Jaquettes/\(system.folderName)/\(safe).png")
     }
 }
@@ -324,20 +323,20 @@ struct GameDisplay {
 
 /// Images des jaquettes et vignettes, réduites et gardées en mémoire.
 enum CoverImages {
-    private static let cache = NSCache<NSString, UIImage>()
+    private static let cache = NSCache<NSString, PlatformImage>()
     private static let sizes = [24, 600, 700]
 
     private static func key(_ url: URL, _ maxPixel: Int) -> NSString { "\(url.path)#\(maxPixel)" as NSString }
 
-    static func load(_ url: URL, maxPixel: Int = 700) async -> UIImage? {
+    static func load(_ url: URL, maxPixel: Int = 700) async -> PlatformImage? {
         if let image = cache.object(forKey: key(url, maxPixel)) { return image }
-        let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+        let image = await Task.detached(priority: .userInitiated) { () -> PlatformImage? in
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
                                             kCGImageSourceCreateThumbnailWithTransform: true]
             guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-            return UIImage(cgImage: cgImage)
+            return PlatformImage.make(cgImage)
         }.value
         if let image { cache.setObject(image, forKey: key(url, maxPixel)) }
         return image

@@ -13,7 +13,9 @@ enum BootSound {
     /// Chargé dès le lancement de l'app, pour partir sans délai avec l'animation.
     static func prepare() {
         guard isEnabled, let url = Bundle.main.url(forResource: "BootSound", withExtension: "m4a") else { return }
+#if os(iOS)
         try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
+#endif
         player = try? AVAudioPlayer(contentsOf: url)
         player?.prepareToPlay()
     }

@@ -1,5 +1,7 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#endif
 
 @MainActor
 final class GameLibrary: ObservableObject {
@@ -106,7 +108,9 @@ final class GameLibrary: ObservableObject {
     private var importAdded = 0
     private var importPresent = 0
     private var importFailuresPending: [String] = []
+#if os(iOS)
     private var importBackgroundTask = UIBackgroundTaskIdentifier.invalid
+#endif
     private let importCancel = ImportCancel()
 
     /// Annulation demandée (bouton du bandeau, ou temps en arrière-plan écoulé), lue par le fil de l'import.
@@ -136,10 +140,12 @@ final class GameLibrary: ObservableObject {
         // arrière-plan ; s'il s'écoule, l'import s'arrête proprement (fichier commencé effacé).
         ScreenAwake.hold(.importing)
         let cancel = importCancel
+#if os(iOS)
         importBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Import de jeux") { [weak self] in
             cancel.cancel()
             MainActor.assumeIsolated { self?.endImportBackgroundTask() }
         }
+#endif
         Task.detached(priority: .userInitiated) { [self] in
             await runImports(cancel: cancel)
         }
@@ -250,9 +256,11 @@ final class GameLibrary: ObservableObject {
     }
 
     private func endImportBackgroundTask() {
+#if os(iOS)
         guard importBackgroundTask != .invalid else { return }
         UIApplication.shared.endBackgroundTask(importBackgroundTask)
         importBackgroundTask = .invalid
+#endif
     }
 
     private enum ImportResult {

@@ -50,7 +50,7 @@ static NSString *loadFailure;
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);
     if (!view) return [self failAfterLoad:@"Le moteur PS2 n'a pas pu démarrer." error:error];
-    engine->_renderView = (__bridge UIView *)view;
+    engine->_renderView = (__bridge PTPlatformView *)view;
     loadedEngine = engine;
     return engine;
 }
@@ -121,7 +121,7 @@ static NSString *loadFailure;
     return _fn.PTPS2GetAspectRatio();
 }
 
-- (UIImage *)snapshot {
+- (PTPlatformImage *)snapshot {
     int width = 0, height = 0;
     void *pixels = _fn.PTPS2CopySnapshot(&width, &height);
     if (!pixels) return nil;
@@ -134,7 +134,7 @@ static NSString *loadFailure;
     CGColorSpaceRelease(space);
     CGDataProviderRelease(provider);
     if (!image) return nil;
-    UIImage *result = [UIImage imageWithCGImage:image];
+    PTPlatformImage *result = PTPlatformImageWithCGImage(image);
     CGImageRelease(image);
     return result;
 }

@@ -9,6 +9,8 @@
 /* Begin PBXFileReference section */
 		7F0000000000000000000005 /* PlayTendo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlayTendo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F0000000000000000000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7F0000000000000000000021 /* PlayTendo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlayTendo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7F0000000000000000000022 /* Info-Mac.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Mac.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +25,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7F0000000000000000000024 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -31,6 +40,7 @@
 			children = (
 				7F0000000000000000000004 /* PlayTendo */,
 				7F0000000000000000000011 /* Info.plist */,
+				7F0000000000000000000022 /* Info-Mac.plist */,
 				7F0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -39,6 +49,7 @@
 			isa = PBXGroup;
 			children = (
 				7F0000000000000000000005 /* PlayTendo.app */,
+				7F0000000000000000000021 /* PlayTendo.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -68,6 +79,28 @@
 			productReference = 7F0000000000000000000005 /* PlayTendo.app */;
 			productType = "com.apple.product-type.application";
 		};
+		7F0000000000000000000020 /* PlayTendo Mac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7F0000000000000000000027 /* Build configuration list for PBXNativeTarget "PlayTendo Mac" */;
+			buildPhases = (
+				7F00000000000000000000A2 /* Clés masquées */,
+				7F0000000000000000000023 /* Sources */,
+				7F0000000000000000000024 /* Frameworks */,
+				7F0000000000000000000025 /* Resources */,
+				7F0000000000000000000026 /* Embed cores */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7F0000000000000000000004 /* PlayTendo */,
+			);
+			name = "PlayTendo Mac";
+			productName = PlayTendo;
+			productReference = 7F0000000000000000000021 /* PlayTendo.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -79,6 +112,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					7F0000000000000000000006 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					7F0000000000000000000020 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -98,12 +134,20 @@
 			projectRoot = "";
 			targets = (
 				7F0000000000000000000006 /* PlayTendo */,
+				7F0000000000000000000020 /* PlayTendo Mac */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		7F0000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7F0000000000000000000025 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -150,12 +194,58 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Copie les moteurs d'émulation (frameworks) dans l'app.\nset -e\nCORES=\"${PROJECT_DIR}/../cores/ios\"\nif [ \"${PLATFORM_NAME}\" = \"iphonesimulator\" ]; then CORES=\"${PROJECT_DIR}/../cores/sim\"; fi\nDEST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nmkdir -p \"${DEST}\"\nfor FW in \"${CORES}\"/*.framework; do\n  [ -d \"${FW}\" ] || continue\n  NAME=$(basename \"${FW}\")\n  # PS Vita mise de côté : VitaCore seulement dans une app compilée avec elle (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).\n  if [ \"${NAME}\" = \"VitaCore.framework\" ]; then\n    case \" ${SWIFT_ACTIVE_COMPILATION_CONDITIONS} \" in\n      *\" PLAYTENDO_VITA \"*) ;;\n      *) rm -rf \"${DEST:?}/${NAME:?}\"; continue ;;\n    esac\n  fi\n  rm -rf \"${DEST:?}/${NAME:?}\"\n  cp -R \"${FW}\" \"${DEST}/\"\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY}\" ]; then\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none \"${DEST}/${NAME}\"\n  fi\ndone\n# Fichiers d'accompagnement des moteurs (PPSSPP…).\nRES=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nfor A in \"${PROJECT_DIR}/../cores/assets\"/*; do\n  [ -d \"${A}\" ] || continue\n  ASSET=$(basename \"${A}\")\n  rm -rf \"${RES:?}/${ASSET:?}\"\n  cp -R \"${A}\" \"${RES}/\"\ndone\n";
+			shellScript = "# Copie les moteurs d'émulation (frameworks) dans l'app.\nset -e\nCORES=\"${PROJECT_DIR}/../cores/ios\"\nif [ \"${PLATFORM_NAME}\" = \"iphonesimulator\" ]; then CORES=\"${PROJECT_DIR}/../cores/sim\"; fi\nif [ \"${PLATFORM_NAME}\" = \"macosx\" ]; then CORES=\"${PROJECT_DIR}/../cores/mac\"; fi\n# Mac : signature locale (« - ») si aucune identité n'est donnée (l'app ne se signe pas sinon).\nSIGN=\"${EXPANDED_CODE_SIGN_IDENTITY}\"\nif [ \"${PLATFORM_NAME}\" = \"macosx\" ] && [ -z \"${SIGN}\" ]; then SIGN=\"-\"; fi\nDEST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nmkdir -p \"${DEST}\"\nfor FW in \"${CORES}\"/*.framework; do\n  [ -d \"${FW}\" ] || continue\n  NAME=$(basename \"${FW}\")\n  # PS Vita mise de côté : VitaCore seulement dans une app compilée avec elle (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).\n  if [ \"${NAME}\" = \"VitaCore.framework\" ]; then\n    case \" ${SWIFT_ACTIVE_COMPILATION_CONDITIONS} \" in\n      *\" PLAYTENDO_VITA \"*) ;;\n      *) rm -rf \"${DEST:?}/${NAME:?}\"; continue ;;\n    esac\n  fi\n  rm -rf \"${DEST:?}/${NAME:?}\"\n  cp -R \"${FW}\" \"${DEST}/\"\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${SIGN}\" ]; then\n    codesign --force --sign \"${SIGN}\" --timestamp=none \"${DEST}/${NAME}\"\n  fi\ndone\n# Fichiers d'accompagnement des moteurs (PPSSPP…).\nRES=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nfor A in \"${PROJECT_DIR}/../cores/assets\"/*; do\n  [ -d \"${A}\" ] || continue\n  ASSET=$(basename \"${A}\")\n  rm -rf \"${RES:?}/${ASSET:?}\"\n  cp -R \"${A}\" \"${RES}/\"\ndone\n";
+		};
+		7F00000000000000000000A2 /* Clés masquées */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Clés masquées";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(PROJECT_DIR)/../build/generated/PTSecrets.generated.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Clés de service masquées (jamais en clair dans l'app) : build/generated/PTSecrets.generated.h.\nset -e\npython3 \"${PROJECT_DIR}/../scripts/make_secrets.py\"\n";
+		};
+		7F0000000000000000000026 /* Embed cores */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed cores";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Copie les moteurs d'émulation (frameworks) dans l'app.\nset -e\nCORES=\"${PROJECT_DIR}/../cores/ios\"\nif [ \"${PLATFORM_NAME}\" = \"iphonesimulator\" ]; then CORES=\"${PROJECT_DIR}/../cores/sim\"; fi\nif [ \"${PLATFORM_NAME}\" = \"macosx\" ]; then CORES=\"${PROJECT_DIR}/../cores/mac\"; fi\n# Mac : signature locale (« - ») si aucune identité n'est donnée (l'app ne se signe pas sinon).\nSIGN=\"${EXPANDED_CODE_SIGN_IDENTITY}\"\nif [ \"${PLATFORM_NAME}\" = \"macosx\" ] && [ -z \"${SIGN}\" ]; then SIGN=\"-\"; fi\nDEST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nmkdir -p \"${DEST}\"\nfor FW in \"${CORES}\"/*.framework; do\n  [ -d \"${FW}\" ] || continue\n  NAME=$(basename \"${FW}\")\n  # PS Vita mise de côté : VitaCore seulement dans une app compilée avec elle (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).\n  if [ \"${NAME}\" = \"VitaCore.framework\" ]; then\n    case \" ${SWIFT_ACTIVE_COMPILATION_CONDITIONS} \" in\n      *\" PLAYTENDO_VITA \"*) ;;\n      *) rm -rf \"${DEST:?}/${NAME:?}\"; continue ;;\n    esac\n  fi\n  rm -rf \"${DEST:?}/${NAME:?}\"\n  cp -R \"${FW}\" \"${DEST}/\"\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${SIGN}\" ]; then\n    codesign --force --sign \"${SIGN}\" --timestamp=none \"${DEST}/${NAME}\"\n  fi\ndone\n# Fichiers d'accompagnement des moteurs (PPSSPP…).\nRES=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nfor A in \"${PROJECT_DIR}/../cores/assets\"/*; do\n  [ -d \"${A}\" ] || continue\n  ASSET=$(basename \"${A}\")\n  rm -rf \"${RES:?}/${ASSET:?}\"\n  cp -R \"${A}\" \"${RES}/\"\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		7F0000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7F0000000000000000000023 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -308,6 +398,92 @@
 			};
 			name = Release;
 		};
+		7F0000000000000000000028 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/PlayTendo/Emulation/Vulkan",
+					"$(SRCROOT)/../libs/libarchive/include",
+					"$(SRCROOT)/../build/generated",
+				);
+				INFOPLIST_FILE = "Info-Mac.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/../libs/libarchive/mac/libarchive.a",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.playtendo.mac;
+				PRODUCT_NAME = PlayTendo;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "PlayTendo/Emulation/PlayTendo-Bridging-Header.h";
+			};
+			name = Debug;
+		};
+		7F0000000000000000000029 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/PlayTendo/Emulation/Vulkan",
+					"$(SRCROOT)/../libs/libarchive/include",
+					"$(SRCROOT)/../build/generated",
+				);
+				INFOPLIST_FILE = "Info-Mac.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(SRCROOT)/../libs/libarchive/mac/libarchive.a",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.playtendo.mac;
+				PRODUCT_NAME = PlayTendo;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "PlayTendo/Emulation/PlayTendo-Bridging-Header.h";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -325,6 +501,15 @@
 			buildConfigurations = (
 				7F000000000000000000000F /* Debug */,
 				7F0000000000000000000010 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7F0000000000000000000027 /* Build configuration list for PBXNativeTarget "PlayTendo Mac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7F0000000000000000000028 /* Debug */,
+				7F0000000000000000000029 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -1,5 +1,5 @@
 import Foundation
-import UIKit
+import SwiftUI
 
 /// Fait tourner un jeu : charge le moteur, cadence les images, le son et gère les sauvegardes.
 /// Le moteur vit sur son propre thread ; l'interface lui envoie des commandes.
@@ -39,7 +39,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var vitaAccuracy: VitaSettings.Accuracy?
 #endif
     /// PS2, GameCube/Wii : vue Metal où le moteur dessine, placée par l'écran de jeu.
-    @Published private(set) var engineView: UIView?
+    @Published private(set) var engineView: PlatformView?
 
     private let ring: OpaquePointer
     /// Moteur en cours : écrit par le thread d'émulation, lu aussi par les entrées (écran, manette)
@@ -75,6 +75,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private var pendingReloadState: Data?
     private var pendingReloadAttempts = 0
 
+#if os(macOS)
+    /// Partie en cours (thread principal) : arrêtée proprement avant que l'app se ferme (MacAppDelegate).
+    nonisolated(unsafe) static weak var active: EmulatorSession?
+#endif
+
     init(game: Game) {
         self.game = game
         ring = PTAudioRingCreate(48_000)
@@ -89,6 +94,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     func start() {
         guard thread == nil else { return }
+#if os(macOS)
+        // Sur Mac, les consoles arrivent étape par étape : sans son moteur dans l'app, un message clair.
+        guard Self.engineInstalled(for: game.system) else {
+            fail(tr("La \(game.system.name) n'est pas encore disponible sur Mac : elle arrivera dans une prochaine version de PlayTendo."))
+            return
+        }
+        Self.active = self
+#endif
         var external: ExternalEngine?
         do {
             switch game.system {
@@ -371,10 +384,26 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     private func finishStop() {
+#if os(macOS)
+        if Self.active === self { Self.active = nil }
+#endif
         let handlers = stopHandlers
         stopHandlers.removeAll()
         handlers.forEach { $0() }
     }
+
+    /// Le moteur de cette console est dans l'app (sur Mac, les consoles arrivent étape par étape).
+    static func engineInstalled(for system: GameSystem) -> Bool {
+        installedEngines.contains(system.coreName)
+    }
+
+    /// Moteurs présents dans l'app (ils ne changent pas tant qu'elle est ouverte).
+    private static let installedEngines: Set<String> = {
+        guard let frameworks = Bundle.main.privateFrameworksPath else { return [] }
+        return Set(GameSystem.allCases.map(\.coreName).filter {
+            FileManager.default.fileExists(atPath: "\(frameworks)/\($0).framework/\($0)")
+        })
+    }()
 
     /// Réserve JIT sans assez de place d'un seul tenant (ne devrait plus arriver : voir PT_JIT_SMALL dans PTJIT.m).
     private static var jitFullMessage: String {
@@ -909,7 +938,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
                                   provider: provider, decode: nil, shouldInterpolate: false,
                                   intent: .defaultIntent) else { return }
-        writeThumbnail(UIImage(cgImage: image))
+        writeThumbnail(image)
     }
 
     /// PS2, GameCube/Wii : le moteur dessine lui-même, l'image vient de sa capture.
@@ -918,11 +947,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             PTLogLine("\(game.system.shortName) : vignette impossible à capturer")
             return
         }
-        writeThumbnail(image)
+        guard let cgImage = image.cgImageValue else { return }
+        writeThumbnail(cgImage)
     }
 
-    private func writeThumbnail(_ image: UIImage) {
-        guard let png = image.pngData() else { return }
+    private func writeThumbnail(_ image: CGImage) {
+        guard let png = ImageCoding.png(image) else { return }
         try? png.write(to: Paths.thumbnailFile(for: game), options: .atomic)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .thumbnailUpdated, object: self.game.id)

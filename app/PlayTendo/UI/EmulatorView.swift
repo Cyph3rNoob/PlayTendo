@@ -2,6 +2,8 @@ import SwiftUI
 
 struct EmulatorView: View {
     let game: Game
+    /// Mac : la partie est posée par-dessus la bibliothèque (et non présentée en plein écran) ; ferme-la.
+    private let onClose: (() -> Void)?
     @StateObject private var session: EmulatorSession
     @StateObject private var gamepad = GamepadManager()
     @Environment(\.dismiss) private var dismiss
@@ -17,8 +19,9 @@ struct EmulatorView: View {
     /// PS1 : lissage des bords, fait par l'écran de jeu (filtre FXAA de PlayTendo).
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
 
-    init(game: Game) {
+    init(game: Game, onClose: (() -> Void)? = nil) {
         self.game = game
+        self.onClose = onClose
         _session = StateObject(wrappedValue: EmulatorSession(game: game))
         _screensSwapped = State(initialValue: Self.savedSwap(for: game))
         let savedSize = UserDefaults.standard.string(forKey: Self.touchSizeKey) ?? ""
@@ -61,8 +64,10 @@ struct EmulatorView: View {
             stage(size: geometry.size)
         }
         .ignoresSafeArea()
+#if os(iOS)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
+#endif
         .onAppear {
             gamepad.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
             gamepad.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: x, y: y) }
@@ -89,7 +94,7 @@ struct EmulatorView: View {
             Text(tr("La progression non sauvegardée sera perdue."))
         }
         .alert(tr("Impossible de lancer le jeu"), isPresented: Binding(get: { failureMessage != nil }, set: { _ in })) {
-            Button("OK") { dismiss() }
+            Button("OK") { close() }
         } message: {
             Text(failureMessage ?? "")
         }
@@ -104,8 +109,13 @@ struct EmulatorView: View {
         ZStack {
             Color.black
             screens(layout)
+#if os(iOS)
             TouchControls(layout: layout, scheme: controls, session: session, onMenu: openMenu,
                           onTouchDown: { gamepad.deactivate() })
+#else
+            MacInput(layout: layout, scheme: controls, session: session,
+                     onMenu: { showingMenu ? closeMenu() : openMenu() })
+#endif
             if session.state == .loading {
                 VStack(spacing: 22) {
                     ProgressView()
@@ -136,12 +146,18 @@ struct EmulatorView: View {
 
     /// Place des écrans et des boutons selon l'orientation, la manette et les réglages.
     private func makeLayout(bounds: CGRect) -> ControlLayout {
-        ControlLayout.make(scheme: controls, aspect: session.aspectRatio,
+#if os(macOS)
+        // Mac : aucun bouton à l'écran, l'image prend toute la fenêtre.
+        return ControlLayout.makeForWindow(scheme: controls, aspect: session.aspectRatio, bounds: bounds,
+                                           dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize))
+#else
+        return ControlLayout.make(scheme: controls, aspect: session.aspectRatio,
                                   bounds: bounds, safe: Self.safeAreaInsets(),
                                   controllerConnected: gamepad.isConnected,
                                   hideTouchControls: gamepad.isActive,
                                   dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
                                   fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController))
+#endif
     }
 
     /// Les images du jeu (deux pour la DS, une pour les autres consoles ; la PS2 et la GameCube/Wii dessinent
@@ -173,7 +189,7 @@ struct EmulatorView: View {
                          onSwapScreens: swap,
                          touchSizeLabel: controls.usesTouchScreen && landscape ? touchSize.label : nil,
                          onTouchSize: { nextTouchSize() },
-                         imageSizeLabel: controls.canFillScreen && landscape && !ps2FillsForController
+                         imageSizeLabel: Self.hasTouchControls && controls.canFillScreen && landscape && !ps2FillsForController
                             ? (fillScreen ? tr("Plein écran") : tr("Réduite")) : nil,
                          onImageSize: { toggleFillScreen() },
                          controllerLabel: game.system == .wii ? wiiController.label : nil,
@@ -232,9 +248,23 @@ struct EmulatorView: View {
     private func quit() {
         guard !quitting else { return }
         quitting = true
-        session.stop { dismiss() }
+        session.stop { close() }
     }
 
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
+
+    /// Boutons à l'écran (iPhone, iPad) ; sur Mac : clavier, souris et manette.
+    private static var hasTouchControls: Bool {
+#if os(iOS)
+        true
+#else
+        false
+#endif
+    }
+
+#if os(iOS)
     /// Marges de sécurité de l'écran (encoche, barre d'accueil) dans l'orientation actuelle.
     private static func safeAreaInsets() -> UIEdgeInsets {
         let window = UIApplication.shared.connectedScenes
@@ -243,6 +273,7 @@ struct EmulatorView: View {
             .first { $0.isKeyWindow }
         return window?.safeAreaInsets ?? .zero
     }
+#endif
 }
 
 private struct PauseMenu: View {
@@ -290,7 +321,8 @@ private struct PauseMenu: View {
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
     private var hasImageSettings: Bool {
-        [.psp, .ps2, .gameCube, .wii, .n3ds, .nds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
+        [.psp, .ps2, .gameCube, .wii, .n3ds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
+            || (session.game.system == .nds && DSSettings.isAvailable)
     }
     /// Vita3K n'a ni sauvegarde rapide, ni avance rapide, ni « recommencer » : seules les sauvegardes des jeux existent.
     private var hasEngineExtras: Bool { !session.game.system.isVita }
@@ -342,6 +374,14 @@ private struct PauseMenu: View {
         if let controllerLabel {
             items.append(Item(title: tr("Manette : \(controllerLabel)"), icon: "gamecontroller", action: onController))
         }
+#if os(macOS)
+        let fullScreen = MacWindow.isFullScreen
+        items.append(Item(title: fullScreen ? tr("Quitter le plein écran") : tr("Plein écran"),
+                          icon: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+            MacWindow.toggleFullScreen()
+            onResume()
+        })
+#endif
         return items
     }
 
@@ -561,7 +601,9 @@ private struct PauseMenu: View {
 
     private func choose(_ change: () -> Void) {
         change()
+#if os(iOS)
         UISelectionFeedbackGenerator().selectionChanged()
+#endif
         // PS Vita : retenue pour le prochain lancement (EmulatorSession la donne au moteur avant chaque démarrage).
         if session.game.system.isVita { return }
         if isDolphin {

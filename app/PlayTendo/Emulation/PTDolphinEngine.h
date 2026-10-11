@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "PTPlatform.h"
 #import "PTDolphin.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -19,7 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
                                          error:(NSError **)error;
 
 /// Vue Metal où le jeu est dessiné (une seule pour toute la vie de l'app).
-@property (nonatomic, readonly) UIView *renderView;
+@property (nonatomic, readonly) PTPlatformView *renderView;
 @property (nonatomic, readonly) PTDolphinState state;
 
 /// `jit` : la réserve JIT de l'app est prête (recompilateur), sinon interpréteur.

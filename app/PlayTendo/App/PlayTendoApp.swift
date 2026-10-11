@@ -10,49 +10,143 @@ struct PlayTendoApp: App {
     /// Thème : mode clair ou sombre (heure, batterie, feuilles du système) et couleur des boutons du système.
     @AppStorage(AppTheme.key) private var theme = AppTheme.neon
     @Environment(\.scenePhase) private var scenePhase
+#if os(macOS)
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
+#endif
 
     init() {
+#if os(macOS)
+        // Mac : le dossier PlayTendo n'existe pas encore au tout premier lancement (le journal y est écrit).
+        try? FileManager.default.createDirectory(at: Paths.documents, withIntermediateDirectories: true)
+#endif
         // Journal d'abord : la préparation des dossiers peut y écrire (effacement des données de la PS Vita).
         PTLogSetFile(Paths.logFile.path)
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+#if os(iOS)
         PTLogLine("PlayTendo \(version) démarré — iOS \(UIDevice.current.systemVersion)")
+#else
+        PTLogLine("PlayTendo \(version) démarré — macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+        MacAppDelegate.registerFonts()
+#endif
         Paths.prepare()
         BootSound.prepare()
     }
 
     var body: some Scene {
+#if os(iOS)
         WindowGroup {
-            ZStack {
-                LibraryView()
-                // Présentation : sous l'animation de démarrage, qui s'efface en la dévoilant.
-                if welcomeSeen < WelcomeView.version {
-                    WelcomeView { withAnimation(.easeOut(duration: 0.3)) { welcomeSeen = WelcomeView.version } }
-                        .transition(.opacity)
-                        .zIndex(1)
-                }
-                if showBoot {
-                    BootView { showBoot = false }
-                        .zIndex(2)
-                }
-            }
-            .environmentObject(library)
-            .environmentObject(metadata)
-            .environmentObject(jit)
-            .preferredColorScheme(theme.colorScheme)
-            .tint(Neon.tint)
-            .onOpenURL { url in library.importFiles([url]) }
-            // En arrière-plan, iOS peut arrêter l'app sans prévenir : le journal est mis à jour sur le disque avant.
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .background { PTLogFlush() }
-            }
-            #if DEBUG
-            .onAppear(perform: forceLandscapeForTesting)
-            #endif
+            content
         }
+#else
+        // Une seule fenêtre : un seul moteur peut tourner à la fois.
+        Window("PlayTendo", id: "main") {
+            content
+                .frame(minWidth: 720, minHeight: 520)
+                // Mode turbo : sur Mac, l'app prépare elle-même sa mémoire dès l'ouverture, s'il sert à une console.
+                .task {
+                    if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
+                        try? await jit.activate()
+                    }
+                }
+        }
+        .defaultSize(width: 1180, height: 780)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button(tr("Ajouter des jeux…")) {
+                    NotificationCenter.default.post(name: .playTendoImportGames, object: nil)
+                }
+                .keyboardShortcut("o")
+                Button(tr("Afficher le dossier PlayTendo")) {
+                    NSWorkspace.shared.open(Paths.documents)
+                }
+            }
+            CommandGroup(replacing: .appSettings) {
+                Button(tr("Réglages…")) {
+                    NotificationCenter.default.post(name: .playTendoShowSettings, object: nil)
+                }
+                .keyboardShortcut(",")
+            }
+        }
+#endif
+    }
+
+    private var content: some View {
+        ZStack {
+            LibraryView()
+            // Présentation : sous l'animation de démarrage, qui s'efface en la dévoilant.
+            if welcomeSeen < WelcomeView.version {
+                WelcomeView { withAnimation(.easeOut(duration: 0.3)) { welcomeSeen = WelcomeView.version } }
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
+            if showBoot {
+                BootView { showBoot = false }
+                    .zIndex(2)
+            }
+        }
+        .environmentObject(library)
+        .environmentObject(metadata)
+        .environmentObject(jit)
+        .preferredColorScheme(theme.colorScheme)
+        .tint(Neon.tint)
+        .onOpenURL { url in library.importFiles([url]) }
+        // En arrière-plan, iOS peut arrêter l'app sans prévenir : le journal est mis à jour sur le disque avant.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { PTLogFlush() }
+        }
+#if DEBUG && os(iOS)
+        .onAppear(perform: forceLandscapeForTesting)
+#endif
     }
 }
 
-#if DEBUG
+#if os(macOS)
+extension Notification.Name {
+    /// Barre des menus : « Ajouter des jeux… » (⌘O) et « Réglages… » (⌘,), reçus par la bibliothèque.
+    static let playTendoImportGames = Notification.Name("PlayTendoImportGames")
+    static let playTendoShowSettings = Notification.Name("PlayTendoShowSettings")
+}
+
+/// Mac : l'app se ferme avec sa fenêtre, après avoir arrêté proprement la partie en cours (sauvegarde du jeu écrite).
+final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    private var replied = false
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let session = EmulatorSession.active else { return .terminateNow }
+        switch session.state {
+        case .stopped, .failed: return .terminateNow
+        default: break
+        }
+        PTLogLine("Fermeture de PlayTendo : arrêt de la partie en cours")
+        replied = false
+        session.stop { [self] in DispatchQueue.main.async { self.reply() } }
+        // Moteur qui ne s'arrête pas : l'app se ferme quand même.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [self] in reply() }
+        return .terminateLater
+    }
+
+    private func reply() {
+        guard !replied else { return }
+        replied = true
+        NSApp.reply(toApplicationShouldTerminate: true)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        PTLogFlush()
+    }
+
+    /// Polices de l'app (Orbitron, Press Start 2P) : sur iPhone, Info.plist les déclare (UIAppFonts).
+    static func registerFonts() {
+        for url in Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? [] {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+    }
+}
+#endif
+
+#if DEBUG && os(iOS)
 /// Tests dans le simulateur : l'argument « -PTLandscape » ou un fichier Documents/PTLandscape
 /// bascule l'app en paysage.
 private func forceLandscapeForTesting() {

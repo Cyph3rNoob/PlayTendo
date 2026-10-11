@@ -1,3 +1,5 @@
+// Boutons tactiles : iPhone et iPad seulement (sur Mac : clavier, souris et manette, MacInputView.swift).
+#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -551,3 +553,4 @@ struct TouchControls: UIViewRepresentable {
         view.onTouchDown = onTouchDown
     }
 }
+#endif

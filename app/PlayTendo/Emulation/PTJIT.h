@@ -20,7 +20,7 @@ bool PTJITHasGetTaskAllow(void);
 /// bout de code s'exécute. Bloquant, hors du thread principal. En cas d'échec, `error` explique.
 bool PTJITPreparePool(size_t size, char *error, size_t errorSize);
 
-/// Simulateur uniquement : même réserve à deux vues, sans débogueur (pour tester les moteurs).
+/// Simulateur et Mac : même réserve à deux vues, sans débogueur (au simulateur, pour tester les moteurs).
 bool PTJITPrepareSimulatedPool(size_t size, char *error, size_t errorSize);
 
 // Exportées pour les moteurs (PPSSPP les retrouve par dlsym, voir scripts/patch_ppsspp_jit.py).

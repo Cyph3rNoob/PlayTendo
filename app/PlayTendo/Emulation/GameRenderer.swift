@@ -5,7 +5,7 @@ import SwiftUI
 /// Affiche l'image du jeu avec Metal. La vue occupe exactement la zone de l'écran affiché.
 /// `source` choisit la partie de l'image à dessiner (de 0 à 1) : la DS en utilise deux,
 /// une par écran, pour pouvoir les placer et les dimensionner librement.
-struct GameScreen: UIViewRepresentable {
+struct GameScreen {
     let frameBuffer: FrameBuffer
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
     /// Lissage des bords (FXAA) avant l'agrandissement (PS1).
@@ -15,23 +15,45 @@ struct GameScreen: UIViewRepresentable {
         GameRenderer(frameBuffer: frameBuffer)
     }
 
-    func makeUIView(context: Context) -> MTKView {
-        let view = MTKView(frame: .zero, device: context.coordinator.device)
+    private func makeView(_ renderer: GameRenderer) -> MTKView {
+#if os(iOS)
+        let view = MTKView(frame: .zero, device: renderer.device)
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .black
+#else
+        // Mac : la souris et le clavier sont lus par l'écran de jeu, posé par-dessus.
+        let view = PassThroughMTKView(frame: .zero, device: renderer.device)
+#endif
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.framebufferOnly = true
         view.preferredFramesPerSecond = 60
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .black
-        view.delegate = context.coordinator
+        view.delegate = renderer
         return view
     }
 
-    func updateUIView(_ view: MTKView, context: Context) {
-        context.coordinator.source = source
-        context.coordinator.smoothing = smoothing
+    private func update(_ renderer: GameRenderer) {
+        renderer.source = source
+        renderer.smoothing = smoothing
     }
 }
+
+#if os(iOS)
+extension GameScreen: UIViewRepresentable {
+    func makeUIView(context: Context) -> MTKView { makeView(context.coordinator) }
+    func updateUIView(_ view: MTKView, context: Context) { update(context.coordinator) }
+}
+#else
+extension GameScreen: NSViewRepresentable {
+    func makeNSView(context: Context) -> MTKView { makeView(context.coordinator) }
+    func updateNSView(_ view: MTKView, context: Context) { update(context.coordinator) }
+}
+
+/// Vue Metal qui laisse passer la souris à ce qui est dessous.
+final class PassThroughMTKView: MTKView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+#endif
 
 final class GameRenderer: NSObject, MTKViewDelegate {
     let device: MTLDevice?

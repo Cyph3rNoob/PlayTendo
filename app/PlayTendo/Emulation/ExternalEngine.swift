@@ -1,4 +1,4 @@
-import UIKit
+import SwiftUI
 
 /// État d'un moteur autonome.
 enum ExternalEngineState {
@@ -8,7 +8,7 @@ enum ExternalEngineState {
 /// Moteur qui cadence, dessine et joue le son lui-même (PS2, GameCube/Wii, PS Vita) : la session le pilote seulement
 /// (`EmulatorSession.runExternal`). Chargé à la première partie, gardé jusqu'à la fermeture de l'app.
 protocol ExternalEngine: AnyObject {
-    var renderView: UIView { get }
+    var renderView: PlatformView { get }
     var engineState: ExternalEngineState { get }
     /// Démarre le jeu. `jit` : la réserve JIT de l'app est prête.
     func boot(path: String, jit: Bool) -> Bool
@@ -24,7 +24,7 @@ protocol ExternalEngine: AnyObject {
     func loadState(fromPath path: String) -> Bool
     func lastError() -> String?
     /// Image du jeu pour la vignette « Continuer » (bloquant), ou nil.
-    func snapshot() -> UIImage?
+    func snapshot() -> PlatformImage?
     /// Appelé juste avant chaque mise en pause, jeu encore en marche (bloquant, court).
     func prepareSnapshot()
     /// Format de l'image du jeu (largeur / hauteur) s'il est connu ; nil : 4:3.
@@ -75,18 +75,10 @@ extension PTDolphinEngine: ExternalEngine {
         _ = captureScreen(toPath: Self.captureURL.path)
     }
 
-    func snapshot() -> UIImage? {
-        guard let image = UIImage(contentsOfFile: Self.captureURL.path), image.size.width > 0 else { return nil }
-        // Capture à la taille de l'écran : réduite à 640 points de large, comme les autres vignettes.
-        let scale = min(1, 640 / image.size.width)
-        guard scale < 1 else { return image }
-        let size = CGSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: size))
-        }
+    func snapshot() -> PlatformImage? {
+        guard let image = ImageCoding.load(Self.captureURL), image.width > 0 else { return nil }
+        // Capture à la taille de l'écran : réduite à 640 pixels de large, comme les autres vignettes.
+        return .make(ImageCoding.resized(image, width: 640))
     }
 
     var imageAspectRatio: CGFloat? {
@@ -116,7 +108,7 @@ extension PTVitaEngine: ExternalEngine {
     /// Vita3K n'a pas de sauvegarde rapide : seules les sauvegardes des jeux existent.
     func saveState(toPath path: String) -> Bool { false }
     func loadState(fromPath path: String) -> Bool { false }
-    func snapshot() -> UIImage? { nil }
+    func snapshot() -> PlatformImage? { nil }
     func prepareSnapshot() {}
     /// Écran de la Vita : 960 × 544.
     var imageAspectRatio: CGFloat? { 960.0 / 544.0 }

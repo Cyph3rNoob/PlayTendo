@@ -1,4 +1,4 @@
-import UIKit
+import SwiftUI
 
 enum ControlElement: Hashable {
     case dpad
@@ -293,6 +293,29 @@ struct ControlLayout: Equatable {
             // Manette utilisée : seuls les boutons tactiles disparaissent. L'image du jeu garde
             // exactement la même place, pour ne pas sauter quand les boutons reviennent.
             layout.controls = layout.controls.filter { $0.element == .menu }
+        }
+        return layout
+    }
+
+    /// Mac : aucun bouton à l'écran (clavier, souris, manette), l'image prend toute la fenêtre en gardant son format.
+    /// DS et 3DS : écrans côte à côte (taille de l'écran tactile au choix) si la fenêtre est plus large que haute,
+    /// empilés sinon.
+    static func makeForWindow(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect,
+                              dual: DualScreenOptions = DualScreenOptions()) -> ControlLayout {
+        guard bounds.width > 0, bounds.height > 0, aspect > 0 else { return ControlLayout() }
+        var layout = ControlLayout()
+        if scheme.usesTouchScreen {
+            layout.placeDualScreens(in: bounds, portrait: bounds.height >= bounds.width, maxStackHeight: bounds.height,
+                                    centered: true, dual: dual, scheme: scheme)
+        } else {
+            var width = bounds.width
+            var height = width / aspect
+            if height > bounds.height {
+                height = bounds.height
+                width = height * aspect
+            }
+            layout.gameRect = CGRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2, width: width, height: height)
+            layout.screens = [ScreenPlacement(frame: layout.gameRect, source: fullImage, isTouch: scheme.usesPointer)]
         }
         return layout
     }

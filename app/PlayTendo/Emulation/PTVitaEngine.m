@@ -59,7 +59,7 @@ static void PTVitaReportProgress(float progress, void *context) {
         free(reason);
         return [self failWithMessage:message error:error];
     }
-    engine->_renderView = (__bridge UIView *)view;
+    engine->_renderView = (__bridge PTPlatformView *)view;
     loadedEngine = engine;
     return engine;
 }

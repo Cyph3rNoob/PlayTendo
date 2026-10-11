@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "PTPlatform.h"
 #import "PTPS2.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -19,7 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
                                          error:(NSError **)error;
 
 /// Vue Metal où la PS2 dessine (une seule pour toute la vie de l'app).
-@property (nonatomic, readonly) UIView *renderView;
+@property (nonatomic, readonly) PTPlatformView *renderView;
 @property (nonatomic, readonly) PTPS2State state;
 
 /// Nom du BIOS PS2 retenu dans le dossier des BIOS, ou nil s'il n'y en a pas.
@@ -44,7 +44,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Format de l'image du jeu (largeur / hauteur), 0 si inconnu.
 @property (nonatomic, readonly) float aspectRatio;
 /// Image du jeu en cours (640×480), pour la vignette « Continuer ». Bloquant, hors du thread principal.
-- (nullable UIImage *)snapshot;
+- (nullable PTPlatformImage *)snapshot;
 - (nullable NSString *)lastError;
 
 @end

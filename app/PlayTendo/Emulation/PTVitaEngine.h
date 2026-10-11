@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import "PTPlatform.h"
 #import "PTVita.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -18,7 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
                                          error:(NSError **)error;
 
 /// Vue où le jeu est dessiné (une seule pour toute la vie de l'app).
-@property (nonatomic, readonly) UIView *renderView;
+@property (nonatomic, readonly) PTPlatformView *renderView;
 @property (nonatomic, readonly) PTVitaState state;
 
 /// Firmware (PSVUPDAT.PUP) installé.

@@ -1,6 +1,10 @@
 // PTGLESCompat.cpp — équivalents OpenGL ES 3.0 des fonctions OpenGL « ordinateur » de melonDS (PlayTendo).
 // Voir PTGLESCompat.h. Ce fichier appelle les vraies fonctions d'OpenGL ES : il n'inclut pas PlatformOGLPrivate.h,
 // dont les macros renvoient vers les fonctions ci-dessous.
+// Sur Mac, melonDS garde son rendu OpenGL d'origine : ce fichier y est vide.
+
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS
 
 #include <OpenGLES/ES3/gl.h>
 #include <OpenGLES/ES3/glext.h>
@@ -404,3 +408,5 @@ char* ptgl_AdaptShaderSource(const char* source)
 }
 
 }
+
+#endif // TARGET_OS_IOS
