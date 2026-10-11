@@ -2,6 +2,8 @@ build/
 sources/
 cores/macos/
 *.ipa
+# Clés de service de l'utilisateur (masquées dans l'app à la compilation, jamais versionnées)
+secrets/
 .DS_Store
 Captures/
 # Moteur PS2 (≈ 100 Mo) : recompilé par scripts/build_ps2.sh

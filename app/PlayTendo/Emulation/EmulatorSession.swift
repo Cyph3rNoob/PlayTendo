@@ -100,7 +100,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             default: break
             }
         } catch {
-            fail(error.localizedDescription)
+            fail(trMessage(error.localizedDescription))
             return
         }
         self.external = external
@@ -206,17 +206,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     PTLogLine("\(game.system.shortName) : sauvegarde rapide écrite")
                     saveEngineThumbnail(external)
                     DispatchQueue.main.async { self.hasSaveState = true }
-                    showToast("Partie sauvegardée")
+                    showToast(tr("Partie sauvegardée"))
                 } else {
                     PTLogLine("\(game.system.shortName) : sauvegarde rapide impossible (\(external.lastError() ?? "raison inconnue"))")
-                    showToast("Échec de la sauvegarde")
+                    showToast(tr("Échec de la sauvegarde"))
                 }
             }
             return
         }
         perform { [self] in
             guard let data = core?.saveState() else {
-                showToast("Ce jeu ne permet pas la sauvegarde rapide")
+                showToast(tr("Ce jeu ne permet pas la sauvegarde rapide"))
                 return
             }
             do {
@@ -226,9 +226,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                           : "Sauvegarde rapide : \(data.count / 1024) Ko, \(packed.count / 1024) Ko une fois compressée")
                 saveThumbnail()
                 DispatchQueue.main.async { self.hasSaveState = true }
-                showToast("Partie sauvegardée")
+                showToast(tr("Partie sauvegardée"))
             } catch {
-                showToast("Échec de la sauvegarde")
+                showToast(tr("Échec de la sauvegarde"))
             }
         }
     }
@@ -238,10 +238,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             perform { [self] in
                 if external.loadState(fromPath: Paths.stateFile(for: game).path) {
                     PTLogLine("\(game.system.shortName) : sauvegarde rapide chargée")
-                    showToast("Sauvegarde chargée")
+                    showToast(tr("Sauvegarde chargée"))
                 } else {
                     PTLogLine("\(game.system.shortName) : chargement impossible (\(external.lastError() ?? "raison inconnue"))")
-                    showToast("Impossible de charger la sauvegarde")
+                    showToast(tr("Impossible de charger la sauvegarde"))
                 }
             }
             return
@@ -251,11 +251,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                   let data = Self.unpackState(file),
                   core?.loadState(data) == true else {
                 PTLogLine("Sauvegarde rapide illisible")
-                showToast("Impossible de charger la sauvegarde")
+                showToast(tr("Impossible de charger la sauvegarde"))
                 return
             }
             PTLogLine("Sauvegarde rapide chargée (\(file.starts(with: Self.compressedStateMagic) ? "compressée" : "brute"))")
-            showToast("Sauvegarde chargée")
+            showToast(tr("Sauvegarde chargée"))
         }
     }
 
@@ -289,7 +289,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             guard let core, core.switchToNextDisk() else { return }
             let info = DiskInfo(current: Int(core.currentDiskIndex) + 1, count: Int(core.diskCount))
             DispatchQueue.main.async { self.diskInfo = info }
-            showToast("Disque \(info.current) inséré")
+            showToast(tr("Disque \(info.current) inséré"))
         }
     }
 
@@ -377,8 +377,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     /// Réserve JIT sans assez de place d'un seul tenant (ne devrait plus arriver : voir PT_JIT_SMALL dans PTJIT.m).
-    private static let jitFullMessage = "la mémoire du mode turbo est encore occupée par une autre console. Ferme "
-        + "PlayTendo (fais-la glisser vers le haut dans le sélecteur d'apps), puis relance-la."
+    private static var jitFullMessage: String {
+        tr("la mémoire du mode turbo est encore occupée par une autre console. Ferme PlayTendo (fais-la glisser vers le haut dans le sélecteur d'apps), puis relance-la.")
+    }
 
     /// Après une partie PS2, sa console en veille garde des Go d'adresses réservées (dont celles que la PSP veut
     /// pour sa mémoire : « Memory init failed ») et sa part de la réserve JIT : on l'arrête avant une autre console.
@@ -393,7 +394,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         let system = game.system
         releasePS2Memory()
         guard let frameworks = Bundle.main.privateFrameworksPath else {
-            fail("Moteurs introuvables dans l'app.")
+            fail(tr("Moteurs introuvables dans l'app."))
             return
         }
         let corePath = "\(frameworks)/\(system.coreName).framework/\(system.coreName)"
@@ -402,7 +403,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         do {
             core = try loadCore(path: corePath)
         } catch {
-            fail(error.localizedDescription)
+            fail(trMessage(error.localizedDescription))
             return
         }
 
@@ -421,7 +422,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         if JITManager.benefits(system) {
             let jit = PTJITIsActive()
             PTLogLine(jit ? "Mode turbo (JIT) utilisé" : "Sans JIT : interpréteur")
-            if jit { showToast("Mode turbo (JIT) actif") }
+            if jit { showToast(tr("Mode turbo (JIT) actif")) }
         }
 
         let clock = MachClock()
@@ -462,7 +463,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                         audio.stop()
                         self.audio = nil
                         self.core = nil
-                        fail("Le jeu n'a pas pu redémarrer avec les nouveaux réglages d'image.")
+                        fail(tr("Le jeu n'a pas pu redémarrer avec les nouveaux réglages d'image."))
                         return
                     }
                     core = reloaded
@@ -485,11 +486,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 if core.loadState(state) {
                     pendingReloadState = nil
                     PTLogLine("Rechargement du moteur : partie reprise après \(pendingReloadAttempts) image(s)")
-                    showToast("Image appliquée")
+                    showToast(tr("Image appliquée"))
                 } else if pendingReloadAttempts >= 120 {
                     pendingReloadState = nil
                     PTLogLine("Rechargement du moteur : la partie n'a pas pu être reprise")
-                    showToast("Partie non reprise (sauvegarde rapide toujours disponible)")
+                    showToast(tr("Partie non reprise (sauvegarde rapide toujours disponible)"))
                 }
             }
 
@@ -602,7 +603,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             // Reprise de la partie après les premières images (voir pendingReloadState).
             pendingReloadState = state
             pendingReloadAttempts = 0
-            if state == nil { showToast("Image appliquée") }
+            if state == nil { showToast(tr("Image appliquée")) }
             return core
         } catch {
             PTLogLine("Rechargement du moteur impossible : \(error.localizedDescription)")
@@ -616,7 +617,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private static func loadPS2Engine() throws -> PTPS2Engine {
         if let engine = PTPS2Engine.loaded { return engine }
         guard let frameworks = Bundle.main.privateFrameworksPath else {
-            throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey: "Moteurs introuvables dans l'app."])
+            throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey: tr("Moteurs introuvables dans l'app.")])
         }
         let engine = try PTPS2Engine.load(withFrameworkPath: "\(frameworks)/PS2Core.framework/PS2Core",
                                           dataRoot: Paths.ps2Engine.path,
@@ -630,7 +631,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private static func loadDolphinEngine() throws -> PTDolphinEngine {
         if let engine = PTDolphinEngine.loaded { return engine }
         guard let frameworks = Bundle.main.privateFrameworksPath else {
-            throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey: "Moteurs introuvables dans l'app."])
+            throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey: tr("Moteurs introuvables dans l'app.")])
         }
         let engine = try PTDolphinEngine.load(withFrameworkPath: "\(frameworks)/DolphinCore.framework/DolphinCore",
                                               userDirectory: Paths.dolphinEngine.path,
@@ -652,7 +653,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         guard let frameworks = Bundle.main.privateFrameworksPath,
               FileManager.default.fileExists(atPath: "\(frameworks)/VitaCore.framework/VitaCore") else {
             throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey:
-                "La PS Vita n'est pas dans cette version de l'app (elle marche sur iPhone et iPad, pas au simulateur)."])
+                tr("La PS Vita n'est pas dans cette version de l'app (elle marche sur iPhone et iPad, pas au simulateur).")])
         }
         Paths.prepareVitaEngine()
         let engine = try PTVitaEngine.load(withFrameworkPath: "\(frameworks)/VitaCore.framework/VitaCore",
@@ -667,8 +668,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private func prepareVita(_ vita: PTVitaEngine) -> String? {
         // Vita3K n'a pas d'interpréteur : sans la réserve JIT de l'app, aucun jeu ne peut tourner.
         guard PTJITIsActive() else {
-            fail("La PS Vita a besoin du mode turbo : sans lui, aucun jeu ne peut démarrer. Vérifie StikDebug et "
-                 + "LocalDevVPN (roue dentée de la bibliothèque), puis relance le jeu.")
+            fail(tr("La PS Vita a besoin du mode turbo : sans lui, aucun jeu ne peut démarrer. Vérifie StikDebug et LocalDevVPN (roue dentée de la bibliothèque), puis relance le jeu."))
             return nil
         }
         let clock = MachClock()
@@ -678,7 +678,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             let install = { (file: URL) in
                 tried.insert(file)
                 let label = file.lastPathComponent.uppercased().contains("PSP2UPDAT")
-                    ? "Installation des polices de la PS Vita" : "Installation du firmware de la PS Vita"
+                    ? tr("Installation des polices de la PS Vita") : tr("Installation du firmware de la PS Vita")
                 self.setLoadingDetail("\(label)…")
                 let start = clock.now
                 if let version = vita.installFirmware(atPath: file.path, progress: { [weak self] progress in
@@ -696,8 +696,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             for file in files where !vita.hasFonts && !tried.contains(file) && !VitaGame.wasInstalled(file) { install(file) }
             guard vita.hasFirmware else {
                 setLoadingDetail(nil)
-                fail("Firmware PS Vita introuvable. Copie le fichier PSVUPDAT.PUP (la mise à jour officielle de la console) "
-                     + "dans le dossier BIOS de PlayTendo, avec l'app Fichiers.")
+                fail(tr("Firmware PS Vita introuvable. Copie le fichier PSVUPDAT.PUP (la mise à jour officielle de la console) dans le dossier BIOS de PlayTendo, avec l'app Fichiers."))
                 return nil
             }
             if !vita.hasFonts {
@@ -706,7 +705,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
         guard let titleID = VitaGame.titleID(of: game.url) else {
             setLoadingDetail(nil)
-            fail("Ce jeu PS Vita est illisible : son fichier sce_sys/param.sfo est introuvable.")
+            fail(tr("Ce jeu PS Vita est illisible : son fichier sce_sys/param.sfo est introuvable."))
             return nil
         }
         if vita.isGameInstalled(titleID) {
@@ -715,13 +714,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             VitaGame.removeOriginal(game.url, titleID: titleID)
             return titleID
         }
-        setLoadingDetail("Installation du jeu (une seule fois)…")
+        setLoadingDetail(tr("Installation du jeu (une seule fois)…"))
         let start = clock.now
         guard let installed = vita.installGame(atPath: game.url.path, progress: { [weak self] progress in
-            self?.setLoadingDetail("Installation du jeu (une seule fois)… \(Int(progress * 100)) %")
+            self?.setLoadingDetail(tr("Installation du jeu (une seule fois)… \(Int(progress * 100)) %"))
         }) else {
             setLoadingDetail(nil)
-            fail(vita.lastError() ?? "Le jeu n'a pas pu être installé.")
+            fail(vita.lastError().map(trMessage) ?? tr("Le jeu n'a pas pu être installé."))
             return nil
         }
         PTLogLine(String(format: "Vita : jeu %@ installé en %.0f s (%@)", installed, clock.now - start, game.url.lastPathComponent))
@@ -743,7 +742,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         // Le recompilateur de Dolphin prend 256 Mo d'un seul tenant (TOTAL_CODE_SIZE, JitArm64/Jit.cpp) : sans
         // cette place, il écrirait son code dans le vide et l'app planterait.
         if PTJITIsActive() && PTJITLargestFree() < 256 << 20 {
-            fail("La \(game.system.name) ne peut pas démarrer : \(Self.jitFullMessage)")
+            fail(tr("La \(game.system.name) ne peut pas démarrer : \(Self.jitFullMessage)"))
             return false
         }
         Self.applyDolphinImage(to: engine as? PTDolphinEngine)
@@ -775,8 +774,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #endif
         if let ps2 = engine as? PTPS2Engine {
             guard let bios = ps2.pickBIOS() else {
-                fail("Aucun BIOS PS2 trouvé. Copie le BIOS de ta PS2 (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier "
-                     + "BIOS de PlayTendo, avec l'app Fichiers.")
+                fail(tr("Aucun BIOS PS2 trouvé. Importe celui de ta PS2 dans Réglages (roue dentée) › BIOS PS2, ou copie-le (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier BIOS de PlayTendo avec l'app Fichiers."))
                 return
             }
             PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
@@ -804,7 +802,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
         let jitFailures = PTJITFailureCount()
         guard engine.boot(path: bootPath, jit: PTJITIsActive()) else {
-            fail(engine.lastError() ?? "Le jeu n'a pas pu démarrer.")
+            fail(engine.lastError().map(trMessage) ?? tr("Le jeu n'a pas pu démarrer."))
             return
         }
 
@@ -847,16 +845,16 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #else
                     PTLogLine(jit ? "\(name) : mode turbo (JIT) utilisé" : "\(name) : sans JIT, interpréteur (très lent)")
 #endif
-                    if jit { showToast("Mode turbo (JIT) actif") }
+                    if jit { showToast(tr("Mode turbo (JIT) actif")) }
                     DispatchQueue.main.async { self.state = .running }
                 } else if engineState == .stopped && (seenActivity || clock.now - bootStart > 20) {
-                    failure = engine.lastError() ?? "La console n'a pas pu démarrer le jeu."
+                    failure = engine.lastError().map(trMessage) ?? tr("La console n'a pas pu démarrer le jeu.")
                     break
                 }
                 continue
             }
             if engineState == .stopped {
-                failure = engine.lastError() ?? "La console s'est arrêtée."
+                failure = engine.lastError().map(trMessage) ?? tr("La console s'est arrêtée.")
                 break
             }
             if paused != enginePaused {
@@ -882,7 +880,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         if engine.engineState != .stopped { PTLogLine("\(name) : la console ne s'est pas arrêtée à temps") }
         if let failure {
             PTLogLine("\(name) : \(failure)")
-            fail("La \(game.system.name) s'est arrêtée : \(failure)")
+            fail(tr("La \(game.system.name) s'est arrêtée : \(failure)"))
             return
         }
         PTLogLine("\(name) : jeu fermé")

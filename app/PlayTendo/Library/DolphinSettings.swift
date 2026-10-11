@@ -12,7 +12,7 @@ enum DolphinSettings {
         var label: String { "x\(rawValue)" }
         var detail: String {
             switch self {
-            case .x1: "origine"
+            case .x1: tr("origine")
             case .x2: "≈ 720p"
             case .x3: "≈ 1080p"
             }
@@ -24,7 +24,7 @@ enum DolphinSettings {
         case off = 0, on
 
         var id: Int { rawValue }
-        var label: String { self == .off ? "Non" : "Oui" }
+        var label: String { self == .off ? tr("Non") : tr("Oui") }
     }
 
     /// Manette d'un jeu Wii : la Wiimote avec son Nunchuk (la plupart des jeux) ou la manette GameCube (Smash

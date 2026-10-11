@@ -14,7 +14,8 @@ for fw in "$ROOT"/cores/ios/*.framework; do
   out="$ROOT/cores/sim/$name.framework"
   rm -rf "${out:?}"
   mkdir -p "$out"
-  sed 's/<string>iPhoneOS<\/string>/<string>iPhoneSimulator<\/string>/' "$fw/Info.plist" > "$out/Info.plist"
+  # LC_ALL=C : certains Info.plist (MoltenVK) sont binaires ; sed refuse leurs octets dans un terminal en UTF-8.
+  LC_ALL=C sed 's/<string>iPhoneOS<\/string>/<string>iPhoneSimulator<\/string>/' "$fw/Info.plist" > "$out/Info.plist"
   xcrun vtool -arch arm64 -set-build-version iossim 15.0 "$SDK_VERSION" -replace -output "$out/$name" "$fw/$name"
   codesign --force --sign - "$out" >/dev/null 2>&1
   echo "$name : OK"

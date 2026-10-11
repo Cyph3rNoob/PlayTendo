@@ -9,7 +9,6 @@ enum Paths {
     static let bios = documents.appendingPathComponent("BIOS", isDirectory: true)
     static let saves = documents.appendingPathComponent("Sauvegardes", isDirectory: true)
     static let logFile = documents.appendingPathComponent("Journal.txt")
-    static let readme = documents.appendingPathComponent("Lisez-moi.txt")
 
     static let states = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Etats", isDirectory: true)
@@ -18,9 +17,7 @@ enum Paths {
         for folder in [games, bios, saves, states] {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        if (try? String(contentsOf: readme, encoding: .utf8)) != readmeText {
-            try? readmeText.write(to: readme, atomically: true, encoding: .utf8)
-        }
+        writeReadme()
 #if !PLAYTENDO_VITA
         removeVitaLeftovers()
 #endif
@@ -257,6 +254,18 @@ enum Paths {
         return folder.appendingPathComponent(fileName(for: game) + ".state")
     }
 
+    /// « Lisez-moi.txt » à la racine de Documents (« Read Me.txt » quand l'app est en anglais : l'autre est retiré),
+    /// réécrit s'il a changé. Appelé au lancement et quand la langue change.
+    static func writeReadme() {
+        let english = AppLanguage.isEnglish
+        let file = documents.appendingPathComponent(english ? "Read Me.txt" : "Lisez-moi.txt")
+        try? FileManager.default.removeItem(at: documents.appendingPathComponent(english ? "Lisez-moi.txt" : "Read Me.txt"))
+        let text = english ? readmeTextEnglish : readmeText
+        if (try? String(contentsOf: file, encoding: .utf8)) != text {
+            try? text.write(to: file, atomically: true, encoding: .utf8)
+        }
+    }
+
     private static let readmeText = """
     PlayTendo — où ranger quoi
 
@@ -271,14 +280,15 @@ enum Paths {
       Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
 
     """ + readmeVitaGames + """
-      Les .zip sont acceptés avec le bouton « + » de l'app.
+      Les archives .zip, .7z et .rar sont acceptées avec le bouton « + » de l'app.
 
     BIOS (facultatif)
       PlayStation : scph5501.bin (ou scph1001.bin…)
       Nintendo DS : bios7.bin, bios9.bin, firmware.bin
       Game Boy Advance : gba_bios.bin
       PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo
-        (« SCPH-70004… », n'importe quel nom, PlayTendo le reconnaît)
+        (« SCPH-70004… », n'importe quel nom, PlayTendo le reconnaît),
+        ou dans l'app : Réglages › BIOS PS2 › Importer un BIOS PS2
 
     """ + readmeVitaBIOS + """
 
@@ -290,7 +300,53 @@ enum Paths {
       Journal-precedent.txt : celui de la session d'avant.
     """
 
+    private static let readmeTextEnglish = """
+    PlayTendo — what goes where
+
+    Jeux (games)
+      Put your games here (you can make subfolders):
+      NES .nes · Super Nintendo .sfc .smc · Nintendo 64 .z64 .n64 .v64
+      Game Boy .gb · Game Boy Color .gbc · Game Boy Advance .gba · Nintendo DS .nds
+      PlayStation .chd .pbp .m3u, or .cue with its .bin files
+      PlayStation 2 .iso .chd .cso
+      PlayStation Portable .iso .cso .pbp
+      GameCube and Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
+      Nintendo 3DS .3ds .cci .cxi .3dsx (decrypted games)
+
+    """ + readmeVitaGamesEnglish + """
+      .zip, .7z and .rar archives are accepted with the app's “+” button.
+
+    BIOS (optional)
+      PlayStation: scph5501.bin (or scph1001.bin…)
+      Nintendo DS: bios7.bin, bios9.bin, firmware.bin
+      Game Boy Advance: gba_bios.bin
+      PlayStation 2 (required): your console's BIOS, a 4 MB .bin file
+        (“SCPH-70004…”, any name, PlayTendo recognizes it),
+        or in the app: Settings › PS2 BIOS › Import a PS2 BIOS
+
+    """ + readmeVitaBIOSEnglish + """
+
+    Sauvegardes (saves)
+      Your games' saves. Copy this folder to keep them safe.
+
+    Journal.txt
+      The app's technical log (in French), useful if something goes wrong.
+      Journal-precedent.txt: the one from the previous session.
+    """
+
 #if PLAYTENDO_VITA
+    private static let readmeVitaGamesEnglish = """
+      PlayStation Vita: the game folder extracted from your Vita (“PCSA00011”…, with its
+        license sce_sys/package/work.bin for a retail game) or a .vpk.
+        Installed into PlayTendo on first launch, then removed from this folder: keep your
+        original elsewhere (leave room for a copy during installation).
+
+    """
+    private static let readmeVitaBIOSEnglish = """
+      PlayStation Vita (required): PSVUPDAT.PUP, the console's official update,
+        and if possible its PSP2UPDAT.PUP fonts
+
+    """
     private static let readmeVitaGames = """
       PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa
         licence sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk.
@@ -306,5 +362,7 @@ enum Paths {
 #else
     private static let readmeVitaGames = ""
     private static let readmeVitaBIOS = ""
+    private static let readmeVitaGamesEnglish = ""
+    private static let readmeVitaBIOSEnglish = ""
 #endif
 }

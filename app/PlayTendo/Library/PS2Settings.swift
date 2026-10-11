@@ -12,7 +12,7 @@ enum PS2Settings {
         var label: String { "x\(rawValue)" }
         var detail: String {
             switch self {
-            case .x1: "origine"
+            case .x1: tr("origine")
             case .x2: "≈ 720p"
             case .x3: "≈ 1080p"
             case .x4: "≈ 1440p"
@@ -25,7 +25,7 @@ enum PS2Settings {
         case off = 0, on
 
         var id: Int { rawValue }
-        var label: String { self == .off ? "Non" : "Oui" }
+        var label: String { self == .off ? tr("Non") : tr("Oui") }
     }
 
     /// Format : 16:9 active les correctifs « écran large » fournis avec le moteur (environ 4 150 jeux). Le jeu calcule

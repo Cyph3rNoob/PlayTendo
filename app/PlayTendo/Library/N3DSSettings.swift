@@ -18,7 +18,7 @@ enum N3DSSettings {
         case off = 0, on
 
         var id: Int { rawValue }
-        var label: String { self == .off ? "Non" : "Oui" }
+        var label: String { self == .off ? tr("Non") : tr("Oui") }
     }
 
     static let resolutionKey = "resolution3DS"

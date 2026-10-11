@@ -15,6 +15,8 @@ struct LibraryView: View {
     @State private var search = ""
     @State private var filter: GameSystem?
     @State private var gameToDelete: Game?
+    /// Langue changée dans les Réglages : le contenu de la bibliothèque est refait aussitôt dans la nouvelle langue.
+    @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
 
     var body: some View {
         ZStack {
@@ -38,6 +40,7 @@ struct LibraryView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
                 .padding(.bottom, 40)
+                .id(language)
             }
             .scrollDismissesKeyboard(.immediately)
             .refreshable { library.refresh() }
@@ -76,37 +79,53 @@ struct LibraryView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: waitingForJIT)
-        .alert("Mode turbo non activé", isPresented: Binding(get: { jitFailure != nil }, set: { if !$0 { jitFailure = nil } }),
+        .alert(tr("Mode turbo non activé"), isPresented: Binding(get: { jitFailure != nil }, set: { if !$0 { jitFailure = nil } }),
                presenting: jitFailure) { failure in
-            Button("Réessayer") { play(failure.game) }
+            Button(tr("Réessayer")) { play(failure.game) }
             // Toujours proposé, sauf pour la PS Vita (app compilée avec elle : Vita3K n'a pas d'interpréteur).
             if !JITManager.requires(failure.game.system) {
-                Button("Jouer sans JIT") { launch(failure.game) }
+                Button(tr("Jouer sans JIT")) { launch(failure.game) }
             }
-            Button("Annuler", role: .cancel) {}
+            Button(tr("Annuler"), role: .cancel) {}
         } message: { failure in
             Text(failure.message)
         }
-        .alert("Supprimer ce jeu ?", isPresented: Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } }),
+        .alert(tr("Supprimer ce jeu ?"), isPresented: Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } }),
                presenting: gameToDelete) { game in
-            Button("Supprimer", role: .destructive) { library.delete(game) }
-            Button("Annuler", role: .cancel) {}
+            Button(tr("Supprimer"), role: .destructive) { library.delete(game) }
+            Button(tr("Annuler"), role: .cancel) {}
         } message: { game in
             let extra = GameLibrary.files(of: game).count - 1
-            let companions = extra == 1 ? " avec son fichier associé" : extra > 1 ? " avec ses \(extra) fichiers associés" : ""
-            Text("« \(metadata.display(for: game).title) » sera supprimé de l'iPhone\(companions). Ses sauvegardes sont conservées.")
+            let companions = extra == 1 ? tr(" avec son fichier associé")
+                : extra > 1 ? tr(" avec ses \(extra) fichiers associés") : ""
+            Text(tr("« \(metadata.display(for: game).title) » sera supprimé de l'iPhone\(companions). Ses sauvegardes sont conservées."))
+        }
+        .alert(library.importFailures.count == 1 ? tr("Fichier non ajouté") : tr("Fichiers non ajoutés"),
+               isPresented: Binding(get: { !library.importFailures.isEmpty },
+                                    set: { if !$0 { library.importFailures = [] } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(library.importFailures.joined(separator: "\n"))
         }
         .overlay(alignment: .bottom) {
-            if let message = library.message {
-                ToastView(text: message)
-                    .padding(.bottom, 30)
-                    .task(id: message) {
-                        try? await Task.sleep(nanoseconds: 2_500_000_000)
-                        if library.message == message { library.message = nil }
+            VStack(spacing: 10) {
+                if let progress = library.importProgress {
+                    ImportProgressView(progress: progress, cancelling: library.importCancelRequested) {
+                        library.cancelImport()
                     }
+                }
+                if let message = library.message {
+                    ToastView(text: message)
+                        .task(id: message) {
+                            try? await Task.sleep(nanoseconds: 2_500_000_000)
+                            if library.message == message { library.message = nil }
+                        }
+                }
             }
+            .padding(.bottom, 30)
         }
         .animation(.easeInOut(duration: 0.25), value: library.message)
+        .animation(.easeInOut(duration: 0.25), value: library.importProgress == nil)
         .animation(.easeInOut(duration: 0.2), value: filter)
         .task(id: library.games) { metadata.update(library.games) }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
@@ -131,9 +150,9 @@ struct LibraryView: View {
                 if waitingForJIT == game {
                     waitingForJIT = nil
                     let slow = JITManager.requires(game.system)
-                        ? "\n\nSans turbo, la \(game.system.name) ne peut pas démarrer."
+                        ? tr("\n\nSans turbo, la \(game.system.name) ne peut pas démarrer.")
                         : [.ps2, .gameCube, .wii, .n3ds].contains(game.system)
-                        ? "\n\nSans turbo, la \(game.system.name) est très lente (injouable)." : ""
+                        ? tr("\n\nSans turbo, la \(game.system.name) est très lente (injouable).") : ""
                     jitFailure = JITFailure(game: game, message: error.localizedDescription + slow)
                 }
             }
@@ -159,11 +178,11 @@ struct LibraryView: View {
                 .minimumScaleFactor(0.7)
             Spacer(minLength: 8)
             NeonIconButton(systemName: "info", color: Neon.violet) { showingAbout = true }
-                .accessibilityLabel("À propos")
+                .accessibilityLabel(tr("À propos"))
             NeonIconButton(systemName: "gearshape.fill", color: Neon.magenta) { showingSettings = true }
-                .accessibilityLabel("Réglages")
+                .accessibilityLabel(tr("Réglages"))
             NeonIconButton(systemName: "plus") { importing = true }
-                .accessibilityLabel("Ajouter des jeux")
+                .accessibilityLabel(tr("Ajouter des jeux"))
         }
         .padding(.top, 8)
     }
@@ -173,7 +192,7 @@ struct LibraryView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Neon.cyan)
-            TextField("", text: $search, prompt: Text("RECHERCHER UN JEU").foregroundStyle(Neon.dim))
+            TextField("", text: $search, prompt: Text(tr("RECHERCHER UN JEU")).foregroundStyle(Neon.dim))
                 .font(Neon.mono(14, weight: .medium))
                 .foregroundStyle(Neon.text)
                 .textInputAutocapitalization(.never)
@@ -201,7 +220,7 @@ struct LibraryView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(label: "TOUT", color: Neon.cyan, selected: filter == nil) { filter = nil }
+                FilterChip(label: tr("TOUT"), color: Neon.cyan, selected: filter == nil) { filter = nil }
                 ForEach(presentSystems) { system in
                     FilterChip(label: system.badgeName, color: system.neon, selected: filter == system) {
                         filter = filter == system ? nil : system
@@ -218,7 +237,7 @@ struct LibraryView: View {
 
     private func continueRow(_ games: [Game]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            NeonSectionTitle(text: "CONTINUER", color: Neon.magenta)
+            NeonSectionTitle(text: tr("CONTINUER"), color: Neon.magenta)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
                     ForEach(games) { game in
@@ -249,10 +268,10 @@ struct LibraryView: View {
                                     .buttonStyle(CardPressStyle())
                                     .contextMenu {
                                         Button { metadata.retryCover(for: game) } label: {
-                                            Label("Actualiser la jaquette", systemImage: "arrow.clockwise")
+                                            Label(tr("Actualiser la jaquette"), systemImage: "arrow.clockwise")
                                         }
                                         Button(role: .destructive) { gameToDelete = game } label: {
-                                            Label("Supprimer", systemImage: "trash")
+                                            Label(tr("Supprimer"), systemImage: "trash")
                                         }
                                     }
                             }
@@ -261,7 +280,7 @@ struct LibraryView: View {
                 }
             }
             if sectionsAreEmpty {
-                Text("AUCUN JEU NE CORRESPOND")
+                Text(tr("AUCUN JEU NE CORRESPOND"))
                     .font(Neon.mono(13, weight: .semibold))
                     .tracking(1.5)
                     .foregroundStyle(Neon.dim)
@@ -528,9 +547,9 @@ private struct ContinueCard: View {
 
     private static func relative(_ date: Date) -> String {
         // Partie qui vient de se terminer : le formateur dirait « dans 0 seconde ».
-        guard Date().timeIntervalSince(date) >= 60 else { return "À L'INSTANT" }
+        guard Date().timeIntervalSince(date) >= 60 else { return tr("À L'INSTANT") }
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.locale = AppLanguage.locale
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: Date()).uppercased()
     }
@@ -554,17 +573,17 @@ private struct EmptyLibraryView: View {
                 .font(.system(size: 58))
                 .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .neonGlow(Neon.cyan, radius: 14)
-            Text("BIBLIOTHÈQUE VIDE")
+            Text(tr("BIBLIOTHÈQUE VIDE"))
                 .font(.orbitron(20, weight: 900))
                 .tracking(2)
                 .foregroundStyle(Neon.text)
-            Text("Ajoute tes jeux avec le bouton ci-dessous (les .zip sont acceptés), ou dépose-les dans l'app Fichiers : **Sur mon iPhone › PlayTendo › Jeux**.")
+            Text(markdown: tr("Ajoute tes jeux avec le bouton ci-dessous (les .zip, .7z et .rar sont acceptés), ou dépose-les dans l'app Fichiers : **Sur mon iPhone › PlayTendo › Jeux**."))
                 .font(.callout)
                 .foregroundStyle(Neon.dim)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             Button(action: onImport) {
-                Label("AJOUTER DES JEUX", systemImage: "plus")
+                Label(tr("AJOUTER DES JEUX"), systemImage: "plus")
                     .font(.orbitron(14, weight: 800))
                     .tracking(1.5)
                     .foregroundStyle(.black)
@@ -583,5 +602,93 @@ private struct EmptyLibraryView: View {
             .padding(.top, 10)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Bandeau d'avancement de l'import : décompression ou copie d'un jeu, avec annulation.
+struct ImportProgressView: View {
+    let progress: GameLibrary.ImportProgress
+    let cancelling: Bool
+    let cancel: () -> Void
+
+    private var fraction: Double? {
+        progress.total > 0 ? min(1, Double(progress.done) / Double(progress.total)) : nil
+    }
+
+    private var title: String {
+        let step = progress.step == .extracting ? tr("DÉCOMPRESSION") : tr("COPIE")
+        return progress.count > 1 ? "\(step) · \(progress.index)/\(progress.count)" : step
+    }
+
+    private var detail: String {
+        let format = AppLanguage.bytes
+        if cancelling { return tr("Annulation…") }
+        if let fraction { return tr("\(format(progress.done)) sur \(format(progress.total)) · \(Int(fraction * 100)) %") }
+        return progress.done > 0 ? format(progress.done) : tr("Préparation…")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: progress.step == .extracting ? "archivebox" : "doc.on.doc")
+                    .foregroundStyle(Neon.cyan)
+                Text(title)
+                    .font(.orbitron(11))
+                    .foregroundStyle(Neon.cyan)
+                Spacer()
+                Button(action: cancel) {
+                    Text(tr("ANNULER"))
+                        .font(.orbitron(10))
+                        .foregroundStyle(Neon.magenta)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .overlay(Chamfer(cut: 5).stroke(Neon.magenta.opacity(0.8), lineWidth: 1))
+                }
+                .disabled(cancelling)
+                .opacity(cancelling ? 0.4 : 1)
+            }
+            Text(progress.fileName)
+                .font(Neon.mono(12, weight: .semibold))
+                .foregroundStyle(Neon.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            bar
+            Text(detail)
+                .font(Neon.mono(11))
+                .foregroundStyle(Neon.dim)
+                .monospacedDigit()
+        }
+        .padding(14)
+        .background(Chamfer(cut: 10).fill(Color.black.opacity(0.85)))
+        .overlay(Chamfer(cut: 10).stroke(Neon.cyan.opacity(0.7), lineWidth: 1))
+        .neonGlow(Neon.cyan, radius: 6)
+        .frame(maxWidth: 520)
+        .padding(.horizontal, 16)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var bar: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.08))
+                if let fraction {
+                    Capsule()
+                        .fill(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(6, proxy.size.width * fraction))
+                        .animation(.linear(duration: 0.1), value: fraction)
+                } else {
+                    // Taille inconnue : un trait qui va et vient.
+                    TimelineView(.animation) { timeline in
+                        let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
+                        let position = (phase < 0.5 ? phase : 1 - phase) * 2 * proxy.size.width * 0.7
+                        Capsule()
+                            .fill(Neon.cyan)
+                            .frame(width: proxy.size.width * 0.3)
+                            .offset(x: position)
+                    }
+                }
+            }
+        }
+        .frame(height: 6)
     }
 }

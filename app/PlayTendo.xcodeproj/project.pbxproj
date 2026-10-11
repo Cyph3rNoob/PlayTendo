@@ -50,6 +50,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7F000000000000000000000C /* Build configuration list for PBXNativeTarget "PlayTendo" */;
 			buildPhases = (
+				7F00000000000000000000A1 /* Clés masquées */,
 				7F0000000000000000000007 /* Sources */,
 				7F0000000000000000000008 /* Frameworks */,
 				7F0000000000000000000009 /* Resources */,
@@ -112,6 +113,26 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		7F00000000000000000000A1 /* Clés masquées */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Clés masquées";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(PROJECT_DIR)/../build/generated/PTSecrets.generated.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Clés de service masquées (jamais en clair dans l'app) : build/generated/PTSecrets.generated.h.\nset -e\npython3 \"${PROJECT_DIR}/../scripts/make_secrets.py\"\n";
+		};
 		7F000000000000000000000A /* Embed cores */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -210,6 +231,22 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/PlayTendo/Emulation/Vulkan",
+					"$(SRCROOT)/../libs/libarchive/include",
+					"$(SRCROOT)/../build/generated",
+				);
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../libs/libarchive/ios/libarchive.a",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../libs/libarchive/sim/libarchive.a",
+					"-lz",
+					"-lbz2",
+					"-liconv",
 				);
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -238,6 +275,22 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/PlayTendo/Emulation/Vulkan",
+					"$(SRCROOT)/../libs/libarchive/include",
+					"$(SRCROOT)/../build/generated",
+				);
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../libs/libarchive/ios/libarchive.a",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../libs/libarchive/sim/libarchive.a",
+					"-lz",
+					"-lbz2",
+					"-liconv",
 				);
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

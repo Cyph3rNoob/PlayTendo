@@ -84,6 +84,11 @@ else
   echo "OK  MoltenVK deja present"
 fi
 
+# Archives importées (.zip, .7z, .rar) : libarchive (BSD-2-Clause) et le décompresseur LZMA des .7z, liblzma
+# (xz, 0BSD). Compilées par scripts/build_libarchive.sh.
+clone libarchive   https://github.com/libarchive/libarchive.git v3.8.9
+clone xz           https://github.com/tukaani-project/xz.git    v5.8.4
+
 # PS Vita (mise de côté le 2026-10-10) : seulement avec PLAYTENDO_VITA=1, comme scripts/build_app.sh.
 if [ "${PLAYTENDO_VITA:-0}" = "1" ]; then
   # PS Vita : Vita3K n'a pas de version numérotée (seulement des versions automatiques en continu) : version figée le

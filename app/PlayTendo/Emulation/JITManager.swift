@@ -18,7 +18,7 @@ final class JITManager: ObservableObject {
         var label: String {
             switch self {
             case .stikDebug: "Via StikDebug"
-            case .off: "Désactivé"
+            case .off: tr("Désactivé")
             }
         }
     }
@@ -123,35 +123,35 @@ final class JITManager: ObservableObject {
     private func run() async throws {
 #if targetEnvironment(simulator)
         // Pas de StikDebug dans le simulateur : même réserve, sans débogueur, pour tester les moteurs.
-        status = .activating("Préparation de la mémoire…")
+        status = .activating(tr("Préparation de la mémoire…"))
         try await Self.preparePool(simulated: true)
 #else
         guard method != .off else {
-            throw Failure(message: "Le mode turbo est désactivé dans les réglages.")
+            throw Failure(message: tr("Le mode turbo est désactivé dans les réglages."))
         }
         guard PTJITHasGetTaskAllow() else {
-            throw Failure(message: "Cette installation de PlayTendo ne peut pas recevoir de débogueur. Réinstalle-la avec AltStore.")
+            throw Failure(message: tr("Cette installation de PlayTendo ne peut pas recevoir de débogueur. Réinstalle-la avec AltStore."))
         }
         if !PTJITIsTraced() {
             guard let url = stikDebugURL() else {
-                throw Failure(message: "Adresse StikDebug impossible à créer.")
+                throw Failure(message: tr("Adresse StikDebug impossible à créer."))
             }
-            status = .activating("Ouverture de StikDebug…")
+            status = .activating(tr("Ouverture de StikDebug…"))
             PTLogLine("JIT : demande envoyée à StikDebug")
             guard await UIApplication.shared.open(url) else {
-                throw Failure(message: "StikDebug n'est pas installé (ou pas activé dans AltStore).")
+                throw Failure(message: tr("StikDebug n'est pas installé (ou pas activé dans AltStore)."))
             }
-            status = .activating("En attente de StikDebug…")
+            status = .activating(tr("En attente de StikDebug…"))
             // StikDebug s'attache puis rouvre PlayTendo tout seul.
             let deadline = Date().addingTimeInterval(120)
             while !PTJITIsTraced() {
                 if Date() > deadline {
-                    throw Failure(message: "StikDebug n'a pas répondu. Vérifie que LocalDevVPN est connecté et que ton fichier de jumelage est importé dans StikDebug, puis réessaie.")
+                    throw Failure(message: tr("StikDebug n'a pas répondu. Vérifie que LocalDevVPN est connecté et que ton fichier de jumelage est importé dans StikDebug, puis réessaie."))
                 }
                 try await Task.sleep(nanoseconds: 200_000_000)
             }
         }
-        status = .activating("Préparation de la mémoire…")
+        status = .activating(tr("Préparation de la mémoire…"))
         try await Self.preparePool(simulated: false)
 #endif
     }
@@ -178,7 +178,8 @@ final class JITManager: ObservableObject {
                 ? PTJITPrepareSimulatedPool(poolSize, &buffer, buffer.count)
                 : PTJITPreparePool(poolSize, &buffer, buffer.count)
             if !ready {
-                throw Failure(message: "Préparation de la mémoire impossible : \(String(cString: buffer))")
+                // Raison écrite par PTJIT.m (en français) : traduite si c'est une des phrases connues.
+                throw Failure(message: tr("Préparation de la mémoire impossible : \(trMessage(String(cString: buffer)))"))
             }
         }.value
     }

@@ -21,7 +21,7 @@ struct WelcomeView: View {
             VStack(spacing: 0) {
                 HStack {
                     Spacer()
-                    Button("Passer", action: onFinish)
+                    Button(tr("Passer"), action: onFinish)
                         .font(Neon.mono(14, weight: .semibold))
                         .foregroundStyle(Neon.dim)
                         .opacity(page < pageCount - 1 ? 1 : 0)
@@ -64,7 +64,7 @@ struct WelcomeView: View {
                     .font(.orbitron(30, weight: 900))
                     .tracking(2)
                     .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
-                Text("Tes jeux Nintendo et Sony, sur ton \(device).")
+                Text(tr("Tes jeux Nintendo et Sony, sur ton \(device)."))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Neon.text)
                     .multilineTextAlignment(.center)
@@ -82,47 +82,47 @@ struct WelcomeView: View {
                 }
             }
             WelcomeLine(icon: "sparkles",
-                        text: "Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, PS2), 3 fois (GameCube, Wii, 3DS) ou 2 fois (PS1).")
-            WelcomeLine(icon: "rectangle.ratio.16.to.9", text: "L'écran large 16:9 pour la N64 et la PS2.")
+                        text: tr("Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, PS2), 3 fois (GameCube, Wii, 3DS) ou 2 fois (PS1)."))
+            WelcomeLine(icon: "rectangle.ratio.16.to.9", text: tr("L'écran large 16:9 pour la N64 et la PS2."))
             WelcomeLine(icon: "clock.arrow.circlepath",
-                        text: "Une sauvegarde rapide à tout moment, et « Continuer » pour reprendre là où tu t'étais arrêté.")
-            WelcomeLine(icon: "ipad.and.iphone", text: "Sur iPhone et iPad, avec les boutons à l'écran ou une manette.")
+                        text: tr("Une sauvegarde rapide à tout moment, et « Continuer » pour reprendre là où tu t'étais arrêté."))
+            WelcomeLine(icon: "ipad.and.iphone", text: tr("Sur iPhone et iPad, avec les boutons à l'écran ou une manette."))
         }
     }
 
     private var games: some View {
         WelcomeCard {
-            WelcomeTitle(icon: "folder.fill", title: "AJOUTE TES JEUX", color: Neon.cyan)
-            WelcomeLine(icon: "info.circle", text: "PlayTendo ne contient aucun jeu : il fait tourner les tiens.")
-            WelcomeLine(icon: "folder", text: "Copie-les dans l'app Fichiers › Sur mon \(device) › PlayTendo › Jeux.")
-            WelcomeLine(icon: "plus.circle", text: "Ou touche « + » dans la bibliothèque (les fichiers .zip marchent aussi).")
-            WelcomeLine(icon: "cpu", text: "PlayStation 2 : mets aussi le BIOS de ta console dans le dossier BIOS.")
+            WelcomeTitle(icon: "folder.fill", title: tr("AJOUTE TES JEUX"), color: Neon.cyan)
+            WelcomeLine(icon: "info.circle", text: tr("PlayTendo ne contient aucun jeu : il fait tourner les tiens."))
+            WelcomeLine(icon: "folder", text: tr("Copie-les dans l'app Fichiers › Sur mon \(device) › PlayTendo › Jeux."))
+            WelcomeLine(icon: "plus.circle", text: tr("Ou touche « + » dans la bibliothèque (les .zip, .7z et .rar marchent aussi)."))
+            WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS PS2)."))
         }
     }
 
     private var play: some View {
         WelcomeCard {
-            WelcomeTitle(icon: "gamecontroller.fill", title: "JOUE", color: Neon.magenta)
-            WelcomeLine(icon: "hand.tap", text: "Touche un jeu pour le lancer : des boutons apparaissent à l'écran.")
+            WelcomeTitle(icon: "gamecontroller.fill", title: tr("JOUE"), color: Neon.magenta)
+            WelcomeLine(icon: "hand.tap", text: tr("Touche un jeu pour le lancer : des boutons apparaissent à l'écran."))
             WelcomeLine(icon: "gamecontroller",
-                        text: "Une manette Bluetooth (Switch, Xbox, PlayStation) marche aussi : les boutons de l'écran s'effacent dès que tu t'en sers.")
-            WelcomeLine(icon: "pause.circle", text: "Le bouton menu met le jeu en pause : sauvegarde rapide, options, quitter.")
-            WelcomeLine(icon: "externaldrive", text: "Les sauvegardes des jeux s'enregistrent toutes seules.")
+                        text: tr("Une manette Bluetooth (Switch, Xbox, PlayStation) marche aussi : les boutons de l'écran s'effacent dès que tu t'en sers."))
+            WelcomeLine(icon: "pause.circle", text: tr("Le bouton menu met le jeu en pause : sauvegarde rapide, options, quitter."))
+            WelcomeLine(icon: "externaldrive", text: tr("Les sauvegardes des jeux s'enregistrent toutes seules."))
         }
     }
 
     private var turbo: some View {
         WelcomeCard {
-            WelcomeTitle(icon: "bolt.fill", title: "MODE TURBO", color: Neon.violet)
+            WelcomeTitle(icon: "bolt.fill", title: tr("MODE TURBO"), color: Neon.violet)
 #if PLAYTENDO_VITA
-            WelcomeLine(icon: "bolt", text: "Obligatoire pour la PS Vita, indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent.")
+            WelcomeLine(icon: "bolt", text: tr("Obligatoire pour la PS Vita, indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
 #else
-            WelcomeLine(icon: "bolt", text: "Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent.")
+            WelcomeLine(icon: "bolt", text: tr("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
 #endif
-            WelcomeLine(icon: "square.stack.3d.up", text: "Il faut deux apps à part : StikDebug et LocalDevVPN.")
+            WelcomeLine(icon: "square.stack.3d.up", text: tr("Il faut deux apps à part : StikDebug et LocalDevVPN."))
             WelcomeLine(icon: "arrow.triangle.2.circlepath",
-                        text: "Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo : StikDebug s'ouvre quelques secondes puis te ramène ici.")
-            WelcomeLine(icon: "gearshape", text: "Tout est expliqué dans la roue dentée de la bibliothèque.")
+                        text: tr("Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo : StikDebug s'ouvre quelques secondes puis te ramène ici."))
+            WelcomeLine(icon: "gearshape", text: tr("Tout est expliqué dans la roue dentée de la bibliothèque."))
         }
     }
 
@@ -150,7 +150,7 @@ struct WelcomeView: View {
                 withAnimation { page += 1 }
             }
         } label: {
-            Text(last ? "C'EST PARTI !" : "SUIVANT")
+            Text(last ? tr("C'EST PARTI !") : tr("SUIVANT"))
                 .font(.orbitron(16, weight: 900))
                 .tracking(2)
                 .foregroundStyle(.black)

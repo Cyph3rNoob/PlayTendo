@@ -1,17 +1,35 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Réglages de l'app : le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS, et le son du démarrage.
+/// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS, le BIOS PS2
+/// et le son du démarrage.
 struct SettingsView: View {
     @EnvironmentObject private var jit: JITManager
     @AppStorage(BootSound.enabledKey) private var bootSound = true
+    @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
     @State private var vpnConnected = false
+    @State private var biosList: [PS2BIOS.Info] = []
+    @State private var biosInUse: PS2BIOS.Info?
+    @State private var importingBIOS = false
+    @State private var biosBusy = false
+    @State private var biosAlert: (title: String, text: String)?
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Picker(tr("Langue"), selection: $language) {
+                        ForEach(AppLanguage.allCases) { choice in
+                            Text(choice.label).tag(choice)
+                        }
+                    }
+                } footer: {
+                    Text(tr("Automatique : la langue de l'iPhone (le français s'il passe avant l'anglais, sinon l'anglais)."))
+                }
+
                 Section {
                     HStack(spacing: 12) {
                         Image(systemName: statusIcon)
@@ -28,7 +46,7 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
 
-                    Picker("Activation", selection: $jit.method) {
+                    Picker(tr("Activation"), selection: $jit.method) {
                         ForEach(JITManager.Method.allCases) { method in
                             Text(method.label).tag(method)
                         }
@@ -38,40 +56,78 @@ struct SettingsView: View {
                         Button {
                             Task { try? await jit.activate() }
                         } label: {
-                            Label("Activer maintenant", systemImage: "bolt.fill")
+                            Label(tr("Activer maintenant"), systemImage: "bolt.fill")
                         }
                         .disabled(isActivating)
                     }
                 } header: {
-                    Text("Mode turbo (JIT)")
+                    Text(tr("Mode turbo (JIT)"))
                 } footer: {
-                    Text("Accélère la PSP, la PS2, la GameCube, la Wii et la 3DS : leur code est traduit pour l'iPhone au lieu d'être interprété (sans lui, la PS2, la GameCube, la Wii et la 3DS sont injouables). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un de ces jeux, et reste actif jusqu'à la fermeture de l'app.")
+                    Text(tr("Accélère la PSP, la PS2, la GameCube, la Wii et la 3DS : leur code est traduit pour l'iPhone au lieu d'être interprété (sans lui, la PS2, la GameCube, la Wii et la 3DS sont injouables). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un de ces jeux, et reste actif jusqu'à la fermeture de l'app."))
                 }
 
                 if jit.method == .stikDebug {
                     Section {
-                        Requirement(text: "StikDebug installé", done: stikDebugInstalled)
-                        Requirement(text: "Ton fichier de jumelage importé dans StikDebug", done: jit.hasWorked ? true : nil)
+                        Requirement(text: tr("StikDebug installé"), done: stikDebugInstalled)
+                        Requirement(text: tr("Ton fichier de jumelage importé dans StikDebug"), done: jit.hasWorked ? true : nil)
                         // Le VPN ne sert qu'au moment de l'activation : turbo actif, son absence n'est pas une erreur.
-                        Requirement(text: "LocalDevVPN connecté (en Wi-Fi de préférence)",
+                        Requirement(text: tr("LocalDevVPN connecté (en Wi-Fi de préférence)"),
                                     done: vpnConnected ? true : (jit.isActive ? nil : false))
-                        Requirement(text: "Mode développeur activé (Réglages › Confidentialité et sécurité)", done: jit.hasWorked ? true : nil)
+                        Requirement(text: tr("Mode développeur activé (Réglages › Confidentialité et sécurité)"), done: jit.hasWorked ? true : nil)
                     } header: {
-                        Text("Ce qu'il faut")
+                        Text(tr("Ce qu'il faut"))
                     } footer: {
-                        Text("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin.")
+                        Text(tr("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin."))
                     }
                 }
 
                 Section {
-                    Toggle("Son au démarrage", isOn: $bootSound)
+                    if biosList.isEmpty {
+                        Requirement(text: tr("Aucun BIOS PS2"), done: false)
+                    }
+                    ForEach(biosList) { bios in
+                        let used = bios.fileName == biosInUse?.fileName
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(bios.fileName)
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text([bios.summary ?? tr("Version inconnue"), used ? tr("utilisé par la PS2") : nil]
+                                        .compactMap { $0 }.joined(separator: " · "))
+                                    .font(.caption)
+                                    .foregroundStyle(used ? Neon.cyan : Neon.dim)
+                            }
+                        } icon: {
+                            Image(systemName: used ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(used ? Color.green : Neon.dim)
+                        }
+                    }
+                    Button {
+                        importingBIOS = true
+                    } label: {
+                        if biosBusy {
+                            Label(tr("Import…"), systemImage: "hourglass")
+                        } else {
+                            Label(tr("Importer un BIOS PS2…"), systemImage: "square.and.arrow.down")
+                        }
+                    }
+                    .disabled(biosBusy)
                 } header: {
-                    Text("Démarrage")
+                    Text(tr("BIOS PS2"))
                 } footer: {
-                    Text("Joué avec l'animation d'ouverture de PlayTendo. Muet en mode silencieux, comme le son des jeux.")
+                    Text(tr("Obligatoire pour la PS2. Choisis le BIOS de ta console (fichier de 4 Mo, souvent « SCPH-… », n'importe quel nom ; dans un .zip, .7z ou .rar aussi) : PlayTendo vérifie que c'en est bien un et le range dans le dossier BIOS. PlayTendo n'en fournit aucun."))
+                }
+
+                Section {
+                    Toggle(tr("Son au démarrage"), isOn: $bootSound)
+                } header: {
+                    Text(tr("Démarrage"))
+                } footer: {
+                    Text(tr("Joué avec l'animation d'ouverture de PlayTendo. Muet en mode silencieux, comme le son des jeux."))
                 }
             }
-            .navigationTitle("Réglages")
+            .navigationTitle(tr("Réglages"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -79,6 +135,20 @@ struct SettingsView: View {
                 }
             }
             .onAppear(perform: refreshChecks)
+            .onChange(of: language) { _, _ in
+                // Tout s'affiche aussitôt dans la nouvelle langue ; le Lisez-moi suit, et les BIOS sont relus.
+                Paths.writeReadme()
+                refreshBIOS()
+            }
+            .fileImporter(isPresented: $importingBIOS, allowedContentTypes: [.item]) { result in
+                if case .success(let url) = result { importBIOS(url) }
+            }
+            .alert(biosAlert?.title ?? "", isPresented: Binding(get: { biosAlert != nil },
+                                                                set: { if !$0 { biosAlert = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(biosAlert?.text ?? "")
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { refreshChecks() }
             }
@@ -97,6 +167,37 @@ struct SettingsView: View {
     private func refreshChecks() {
         stikDebugInstalled = jit.isStikDebugInstalled
         vpnConnected = JITManager.isLocalDevVPNConnected
+        refreshBIOS()
+    }
+
+    private func refreshBIOS() {
+        biosList = PS2BIOS.installed()
+        biosInUse = PS2BIOS.inUse(among: biosList)
+    }
+
+    /// Vérifie et range le fichier choisi (hors du fil principal : une archive peut prendre un moment), puis le dit.
+    private func importBIOS(_ url: URL) {
+        biosBusy = true
+        Task {
+            let result = await Task.detached(priority: .userInitiated) { PS2BIOS.importFile(url) }.value
+            biosBusy = false
+            refreshBIOS()
+            switch result {
+            case .added(let info):
+                var text = tr("« \(info.fileName) » (\(info.summary ?? tr("version inconnue"))) est rangé dans le dossier BIOS.")
+                if let used = biosInUse, used.fileName != info.fileName {
+                    text += tr(" La PS2 garde pour l'instant « \(used.fileName) ».")
+                }
+                biosAlert = (tr("BIOS PS2 ajouté"), text)
+            case .alreadyThere(let name):
+                biosAlert = (tr("Déjà là"), tr("Ce BIOS est déjà dans le dossier BIOS (« \(name) »). Rien n'a été ajouté."))
+            case .notBIOS:
+                biosAlert = (tr("Ce n'est pas un BIOS PS2"),
+                             tr("Un BIOS PS2 est un fichier de 4 Mo (8 Mo pour certains modèles) copié depuis ta console. Rien n'a été ajouté."))
+            case .failed(let message):
+                biosAlert = (tr("Import impossible"), message)
+            }
+        }
     }
 
     private var isActivating: Bool {
@@ -104,20 +205,20 @@ struct SettingsView: View {
     }
 
     private var statusTitle: String {
-        if jit.isActive { return "Actif" }
+        if jit.isActive { return tr("Actif") }
         switch jit.status {
-        case .activating: return "Activation…"
-        case .failed: return "Échec de l'activation"
-        default: return jit.method == .off ? "Désactivé" : "Inactif"
+        case .activating: return tr("Activation…")
+        case .failed: return tr("Échec de l'activation")
+        default: return jit.method == .off ? tr("Désactivé") : tr("Inactif")
         }
     }
 
     private var statusDetail: String? {
-        if jit.isActive { return "Les jeux PSP, PS2, GameCube, Wii et 3DS lancés maintenant en profitent." }
+        if jit.isActive { return tr("Les jeux PSP, PS2, GameCube, Wii et 3DS lancés maintenant en profitent.") }
         switch jit.status {
         case .activating(let step): return step
         case .failed(let message): return message
-        default: return jit.method == .off ? "Les jeux PSP, PS2, GameCube, Wii et 3DS utilisent l'interpréteur." : "S'activera au prochain de ces jeux."
+        default: return jit.method == .off ? tr("Les jeux PSP, PS2, GameCube, Wii et 3DS utilisent l'interpréteur.") : tr("S'activera au prochain de ces jeux.")
         }
     }
 
@@ -171,7 +272,7 @@ struct JITActivationView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Neon.cyan)
                     .neonGlow(Neon.cyan, radius: 12)
-                Text("MODE TURBO")
+                Text(tr("MODE TURBO"))
                     .font(.orbitron(18, weight: 900))
                     .tracking(3)
                     .foregroundStyle(Neon.text)
@@ -182,7 +283,7 @@ struct JITActivationView: View {
                         .foregroundStyle(Neon.dim)
                 }
                 Button(action: onSkip) {
-                    Text("JOUER SANS JIT")
+                    Text(tr("JOUER SANS JIT"))
                         .font(.orbitron(12, weight: 800))
                         .tracking(1.5)
                         .foregroundStyle(Neon.magenta)
@@ -205,6 +306,6 @@ struct JITActivationView: View {
 
     private var stepText: String {
         if case .activating(let step) = status { return step }
-        return "Activation…"
+        return tr("Activation…")
     }
 }

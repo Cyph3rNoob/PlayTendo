@@ -9,7 +9,7 @@ enum PS1Settings {
 
         var id: Int { rawValue }
         var label: String { "x\(rawValue)" }
-        var detail: String { self == .x1 ? "origine" : "3D plus fine" }
+        var detail: String { self == .x1 ? tr("origine") : tr("3D plus fine") }
     }
 
     /// Lissage des bords en escalier (filtre FXAA de PlayTendo, à l'affichage : le moteur n'en a pas).
@@ -17,7 +17,7 @@ enum PS1Settings {
         case off = 0, on
 
         var id: Int { rawValue }
-        var label: String { self == .off ? "Non" : "Oui" }
+        var label: String { self == .off ? tr("Non") : tr("Oui") }
     }
 
     static let resolutionKey = "resolutionPS1"

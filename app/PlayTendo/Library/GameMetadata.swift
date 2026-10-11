@@ -27,6 +27,7 @@ final class GameMetadata: ObservableObject {
     private static let infosFile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Bibliotheque/infos.json")
     private static let lastPlayedKey = "dernieresParties"
+    private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
 
     init() {
         if let data = try? Data(contentsOf: Self.infosFile),
@@ -186,6 +187,13 @@ final class GameMetadata: ObservableObject {
     private func downloadCovers(for games: [Game]) async {
         let week: Double = 7 * 24 * 3600
         let now = Date().timeIntervalSince1970
+        // Source de secours nouvelle : les jeux restés sans jaquette sont recherchés de nouveau, une fois.
+        if SteamGridDB.isAvailable, !UserDefaults.standard.bool(forKey: Self.steamGridTriedKey) {
+            for key in infos.keys where infos[key]?.coverMissing != nil {
+                infos[key]?.coverMissing = nil
+            }
+            UserDefaults.standard.set(true, forKey: Self.steamGridTriedKey)
+        }
         var wanted: [(key: String, name: String, system: GameSystem)] = []
         var seen = Set<String>()
         for game in games {
@@ -243,7 +251,20 @@ final class GameMetadata: ObservableObject {
                 return .offline
             }
         }
-        PTLogLine("Pas de jaquette chez libretro pour : \(name)")
+        // Source de secours, si l'app a été compilée avec la clé SteamGridDB.
+        switch await SteamGridDB.cover(for: name) {
+        case .found(let data, let gameName):
+            let file = coverURL(name: name, system: system)
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            guard (try? data.write(to: file, options: .atomic)) != nil else { return .offline }
+            PTLogLine("Jaquette téléchargée sur SteamGridDB (« \(gameName) ») : \(name)")
+            return .saved
+        case .offline:
+            return .offline
+        case .missing:
+            break
+        }
+        PTLogLine("Pas de jaquette chez libretro\(SteamGridDB.isAvailable ? " ni SteamGridDB" : "") pour : \(name)")
         return .missing
     }
 

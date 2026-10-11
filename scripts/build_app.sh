@@ -24,6 +24,11 @@ APP="$BUILD/Release-iphoneos/PlayTendo.app"
 # supprimée du projet restait dans PlugIns et se retrouvait dans l'IPA).
 rm -rf "${APP:?}"
 
+if [ -s "$ROOT/secrets/steamgriddb.key" ]; then
+  echo ">>> Clé SteamGridDB embarquée, masquée (jaquettes de secours)"
+else
+  echo ">>> Pas de clé SteamGridDB (secrets/steamgriddb.key) : jaquettes de secours désactivées"
+fi
 echo ">>> Compilation de l'app…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target PlayTendo -configuration Release -sdk iphoneos \
     SYMROOT="$BUILD" OBJROOT="$BUILD/obj" \

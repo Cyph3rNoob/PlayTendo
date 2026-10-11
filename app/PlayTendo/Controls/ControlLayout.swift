@@ -37,9 +37,9 @@ enum DSTouchSize: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .small: "Petit"
-        case .medium: "Moyen"
-        case .large: "Grand"
+        case .small: tr("Petit")
+        case .medium: tr("Moyen")
+        case .large: tr("Grand")
         }
     }
 
@@ -357,7 +357,7 @@ struct ControlLayout: Equatable {
             let shakeWidth = size.width + 34
             controls.append(PlacedControl(element: .shoulder(.r),
                                           frame: CGRect(x: right - shakeWidth, y: top, width: shakeWidth, height: size.height),
-                                          label: "SECOUER"))
+                                          label: tr("SECOUER")))
             return
         }
         if scheme.isGameCube {

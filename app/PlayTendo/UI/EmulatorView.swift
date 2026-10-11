@@ -69,26 +69,26 @@ struct EmulatorView: View {
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
             gamepad.stickMovesDPad = !controls.hasAnalogStick
             gamepad.nintendoLetters = controls.nintendoLetters
-            UIApplication.shared.isIdleTimerDisabled = true
+            ScreenAwake.hold(.playing)
             session.setWiimote(controls.isWiimote)
             session.start()
         }
         .onDisappear {
-            UIApplication.shared.isIdleTimerDisabled = false
+            ScreenAwake.release(.playing)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active && session.state == .running { openMenu() }
         }
-        .alert("Recommencer le jeu ?", isPresented: $confirmingReset) {
-            Button("Recommencer", role: .destructive) {
+        .alert(tr("Recommencer le jeu ?"), isPresented: $confirmingReset) {
+            Button(tr("Recommencer"), role: .destructive) {
                 session.reset()
                 closeMenu()
             }
-            Button("Annuler", role: .cancel) {}
+            Button(tr("Annuler"), role: .cancel) {}
         } message: {
-            Text("La progression non sauvegardée sera perdue.")
+            Text(tr("La progression non sauvegardée sera perdue."))
         }
-        .alert("Impossible de lancer le jeu", isPresented: Binding(get: { failureMessage != nil }, set: { _ in })) {
+        .alert(tr("Impossible de lancer le jeu"), isPresented: Binding(get: { failureMessage != nil }, set: { _ in })) {
             Button("OK") { dismiss() }
         } message: {
             Text(failureMessage ?? "")
@@ -174,7 +174,7 @@ struct EmulatorView: View {
                          touchSizeLabel: controls.usesTouchScreen && landscape ? touchSize.label : nil,
                          onTouchSize: { nextTouchSize() },
                          imageSizeLabel: controls.canFillScreen && landscape && !ps2FillsForController
-                            ? (fillScreen ? "Plein écran" : "Réduite") : nil,
+                            ? (fillScreen ? tr("Plein écran") : tr("Réduite")) : nil,
                          onImageSize: { toggleFillScreen() },
                          controllerLabel: game.system == .wii ? wiiController.label : nil,
                          onController: { switchWiiController() },
@@ -306,15 +306,15 @@ private struct PauseMenu: View {
         var items: [Item] = []
         if hasEngineExtras {
             items += [
-                Item(title: "Sauvegarder", icon: "square.and.arrow.down") {
+                Item(title: tr("Sauvegarder"), icon: "square.and.arrow.down") {
                     session.saveState()
                     onResume()
                 },
-                Item(title: "Charger", icon: "clock.arrow.circlepath", enabled: session.hasSaveState) {
+                Item(title: tr("Charger"), icon: "clock.arrow.circlepath", enabled: session.hasSaveState) {
                     session.loadState()
                     onResume()
                 },
-                Item(title: session.isFastForwarding ? "Vitesse normale" : "Avance rapide ×3",
+                Item(title: session.isFastForwarding ? tr("Vitesse normale") : tr("Avance rapide ×3"),
                      icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill") {
                     session.toggleFastForward()
                     onResume()
@@ -322,31 +322,31 @@ private struct PauseMenu: View {
             ]
         }
         if let disk = session.diskInfo {
-            items.append(Item(title: "Changer de disque (\(disk.current)/\(disk.count))", icon: "opticaldisc") {
+            items.append(Item(title: tr("Changer de disque (\(disk.current)/\(disk.count))"), icon: "opticaldisc") {
                 session.nextDisk()
                 onResume()
             })
         }
         if let onSwapScreens {
-            items.append(Item(title: "Inverser les écrans", icon: "rectangle.2.swap", action: onSwapScreens))
+            items.append(Item(title: tr("Inverser les écrans"), icon: "rectangle.2.swap", action: onSwapScreens))
         }
         if let touchSizeLabel {
-            items.append(Item(title: "Écran tactile : \(touchSizeLabel)", icon: "hand.tap", action: onTouchSize))
+            items.append(Item(title: tr("Écran tactile : \(touchSizeLabel)"), icon: "hand.tap", action: onTouchSize))
         }
         if let imageSizeLabel {
-            items.append(Item(title: "Image : \(imageSizeLabel)", icon: "arrow.up.left.and.arrow.down.right",
+            items.append(Item(title: tr("Image : \(imageSizeLabel)"), icon: "arrow.up.left.and.arrow.down.right",
                               action: onImageSize))
         }
         if let controllerLabel {
-            items.append(Item(title: "Manette : \(controllerLabel)", icon: "gamecontroller", action: onController))
+            items.append(Item(title: tr("Manette : \(controllerLabel)"), icon: "gamecontroller", action: onController))
         }
         return items
     }
 
     private var endItems: [Item] {
-        let quit = Item(title: "Quitter le jeu", icon: "xmark", destructive: true, action: onQuit)
+        let quit = Item(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, action: onQuit)
         guard hasEngineExtras else { return [quit] }
-        return [Item(title: "Recommencer", icon: "arrow.counterclockwise", action: onReset), quit]
+        return [Item(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset), quit]
     }
 
     var body: some View {
@@ -358,7 +358,7 @@ private struct PauseMenu: View {
             VStack(spacing: compact ? 8 : 10) {
                 header
                     .padding(.bottom, compact ? 2 : 6)
-                MenuButton(title: "Reprendre", icon: "play.fill", prominent: true, action: onResume)
+                MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
                 if compact {
                     grid(items)
                     if hasImageSettings { imageSettings }
@@ -421,9 +421,9 @@ private struct PauseMenu: View {
         if session.game.system == .vita {
             // Vita3K ne lit la précision qu'au lancement du jeu (et n'a pas de sauvegarde rapide pour le relancer).
             imageSettings(
-                resolution: NeonSegments(title: "PRÉCISION",
+                resolution: NeonSegments(title: tr("PRÉCISION"),
                                          detail: session.vitaAccuracy.map { $0.rawValue != vitaAccuracy } == true
-                                            ? "au prochain lancement" : nil,
+                                            ? tr("au prochain lancement") : nil,
                                          options: VitaSettings.Accuracy.allCases.map { ($0.rawValue, $0.label) },
                                          selection: vitaAccuracy) { value in
                     choose { vitaAccuracy = value }
@@ -439,87 +439,87 @@ private struct PauseMenu: View {
     @ViewBuilder private var consoleImageSettings: some View {
         if isDolphin {
             imageSettings(
-                resolution: NeonSegments(title: "RÉSOLUTION",
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
                                          detail: (DolphinSettings.Resolution(rawValue: dolphinResolution) ?? .x1).detail,
                                          options: DolphinSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: dolphinResolution) { value in
                     choose { dolphinResolution = value }
                 },
-                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                smoothing: NeonSegments(title: tr("LISSAGE"), detail: nil,
                                         options: DolphinSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: dolphinSmoothing) { value in
                     choose { dolphinSmoothing = value }
                 })
         } else if session.game.system == .n64 {
             imageSettings(
-                resolution: NeonSegments(title: "RÉSOLUTION",
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
                                          detail: (N64Settings.Resolution(rawValue: n64Resolution) ?? .x2)
                                             .size(wide: n64Format == N64Settings.Format.wide.rawValue),
                                          options: N64Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: n64Resolution) { value in
                     choose { n64Resolution = value }
                 },
-                smoothing: NeonSegments(title: "FORMAT", detail: nil,
+                smoothing: NeonSegments(title: tr("FORMAT"), detail: nil,
                                         options: N64Settings.Format.allCases.map { ($0.rawValue, $0.label) },
                                         selection: n64Format) { value in
                     choose { n64Format = value }
                 })
         } else if session.game.system == .psx {
             imageSettings(
-                resolution: NeonSegments(title: "RÉSOLUTION",
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
                                          detail: (PS1Settings.Resolution(rawValue: ps1Resolution) ?? .x1).detail,
                                          options: PS1Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: ps1Resolution) { value in
                     choose { ps1Resolution = value }
                 },
-                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                smoothing: NeonSegments(title: tr("LISSAGE"), detail: nil,
                                         options: PS1Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: ps1Smoothing) { value in
                     choose { ps1Smoothing = value }
                 })
         } else if session.game.system == .n3ds {
             imageSettings(
-                resolution: NeonSegments(title: "RÉSOLUTION",
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
                                          detail: (N3DSSettings.Resolution(rawValue: n3dsResolution) ?? .x1).size,
                                          options: N3DSSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: n3dsResolution) { value in
                     choose { n3dsResolution = value }
                 },
-                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                smoothing: NeonSegments(title: tr("LISSAGE"), detail: nil,
                                         options: N3DSSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: n3dsSmoothing) { value in
                     choose { n3dsSmoothing = value }
                 })
         } else if session.game.system == .ps2 {
             imageSettings(
-                resolution: NeonSegments(title: "RÉSOLUTION",
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
                                          detail: (PS2Settings.Resolution(rawValue: ps2Resolution) ?? .x1).detail,
                                          options: PS2Settings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: ps2Resolution) { value in
                     choose { ps2Resolution = value }
                 },
-                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                smoothing: NeonSegments(title: tr("LISSAGE"), detail: nil,
                                         options: PS2Settings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: ps2Smoothing) { value in
                     choose { ps2Smoothing = value }
                 },
-                format: NeonSegments(title: "FORMAT",
+                format: NeonSegments(title: tr("FORMAT"),
                                      // 16:9 choisi mais image restée en 4:3 : ce jeu n'a pas de correctif écran large.
                                      detail: ps2Format == PS2Settings.Format.wide.rawValue && session.aspectRatio < 1.5
-                                        ? "reste en 4:3" : nil,
+                                        ? tr("reste en 4:3") : nil,
                                      options: PS2Settings.Format.allCases.map { ($0.rawValue, $0.label) },
                                      selection: ps2Format) { value in
                     choose { ps2Format = value }
                 })
         } else {
             imageSettings(
-                resolution: NeonSegments(title: "RÉSOLUTION",
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
                                          detail: (PSPSettings.Resolution(rawValue: resolution) ?? .x2).size,
                                          options: PSPSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: resolution) { value in
                     choose { resolution = value }
                 },
-                smoothing: NeonSegments(title: "LISSAGE", detail: nil,
+                smoothing: NeonSegments(title: tr("LISSAGE"), detail: nil,
                                         options: PSPSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: smoothing) { value in
                     choose { smoothing = value }

@@ -122,13 +122,11 @@ enum VitaGame {
         if url.pathExtension.lowercased() != "vpk" {
             return try? Data(contentsOf: url.appendingPathComponent(path))
         }
-        guard let archive = try? ZipArchive(url: url),
-              let entry = archive.entries.first(where: { $0.path.lowercased() == path }),
-              entry.uncompressedSize < 16 << 20 else { return nil }
-        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        guard (try? archive.extract(entry, to: temporary)) != nil else { return nil }
-        return try? Data(contentsOf: temporary)
+        guard let archive = try? PTArchiveReader(url: url) else { return nil }
+        while (try? archive.nextEntry()) == true {
+            if archive.entryPath.lowercased() == path { return try? archive.readEntry(withLimit: 16 << 20) }
+        }
+        return nil
     }
 
     /// Format SFO de Sony : en-tête « \0PSF », table des clés, table des valeurs (texte UTF-8 ou entier).

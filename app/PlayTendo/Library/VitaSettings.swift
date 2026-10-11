@@ -12,7 +12,7 @@ enum VitaSettings {
         case normal = 0, high
 
         var id: Int { rawValue }
-        var label: String { self == .normal ? "Normale" : "Haute" }
+        var label: String { self == .normal ? tr("Normale") : tr("Haute") }
     }
 
     static let accuracyKey = "precisionVita"

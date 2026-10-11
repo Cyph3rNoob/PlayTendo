@@ -17,7 +17,7 @@ struct AboutView: View {
         Engine(name: "Mesen", version: "0.9.9", consoles: "NES", license: "GPL-3.0"),
         Engine(name: "bsnes", version: "v115", consoles: "Super Nintendo", license: "GPL-3.0"),
         Engine(name: "Mupen64Plus-Next", version: "3.0 (12edd2c)", consoles: "Nintendo 64", license: "GPL-2.0"),
-        Engine(name: "DolphiniOS (Dolphin)", version: "5.0.0 bêta 6", consoles: "GameCube, Wii", license: "GPL-2.0+"),
+        Engine(name: "DolphiniOS (Dolphin)", version: tr("5.0.0 bêta 6"), consoles: "GameCube, Wii", license: "GPL-2.0+"),
         Engine(name: "mGBA", version: "0.10.5", consoles: "Game Boy, Game Boy Color, Game Boy Advance", license: "MPL-2.0"),
         Engine(name: "melonDS DS", version: "1.4.0", consoles: "Nintendo DS", license: "GPL-3.0"),
         Engine(name: "Azahar", version: "2126.1.2", consoles: "Nintendo 3DS", license: "GPL-2.0+"),
@@ -29,11 +29,11 @@ struct AboutView: View {
 
 #if PLAYTENDO_VITA
     private static let vitaEngines = [Engine(name: "Vita3K", version: "build 4135 (681f695)", consoles: "PlayStation Vita", license: "GPL-2.0+")]
-    private static let moltenVKConsoles = "Affichage de la 3DS et de la PS Vita (Vulkan vers Metal)"
-    private static let vitaFormats = [(console: "PlayStation Vita", files: "dossier extrait de la console, .vpk")]
+    private static var moltenVKConsoles: String { tr("Affichage de la 3DS et de la PS Vita (Vulkan vers Metal)") }
+    private static var vitaFormats: [(console: String, files: String)] { [("PlayStation Vita", tr("dossier extrait de la console, .vpk"))] }
 #else
     private static let vitaEngines: [Engine] = []
-    private static let moltenVKConsoles = "Affichage de la 3DS (Vulkan vers Metal)"
+    private static var moltenVKConsoles: String { tr("Affichage de la 3DS (Vulkan vers Metal)") }
     private static let vitaFormats: [(console: String, files: String)] = []
 #endif
 
@@ -46,7 +46,7 @@ struct AboutView: View {
         ("Wii", ".iso .rvz .wbfs .wia .ciso .gcz"),
         ("Game Boy / Color / Advance", ".gb .gbc .gba"),
         ("Nintendo DS", ".nds"),
-        ("Nintendo 3DS", ".3ds .cci .cxi .3dsx (décryptés)"),
+        ("Nintendo 3DS", tr(".3ds .cci .cxi .3dsx (décryptés)")),
         ("PlayStation", ".cue + .bin, .chd, .pbp, .m3u"),
         ("PlayStation 2", ".iso .chd .cso"),
         ("PlayStation Portable", ".iso .cso .pbp"),
@@ -67,14 +67,14 @@ struct AboutView: View {
                         welcomeSeen = 0
                         dismiss()
                     } label: {
-                        Label("Revoir la présentation", systemImage: "sparkles")
+                        Label(tr("Revoir la présentation"), systemImage: "sparkles")
                     }
                 }
 
-                Section("Ajouter des jeux") {
-                    Label("App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque (.zip acceptés).",
+                Section(tr("Ajouter des jeux")) {
+                    Label(tr("App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque (.zip, .7z et .rar acceptés)."),
                           systemImage: "folder")
-                    DisclosureGroup("Formats acceptés") {
+                    DisclosureGroup(tr("Formats acceptés")) {
                         ForEach(formats, id: \.console) { format in
                             HStack(alignment: .firstTextBaseline) {
                                 Text(format.console)
@@ -89,52 +89,52 @@ struct AboutView: View {
                 }
 
                 Section("BIOS") {
-                    Label("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) dans le dossier BIOS.",
+                    Label(tr("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) : Réglages › BIOS PS2 › Importer, ou copié dans le dossier BIOS."),
                           systemImage: "exclamationmark.circle")
 #if PLAYTENDO_VITA
-                    Label("PlayStation Vita : obligatoire. PSVUPDAT.PUP (mise à jour officielle de la console), et si possible ses polices PSP2UPDAT.PUP, dans le dossier BIOS.",
+                    Label(tr("PlayStation Vita : obligatoire. PSVUPDAT.PUP (mise à jour officielle de la console), et si possible ses polices PSP2UPDAT.PUP, dans le dossier BIOS."),
                           systemImage: "exclamationmark.circle")
 #endif
-                    Label("PlayStation, DS, GBA : facultatifs. Les autres consoles n'en ont pas besoin.",
+                    Label(tr("PlayStation, DS, GBA : facultatifs. Les autres consoles n'en ont pas besoin."),
                           systemImage: "cpu")
                 }
 
-                Section("Mode turbo") {
+                Section(tr("Mode turbo")) {
 #if PLAYTENDO_VITA
-                    Label("Obligatoire pour la PS Vita ; indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP.",
+                    Label(tr("Obligatoire pour la PS Vita ; indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP."),
                           systemImage: "bolt.fill")
 #else
-                    Label("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP.", systemImage: "bolt.fill")
+                    Label(tr("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP."), systemImage: "bolt.fill")
 #endif
                     // Liens : site officiel de StikDebug (celui de son dépôt GitHub) et page App Store de LocalDevVPN
                     // (vérifiés le 2026-10-07).
                     Label {
-                        Text("Il faut [StikDebug](https://stikdebug.xyz/) et [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044). Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo (détails dans la roue dentée).")
+                        Text(markdown: tr("Il faut [StikDebug](https://stikdebug.xyz/) et [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044). Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo (détails dans la roue dentée)."))
                     } icon: {
                         Image(systemName: "gearshape")
                     }
                 }
 
-                Section("Sauvegardes") {
-                    Label("Dans le jeu : enregistrées toutes seules dans le dossier Sauvegardes.", systemImage: "externaldrive")
+                Section(tr("Sauvegardes")) {
+                    Label(tr("Dans le jeu : enregistrées toutes seules dans le dossier Sauvegardes."), systemImage: "externaldrive")
 #if PLAYTENDO_VITA
-                    Label("Rapides : menu pause › Sauvegarder / Charger (une par jeu ; pas sur PS Vita).", systemImage: "clock.arrow.circlepath")
+                    Label(tr("Rapides : menu pause › Sauvegarder / Charger (une par jeu ; pas sur PS Vita)."), systemImage: "clock.arrow.circlepath")
 #else
-                    Label("Rapides : menu pause › Sauvegarder / Charger (une par jeu).", systemImage: "clock.arrow.circlepath")
+                    Label(tr("Rapides : menu pause › Sauvegarder / Charger (une par jeu)."), systemImage: "clock.arrow.circlepath")
 #endif
-                    Label("Mise à jour : installe la nouvelle version par-dessus. Supprimer l'app efface jeux et sauvegardes.",
+                    Label(tr("Mise à jour : installe la nouvelle version par-dessus. Supprimer l'app efface jeux et sauvegardes."),
                           systemImage: "arrow.down.app")
                 }
 
-                Section("Un souci ?") {
-                    Label("Un jeu ne démarre pas : vérifie son format, le BIOS (PS2) et le turbo.", systemImage: "questionmark.circle")
+                Section(tr("Un souci ?")) {
+                    Label(tr("Un jeu ne démarre pas : vérifie son format, le BIOS (PS2) et le turbo."), systemImage: "questionmark.circle")
                     ShareLink(item: Paths.logFile) {
-                        Label("Partager le journal technique", systemImage: "doc.text.magnifyingglass")
+                        Label(tr("Partager le journal technique"), systemImage: "doc.text.magnifyingglass")
                     }
                 }
 
-                Section("Crédits") {
-                    DisclosureGroup("Moteurs d'émulation et licences") {
+                Section(tr("Crédits")) {
+                    DisclosureGroup(tr("Moteurs d'émulation et licences")) {
                         ForEach(engines) { engine in
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack {
@@ -154,13 +154,13 @@ struct AboutView: View {
                             .padding(.vertical, 2)
                         }
                     }
-                    Text("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails. Police : Orbitron (OFL). Turbo : StikDebug (app à part).")
+                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails, et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Police : Orbitron (OFL). Turbo : StikDebug (app à part)."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
                 Section {
-                    Text("App personnelle, construite uniquement avec des logiciels libres. Aucun jeu ni BIOS n'est fourni : utilise les tiens.")
+                    Text(tr("App personnelle, construite uniquement avec des logiciels libres. Aucun jeu ni BIOS n'est fourni : utilise les tiens."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -168,7 +168,7 @@ struct AboutView: View {
             .font(.subheadline)
             .scrollContentBackground(.hidden)
             .background(CyberBackground())
-            .navigationTitle("À propos")
+            .navigationTitle(tr("À propos"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

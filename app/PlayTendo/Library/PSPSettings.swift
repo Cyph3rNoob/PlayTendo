@@ -19,7 +19,7 @@ enum PSPSettings {
         case off = 1, x2, x3, x4
 
         var id: Int { rawValue }
-        var label: String { self == .off ? "Non" : "x\(rawValue)" }
+        var label: String { self == .off ? tr("Non") : "x\(rawValue)" }
         var coreValue: String { self == .off ? "disabled" : "\(rawValue)x" }
     }
 

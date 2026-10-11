@@ -456,6 +456,13 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
               let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
               size == 4 << 20 || size == 8 << 20,
               let head = GameIdentifier.read(url, offset: 0, count: 64 << 10) else { return false }
-        return head.range(of: Data("RESET".utf8)) != nil && head.range(of: Data("ROMVER".utf8)) != nil
+        return isPS2BIOS(head: head, size: size)
+    }
+
+    /// Même vérification sur le début du fichier (`head`, au moins 64 Ko) et sa taille.
+    static func isPS2BIOS(head: Data, size: Int) -> Bool {
+        (size == 4 << 20 || size == 8 << 20)
+            && head.prefix(64 << 10).range(of: Data("RESET".utf8)) != nil
+            && head.prefix(64 << 10).range(of: Data("ROMVER".utf8)) != nil
     }
 }
