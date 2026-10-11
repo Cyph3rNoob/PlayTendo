@@ -1,20 +1,80 @@
 import SwiftUI
 import UIKit
 
-/// Style cyberpunk de PlayTendo : fond nuit, néons cyan et magenta, coins coupés, police Orbitron.
-enum Neon {
-    static let background = Color(red: 0.016, green: 0.016, blue: 0.047)
-    static let cyan = Color(red: 0.0, green: 0.94, blue: 1.0)
-    static let magenta = Color(red: 1.0, green: 0.17, blue: 0.84)
-    static let violet = Color(red: 0.54, green: 0.30, blue: 1.0)
-    static let text = Color(red: 0.90, green: 0.95, blue: 1.0)
-    static let dim = Color(red: 0.50, green: 0.56, blue: 0.68)
-    static let panel = Color(red: 0.05, green: 0.06, blue: 0.13)
+/// Thème de l'interface (Réglages › Thème), appliqué tout de suite : Néon (cyberpunk, d'origine), Rétro 8-bit (gris
+/// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel) ou Minimal sombre (noir pur pour
+/// l'écran OLED, texte blanc, un accent bleu, coins arrondis). L'image des jeux, leurs boutons tactiles et l'animation
+/// de démarrage ne changent pas.
+enum AppTheme: String, CaseIterable, Identifiable, Sendable {
+    case neon
+    case retro
+    case minimal
 
-    static func mono(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+    var id: String { rawValue }
+
+    static let key = "theme"
+
+    static var current: AppTheme {
+        AppTheme(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .neon
+    }
+
+    var label: String {
+        switch self {
+        case .neon: tr("Néon")
+        case .retro: tr("Rétro 8-bit")
+        case .minimal: tr("Minimal sombre")
+        }
+    }
+
+    var colorScheme: ColorScheme { self == .retro ? .light : .dark }
+
+    /// Couleur d'une console dans ce thème : néon telle quelle, plus sombre et franche en Rétro, adoucie en Minimal.
+    func consoleColor(_ neon: Color) -> Color {
+        guard self != .neon else { return neon }
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(neon).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        return self == .retro
+            ? Color(hue: hue, saturation: min(1, saturation * 1.1 + 0.15), brightness: brightness * 0.62)
+            : Color(hue: hue, saturation: saturation * 0.5, brightness: min(0.82, brightness))
     }
 }
+
+/// Couleurs et polices du thème choisi (les noms viennent du thème Néon d'origine : `cyan` est la couleur principale,
+/// `magenta` la seconde).
+enum Neon {
+    private static func pick(_ neon: Color, _ retro: Color, _ minimal: Color) -> Color {
+        switch AppTheme.current {
+        case .neon: neon
+        case .retro: retro
+        case .minimal: minimal
+        }
+    }
+
+    private static func rgb(_ red: Double, _ green: Double, _ blue: Double) -> Color {
+        Color(red: red, green: green, blue: blue)
+    }
+
+    static var background: Color { pick(rgb(0.016, 0.016, 0.047), rgb(0.78, 0.78, 0.75), .black) }
+    static var cyan: Color { pick(rgb(0.0, 0.94, 1.0), rgb(0.10, 0.18, 0.52), rgb(0.04, 0.52, 1.0)) }
+    static var magenta: Color { pick(rgb(1.0, 0.17, 0.84), rgb(0.80, 0.08, 0.12), rgb(0.40, 0.70, 1.0)) }
+    static var violet: Color { pick(rgb(0.54, 0.30, 1.0), rgb(0.40, 0.20, 0.55), rgb(0.55, 0.62, 1.0)) }
+    static var text: Color { pick(rgb(0.90, 0.95, 1.0), rgb(0.08, 0.08, 0.10), rgb(0.96, 0.96, 0.97)) }
+    static var dim: Color { pick(rgb(0.50, 0.56, 0.68), rgb(0.30, 0.30, 0.32), rgb(0.56, 0.56, 0.60)) }
+    static var panel: Color { pick(rgb(0.05, 0.06, 0.13), rgb(0.90, 0.90, 0.87), rgb(0.11, 0.11, 0.12)) }
+    /// Texte posé sur la couleur principale (bouton « Reprendre », pastille choisie).
+    static var onAccent: Color { pick(.black, .white, .white) }
+    /// Texte posé sur la couleur d'une console (étiquettes « N64 »…).
+    static var onConsole: Color { pick(.black, .white, .black) }
+    /// Fond sous les jaquettes.
+    static var coverBase: Color { pick(.black, rgb(0.16, 0.16, 0.18), .black) }
+    /// Couleur des listes et boutons du système (Réglages, À propos).
+    static var tint: Color { pick(rgb(1.0, 0.36, 0.40), rgb(0.80, 0.08, 0.12), rgb(0.04, 0.52, 1.0)) }
+
+    static func mono(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
+        .system(size: size, weight: weight, design: AppTheme.current == .minimal ? .rounded : .monospaced)
+    }
+}
+
 
 extension GameSystem {
     /// Nom sur les pastilles et étiquettes : le Game Boy et la Game Boy Color partagent « GB/C » (`libraryGroup`).
@@ -24,8 +84,12 @@ extension GameSystem {
     /// Titre de la section de la bibliothèque.
     var libraryTitle: String { self == .gb ? "GAME BOY / COLOR" : name.uppercased() }
 
-    /// Couleur néon de la console (la Game Boy Color prend le vert du Game Boy : une seule catégorie GB/C).
-    var neon: Color {
+    /// Couleur de la console dans le thème choisi (la Game Boy Color prend le vert du Game Boy : une seule
+    /// catégorie GB/C).
+    var neon: Color { AppTheme.current.consoleColor(neonOriginal) }
+
+    /// Couleur néon d'origine.
+    private var neonOriginal: Color {
         switch self {
         case .nes: Color(red: 1.0, green: 0.27, blue: 0.40)
         case .snes: Color(red: 0.70, green: 0.48, blue: 1.0)
@@ -47,9 +111,24 @@ extension GameSystem {
 }
 
 extension Font {
-    /// Orbitron (police libre, licence OFL) ; `weight` de 400 (normal) à 900 (noir).
+    /// Orbitron (police libre, licence OFL) ; `weight` de 400 (normal) à 900 (noir). Toujours elle, quel que soit le
+    /// thème (animation de démarrage) ; ailleurs, `display`.
     static func orbitron(_ size: CGFloat, weight: CGFloat = 700) -> Font {
         Font(UIFont.orbitron(size, weight: weight) as CTFont)
+    }
+
+    /// Police des titres et boutons du thème : Orbitron (Néon), Press Start 2P (Rétro, police pixel libre OFL, plus
+    /// petite car très large) ou police du système arrondie (Minimal).
+    static func display(_ size: CGFloat, weight: CGFloat = 700) -> Font {
+        switch AppTheme.current {
+        case .neon:
+            orbitron(size, weight: weight)
+        case .retro:
+            .custom("PressStart2P-Regular", fixedSize: (size * 0.72).rounded())
+        case .minimal:
+            .system(size: size * 0.95, weight: weight >= 850 ? .heavy : weight >= 750 ? .bold : weight >= 600 ? .semibold : .medium,
+                    design: .rounded)
+        }
     }
 }
 
@@ -63,14 +142,30 @@ extension UIFont {
 }
 
 extension View {
-    /// Halo lumineux autour d'un élément.
+    /// Halo lumineux autour d'un élément (Néon) ; ombre portée nette (Rétro) ; rien sur le noir du Minimal.
     func neonGlow(_ color: Color, radius: CGFloat = 8) -> some View {
-        shadow(color: color.opacity(0.75), radius: radius / 3)
-            .shadow(color: color.opacity(0.35), radius: radius)
+        let theme = AppTheme.current
+        return shadow(color: theme == .neon ? color.opacity(0.75) : Self.plainShadow(theme, visible: color != .clear),
+                      radius: theme == .neon ? radius / 3 : theme == .retro ? 0 : radius * 0.6,
+                      x: theme == .retro ? 2 : 0, y: theme == .neon ? 0 : 2)
+            .shadow(color: theme == .neon ? color.opacity(0.35) : .clear, radius: radius)
+    }
+
+    /// Ombre colorée (Néon), remplacée par l'ombre du thème ailleurs.
+    func themedShadow(_ color: Color, radius: CGFloat) -> some View {
+        let theme = AppTheme.current
+        return shadow(color: theme == .neon ? color : Self.plainShadow(theme, visible: color != .clear),
+                      radius: theme == .neon ? radius : theme == .retro ? 0 : radius * 0.6,
+                      x: theme == .retro ? 2 : 0, y: theme == .neon ? 0 : 2)
+    }
+
+    private static func plainShadow(_ theme: AppTheme, visible: Bool) -> Color {
+        visible && theme == .retro ? .black.opacity(0.28) : .clear
     }
 }
 
-/// Rectangle aux coins coupés en biais (haut gauche et bas droit).
+/// Forme des cadres et boutons : coins coupés en biais, haut gauche et bas droit (Néon), carrés (Rétro) ou arrondis
+/// (Minimal, rayon `cut`).
 struct Chamfer: InsettableShape {
     var cut: CGFloat = 14
     var inset: CGFloat = 0
@@ -78,6 +173,11 @@ struct Chamfer: InsettableShape {
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: inset, dy: inset)
         let c = max(0, min(cut - inset, r.width / 3, r.height / 3))
+        switch AppTheme.current {
+        case .retro: return Path(r)
+        case .minimal: return Path(roundedRect: r, cornerRadius: c, style: .continuous)
+        case .neon: break
+        }
         var path = Path()
         path.move(to: CGPoint(x: r.minX + c, y: r.minY))
         path.addLine(to: CGPoint(x: r.maxX, y: r.minY))
@@ -96,20 +196,51 @@ struct Chamfer: InsettableShape {
     }
 }
 
-/// Fond de l'app : nuit violette, halos cyan et magenta, grille en perspective et lignes de balayage.
+/// Fond de l'app selon le thème. Néon : nuit violette, halos cyan et magenta, grille en perspective et lignes de
+/// balayage. Rétro : gris clair à motif de pixels. Minimal : noir pur.
 struct CyberBackground: View {
+    @AppStorage(AppTheme.key) private var theme = AppTheme.neon
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.05, green: 0.02, blue: 0.13), Neon.background,
-                                    Color(red: 0.03, green: 0.01, blue: 0.09)],
-                           startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Neon.cyan.opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: 420)
-            RadialGradient(colors: [Neon.magenta.opacity(0.14), .clear], center: UnitPoint(x: 1.05, y: 0.5),
-                           startRadius: 0, endRadius: 440)
-            PerspectiveGrid()
-            Scanlines()
+            switch theme {
+            case .neon:
+                LinearGradient(colors: [Color(red: 0.05, green: 0.02, blue: 0.13), Neon.background,
+                                        Color(red: 0.03, green: 0.01, blue: 0.09)],
+                               startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Neon.cyan.opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: 420)
+                RadialGradient(colors: [Neon.magenta.opacity(0.14), .clear], center: UnitPoint(x: 1.05, y: 0.5),
+                               startRadius: 0, endRadius: 440)
+                PerspectiveGrid()
+                Scanlines()
+            case .retro:
+                Neon.background
+                PixelPattern()
+            case .minimal:
+                Color.black
+            }
         }
         .ignoresSafeArea()
+    }
+}
+
+/// Petits carrés réguliers, comme les points d'un vieil écran (thème Rétro).
+private struct PixelPattern: View {
+    var body: some View {
+        Canvas { context, size in
+            var dots = Path()
+            var y: CGFloat = 0
+            while y < size.height {
+                var x: CGFloat = (Int(y / 8) % 2 == 0) ? 0 : 4
+                while x < size.width {
+                    dots.addRect(CGRect(x: x, y: y, width: 2, height: 2))
+                    x += 8
+                }
+                y += 8
+            }
+            context.fill(dots, with: .color(.black.opacity(0.06)))
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -170,9 +301,9 @@ struct SystemBadge: View {
 
     var body: some View {
         Text(system.badgeName)
-            .font(.orbitron(size, weight: 900))
+            .font(.display(size, weight: 900))
             .tracking(1)
-            .foregroundStyle(.black)
+            .foregroundStyle(Neon.onConsole)
             .padding(.horizontal, size * 0.7)
             .padding(.vertical, size * 0.35)
             .background(Chamfer(cut: size * 0.5).fill(system.neon))
@@ -210,7 +341,7 @@ struct NeonSectionTitle: View {
         HStack(spacing: 10) {
             Rectangle().fill(color).frame(width: 4, height: 18).neonGlow(color, radius: 6)
             Text(text)
-                .font(.orbitron(14, weight: 800))
+                .font(.display(14, weight: 800))
                 .tracking(2)
                 .foregroundStyle(Neon.text)
                 .lineLimit(1)
@@ -237,7 +368,7 @@ struct ToastView: View {
             .foregroundStyle(Neon.text)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(Chamfer(cut: 8).fill(Color.black.opacity(0.8)))
+            .background(Chamfer(cut: 8).fill(Neon.panel.opacity(0.95)))
             .overlay(Chamfer(cut: 8).stroke(Neon.cyan.opacity(0.7), lineWidth: 1))
             .neonGlow(Neon.cyan, radius: 6)
             .transition(.move(edge: .bottom).combined(with: .opacity))

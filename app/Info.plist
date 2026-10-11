@@ -59,6 +59,7 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>Orbitron.ttf</string>
+		<string>PressStart2P-Regular.ttf</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

@@ -17,6 +17,8 @@ struct LibraryView: View {
     @State private var gameToDelete: Game?
     /// Langue changée dans les Réglages : le contenu de la bibliothèque est refait aussitôt dans la nouvelle langue.
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
+    /// Thème changé dans les Réglages : même chose.
+    @AppStorage(AppTheme.key) private var theme = AppTheme.neon
 
     var body: some View {
         ZStack {
@@ -40,7 +42,7 @@ struct LibraryView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
                 .padding(.bottom, 40)
-                .id(language)
+                .id("\(language.rawValue)-\(theme.rawValue)")
             }
             .scrollDismissesKeyboard(.immediately)
             .refreshable { library.refresh() }
@@ -169,11 +171,11 @@ struct LibraryView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
             Text("PLAYTENDO")
-                .font(.orbitron(30, weight: 900))
+                .font(.display(30, weight: 900))
                 .tracking(2)
                 .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
-                .shadow(color: Neon.cyan.opacity(0.55), radius: 10)
-                .shadow(color: Neon.magenta.opacity(0.35), radius: 18)
+                .themedShadow(Neon.cyan.opacity(0.55), radius: 10)
+                .shadow(color: theme == .neon ? Neon.magenta.opacity(0.35) : .clear, radius: 18)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer(minLength: 8)
@@ -207,7 +209,7 @@ struct LibraryView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
-        .background(Chamfer(cut: 10).fill(Color.white.opacity(0.04)))
+        .background(Chamfer(cut: 10).fill(Neon.text.opacity(0.05)))
         .overlay(Chamfer(cut: 10).stroke(LinearGradient(colors: [Neon.cyan.opacity(0.8), Neon.magenta.opacity(0.5)],
                                                          startPoint: .leading, endPoint: .trailing), lineWidth: 1))
     }
@@ -220,7 +222,7 @@ struct LibraryView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(label: tr("TOUT"), color: Neon.cyan, selected: filter == nil) { filter = nil }
+                FilterChip(label: tr("TOUT"), color: Neon.cyan, onColor: Neon.onAccent, selected: filter == nil) { filter = nil }
                 ForEach(presentSystems) { system in
                     FilterChip(label: system.badgeName, color: system.neon, selected: filter == system) {
                         filter = filter == system ? nil : system
@@ -319,20 +321,22 @@ private extension GameDisplay {
 private struct FilterChip: View {
     let label: String
     let color: Color
+    /// Couleur du texte une fois la pastille choisie (posé sur `color`).
+    var onColor = Neon.onConsole
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.orbitron(12, weight: 800))
+                .font(.display(12, weight: 800))
                 .tracking(1.5)
-                .foregroundStyle(selected ? Color.black : color)
+                .foregroundStyle(selected ? onColor : color)
                 .padding(.horizontal, 14)
                 .frame(height: 32)
                 .background(Chamfer(cut: 8).fill(selected ? color : color.opacity(0.08)))
                 .overlay(Chamfer(cut: 8).stroke(color.opacity(selected ? 0 : 0.55), lineWidth: 1))
-                .shadow(color: selected ? color.opacity(0.7) : .clear, radius: 8)
+                .themedShadow(selected ? color.opacity(0.7) : .clear, radius: 8)
         }
         .buttonStyle(.plain)
     }
@@ -358,7 +362,7 @@ private struct GameCard: View {
                 .overlay(Chamfer(cut: 16).stroke(LinearGradient(colors: [color, color.opacity(0.15), Neon.magenta.opacity(0.55)],
                                                                 startPoint: .topLeading, endPoint: .bottomTrailing),
                                                  lineWidth: 1.2))
-                .shadow(color: color.opacity(0.28), radius: 12)
+                .themedShadow(color.opacity(0.28), radius: 12)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(display.title)
@@ -398,7 +402,7 @@ private struct CoverArt: View {
         ZStack {
             if let cover {
                 ZStack {
-                    Color.black
+                    Neon.coverBase
                     if let backdrop {
                         Color.clear.overlay {
                             Image(uiImage: backdrop)
@@ -441,7 +445,7 @@ private struct GeneratedCover: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [system.neon.opacity(0.35), Neon.panel, Color.black],
+            LinearGradient(colors: [system.neon.opacity(0.35), Neon.panel, Neon.coverBase],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
             Canvas { context, size in
                 var lines = Path()
@@ -455,11 +459,11 @@ private struct GeneratedCover: View {
             }
             VStack(spacing: 10) {
                 Text(system.badgeName)
-                    .font(.orbitron(34, weight: 900))
+                    .font(.display(34, weight: 900))
                     .foregroundStyle(system.neon.opacity(0.85))
                     .neonGlow(system.neon, radius: 10)
                 Text(title.uppercased())
-                    .font(.orbitron(11, weight: 700))
+                    .font(.display(11, weight: 700))
                     .tracking(1)
                     .foregroundStyle(Neon.text.opacity(0.8))
                     .multilineTextAlignment(.center)
@@ -504,9 +508,10 @@ private struct ContinueCard: View {
                         .shadow(color: .black, radius: 4)
                 }
                 VStack(alignment: .leading, spacing: 3) {
+                    // Toujours clair : posé sur l'image du jeu assombrie, quel que soit le thème.
                     Text(display.title)
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Neon.text)
+                        .foregroundStyle(Color(white: 0.95))
                         .lineLimit(1)
                     if let date = metadata.lastPlayedDate(for: game) {
                         Text(Self.relative(date))
@@ -518,7 +523,7 @@ private struct ContinueCard: View {
                 Spacer(minLength: 0)
                 Image(systemName: "play.fill")
                     .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Neon.onAccent)
                     .frame(width: 32, height: 32)
                     .background(Chamfer(cut: 7).fill(Neon.cyan))
                     .neonGlow(Neon.cyan, radius: 6)
@@ -530,7 +535,7 @@ private struct ContinueCard: View {
         .clipShape(Chamfer(cut: 14))
         .overlay(Chamfer(cut: 14).stroke(LinearGradient(colors: [Neon.magenta, Neon.cyan.opacity(0.4)],
                                                         startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2))
-        .shadow(color: Neon.magenta.opacity(0.3), radius: 12)
+        .themedShadow(Neon.magenta.opacity(0.3), radius: 12)
         .task(id: "\(game.key)#\(metadata.coverRevision(for: game))") { await load() }
         .onReceive(NotificationCenter.default.publisher(for: .thumbnailUpdated)) { note in
             if note.object as? String == game.id {
@@ -574,7 +579,7 @@ private struct EmptyLibraryView: View {
                 .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .neonGlow(Neon.cyan, radius: 14)
             Text(tr("BIBLIOTHÈQUE VIDE"))
-                .font(.orbitron(20, weight: 900))
+                .font(.display(20, weight: 900))
                 .tracking(2)
                 .foregroundStyle(Neon.text)
             Text(markdown: tr("Ajoute tes jeux avec le bouton ci-dessous (les .zip, .7z et .rar sont acceptés), ou dépose-les dans l'app Fichiers : **Sur mon iPhone › PlayTendo › Jeux**."))
@@ -584,9 +589,9 @@ private struct EmptyLibraryView: View {
                 .padding(.horizontal, 20)
             Button(action: onImport) {
                 Label(tr("AJOUTER DES JEUX"), systemImage: "plus")
-                    .font(.orbitron(14, weight: 800))
+                    .font(.display(14, weight: 800))
                     .tracking(1.5)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Neon.onAccent)
                     .padding(.horizontal, 22)
                     .frame(height: 48)
                     .background(Chamfer(cut: 12).fill(Neon.cyan))
@@ -633,12 +638,12 @@ struct ImportProgressView: View {
                 Image(systemName: progress.step == .extracting ? "archivebox" : "doc.on.doc")
                     .foregroundStyle(Neon.cyan)
                 Text(title)
-                    .font(.orbitron(11))
+                    .font(.display(11))
                     .foregroundStyle(Neon.cyan)
                 Spacer()
                 Button(action: cancel) {
                     Text(tr("ANNULER"))
-                        .font(.orbitron(10))
+                        .font(.display(10))
                         .foregroundStyle(Neon.magenta)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -659,7 +664,7 @@ struct ImportProgressView: View {
                 .monospacedDigit()
         }
         .padding(14)
-        .background(Chamfer(cut: 10).fill(Color.black.opacity(0.85)))
+        .background(Chamfer(cut: 10).fill(Neon.panel.opacity(0.95)))
         .overlay(Chamfer(cut: 10).stroke(Neon.cyan.opacity(0.7), lineWidth: 1))
         .neonGlow(Neon.cyan, radius: 6)
         .frame(maxWidth: 520)
@@ -670,7 +675,7 @@ struct ImportProgressView: View {
     private var bar: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.08))
+                Capsule().fill(Neon.text.opacity(0.1))
                 if let fraction {
                     Capsule()
                         .fill(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))

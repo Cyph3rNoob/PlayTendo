@@ -603,10 +603,10 @@ private struct MenuButton: View {
                 .font(.system(size: 16, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .foregroundStyle(prominent ? Color.black : color)
+                .foregroundStyle(prominent ? Neon.onAccent : color)
                 .background(Chamfer(cut: 10).fill(prominent ? Neon.cyan : color.opacity(destructive ? 0.1 : 0.07)))
                 .overlay(Chamfer(cut: 10).stroke(prominent ? .clear : color.opacity(destructive ? 0.6 : 0.25), lineWidth: 1))
-                .shadow(color: prominent ? Neon.cyan.opacity(0.6) : .clear, radius: 10)
+                .themedShadow(prominent ? Neon.cyan.opacity(0.6) : .clear, radius: 10)
         }
         .buttonStyle(.plain)
     }
@@ -624,7 +624,7 @@ private struct NeonSegments: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.orbitron(10, weight: 800))
+                    .font(.display(10, weight: 800))
                     .tracking(1.5)
                     .foregroundStyle(Neon.dim)
                 if let detail {
@@ -638,12 +638,12 @@ private struct NeonSegments: View {
                     let selected = value == selection
                     Button { onSelect(value) } label: {
                         Text(label)
-                            .font(.orbitron(13, weight: 800))
-                            .foregroundStyle(selected ? Color.black : Neon.text)
+                            .font(.display(13, weight: 800))
+                            .foregroundStyle(selected ? Neon.onAccent : Neon.text)
                             .frame(maxWidth: .infinity, minHeight: 36)
-                            .background(Chamfer(cut: 7).fill(selected ? Neon.cyan : Color.white.opacity(0.06)))
+                            .background(Chamfer(cut: 7).fill(selected ? Neon.cyan : Neon.text.opacity(0.06)))
                             .overlay(Chamfer(cut: 7).stroke(Neon.cyan.opacity(selected ? 0 : 0.35), lineWidth: 1))
-                            .shadow(color: selected ? Neon.cyan.opacity(0.6) : .clear, radius: 6)
+                            .themedShadow(selected ? Neon.cyan.opacity(0.6) : .clear, radius: 6)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(title.capitalized) \(label)")

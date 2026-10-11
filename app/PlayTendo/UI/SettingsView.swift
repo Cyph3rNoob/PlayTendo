@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var jit: JITManager
     @AppStorage(BootSound.enabledKey) private var bootSound = true
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
+    @AppStorage(AppTheme.key) private var theme = AppTheme.neon
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
@@ -23,6 +24,11 @@ struct SettingsView: View {
                 Section {
                     Picker(tr("Langue"), selection: $language) {
                         ForEach(AppLanguage.allCases) { choice in
+                            Text(choice.label).tag(choice)
+                        }
+                    }
+                    Picker(tr("Thème"), selection: $theme) {
+                        ForEach(AppTheme.allCases) { choice in
                             Text(choice.label).tag(choice)
                         }
                     }
@@ -127,6 +133,8 @@ struct SettingsView: View {
                     Text(tr("Joué avec l'animation d'ouverture de PlayTendo. Muet en mode silencieux, comme le son des jeux."))
                 }
             }
+            // Thème changé : la liste est refaite avec ses nouvelles couleurs.
+            .id(theme)
             .navigationTitle(tr("Réglages"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -160,8 +168,8 @@ struct SettingsView: View {
                 }
             }
         }
-        .tint(.playTendoAccent)
-        .preferredColorScheme(.dark)
+        .tint(Neon.tint)
+        .preferredColorScheme(theme.colorScheme)
     }
 
     private func refreshChecks() {
@@ -273,7 +281,7 @@ struct JITActivationView: View {
                     .foregroundStyle(Neon.cyan)
                     .neonGlow(Neon.cyan, radius: 12)
                 Text(tr("MODE TURBO"))
-                    .font(.orbitron(18, weight: 900))
+                    .font(.display(18, weight: 900))
                     .tracking(3)
                     .foregroundStyle(Neon.text)
                 HStack(spacing: 10) {
@@ -284,7 +292,7 @@ struct JITActivationView: View {
                 }
                 Button(action: onSkip) {
                     Text(tr("JOUER SANS JIT"))
-                        .font(.orbitron(12, weight: 800))
+                        .font(.display(12, weight: 800))
                         .tracking(1.5)
                         .foregroundStyle(Neon.magenta)
                         .padding(.horizontal, 18)

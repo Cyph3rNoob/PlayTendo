@@ -145,7 +145,7 @@ struct AboutView: View {
                                         .font(.caption.weight(.semibold))
                                         .padding(.horizontal, 7)
                                         .padding(.vertical, 3)
-                                        .background(Color.white.opacity(0.1), in: Capsule())
+                                        .background(Neon.text.opacity(0.1), in: Capsule())
                                 }
                                 Text(engine.consoles)
                                     .font(.subheadline)
@@ -154,7 +154,7 @@ struct AboutView: View {
                             .padding(.vertical, 2)
                         }
                     }
-                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails, et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Police : Orbitron (OFL). Turbo : StikDebug (app à part)."))
+                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails, et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikDebug (app à part)."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -190,7 +190,7 @@ struct AboutView: View {
                         .neonGlow(Neon.cyan, radius: 12)
                 }
                 Text("PLAYTENDO")
-                    .font(.orbitron(26, weight: 900))
+                    .font(.display(26, weight: 900))
                     .tracking(2)
                     .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
                 Text("VERSION \(appVersion) · 13 CONSOLES")

@@ -7,6 +7,8 @@ struct PlayTendoApp: App {
     @StateObject private var jit = JITManager()
     @State private var showBoot = true
     @AppStorage(WelcomeView.seenKey) private var welcomeSeen = 0
+    /// Thème : mode clair ou sombre (heure, batterie, feuilles du système) et couleur des boutons du système.
+    @AppStorage(AppTheme.key) private var theme = AppTheme.neon
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -36,8 +38,8 @@ struct PlayTendoApp: App {
             .environmentObject(library)
             .environmentObject(metadata)
             .environmentObject(jit)
-            .preferredColorScheme(.dark)
-            .tint(.playTendoAccent)
+            .preferredColorScheme(theme.colorScheme)
+            .tint(Neon.tint)
             .onOpenURL { url in library.importFiles([url]) }
             // En arrière-plan, iOS peut arrêter l'app sans prévenir : le journal est mis à jour sur le disque avant.
             .onChange(of: scenePhase) { _, phase in
@@ -62,7 +64,3 @@ private func forceLandscapeForTesting() {
     }
 }
 #endif
-
-extension Color {
-    static let playTendoAccent = Color(red: 1.0, green: 0.36, blue: 0.40)
-}

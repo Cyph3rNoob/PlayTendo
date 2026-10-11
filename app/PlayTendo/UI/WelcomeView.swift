@@ -61,7 +61,7 @@ struct WelcomeView: View {
                         .neonGlow(Neon.cyan, radius: 14)
                 }
                 Text("PLAYTENDO")
-                    .font(.orbitron(30, weight: 900))
+                    .font(.display(30, weight: 900))
                     .tracking(2)
                     .foregroundStyle(LinearGradient(colors: [Neon.cyan, Neon.magenta], startPoint: .leading, endPoint: .trailing))
                 Text(tr("Tes jeux Nintendo et Sony, sur ton \(device)."))
@@ -71,7 +71,7 @@ struct WelcomeView: View {
             }
             .frame(maxWidth: .infinity)
             Text("\(GameSystem.displayOrder.count) CONSOLES")
-                .font(.orbitron(12, weight: 800))
+                .font(.display(12, weight: 800))
                 .tracking(2)
                 .foregroundStyle(Neon.dim)
                 .frame(maxWidth: .infinity)
@@ -151,9 +151,9 @@ struct WelcomeView: View {
             }
         } label: {
             Text(last ? tr("C'EST PARTI !") : tr("SUIVANT"))
-                .font(.orbitron(16, weight: 900))
+                .font(.display(16, weight: 900))
                 .tracking(2)
-                .foregroundStyle(.black)
+                .foregroundStyle(Neon.onAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Chamfer(cut: 12).fill(color))
@@ -194,7 +194,7 @@ private struct WelcomeTitle: View {
                 .foregroundStyle(color)
                 .neonGlow(color, radius: 14)
             Text(title)
-                .font(.orbitron(24, weight: 900))
+                .font(.display(24, weight: 900))
                 .tracking(2)
                 .foregroundStyle(Neon.text)
                 .multilineTextAlignment(.center)
