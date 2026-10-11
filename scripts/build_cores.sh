@@ -106,10 +106,15 @@ build_mgba() {
 
 build_melondsds() {
   local b="$WORK/melondsds"
+  # Rendu OpenGL de melonDS (résolution augmentée) adapté à l'OpenGL ES 3.0 de l'iPhone : scripts/patch_melonds.py,
+  # avant la préparation (melonDS DS) puis après (melonDS, téléchargé par la préparation).
+  python3 "$ROOT/scripts/patch_melonds.py" "$SRC/melonds-ds" > /dev/null
   run melondsds-ios cmake -S "$SRC/melonds-ds" -B "$b" -G Ninja \
     --toolchain "$SRC/melonds-ds/cmake/toolchain/ios.toolchain.cmake" \
     -DPLATFORM=OS64 -DDEPLOYMENT_TARGET=$MIN_IOS -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_AS_SHARED_LIBRARY=ON -DBUILD_TESTING=OFF
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_AS_SHARED_LIBRARY=ON -DBUILD_TESTING=OFF \
+    -DENABLE_OPENGL=ON -DOPENGL_PROFILE=OpenGLES3 -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+  python3 "$ROOT/scripts/patch_melonds.py" "$SRC/melonds-ds" "$b/_deps/melonds-src" > /dev/null
   run melondsds-ios cmake --build "$b"
   wrap melondsds "$(find "$b" -name 'melondsds_libretro*.dylib' | head -1)"
 }

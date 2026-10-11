@@ -277,6 +277,8 @@ private struct PauseMenu: View {
     /// 3DS : résolution et lissage des textures (gardés pour tous ses jeux).
     @AppStorage(N3DSSettings.resolutionKey) private var n3dsResolution = N3DSSettings.Resolution.x1.rawValue
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
+    /// DS : résolution (gardée pour tous ses jeux).
+    @AppStorage(DSSettings.resolutionKey) private var dsResolution = DSSettings.Resolution.x2.rawValue
 #if PLAYTENDO_VITA
     @AppStorage(VitaSettings.accuracyKey) private var vitaAccuracy = VitaSettings.Accuracy.normal.rawValue
 #endif
@@ -288,7 +290,7 @@ private struct PauseMenu: View {
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
     private var hasImageSettings: Bool {
-        [.psp, .ps2, .gameCube, .wii, .n3ds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
+        [.psp, .ps2, .gameCube, .wii, .n3ds, .nds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
     }
     /// Vita3K n'a ni sauvegarde rapide, ni avance rapide, ni « recommencer » : seules les sauvegardes des jeux existent.
     private var hasEngineExtras: Bool { !session.game.system.isVita }
@@ -490,6 +492,14 @@ private struct PauseMenu: View {
                                         selection: n3dsSmoothing) { value in
                     choose { n3dsSmoothing = value }
                 })
+        } else if session.game.system == .nds {
+            imageSettings(
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
+                                         detail: (DSSettings.Resolution(rawValue: dsResolution) ?? .x2).size,
+                                         options: DSSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: dsResolution) { value in
+                    choose { dsResolution = value }
+                })
         } else if session.game.system == .ps2 {
             imageSettings(
                 resolution: NeonSegments(title: tr("RÉSOLUTION"),
@@ -558,6 +568,8 @@ private struct PauseMenu: View {
             session.applyDolphinImage()
         } else if session.game.system == .n3ds {
             session.applyOptions(N3DSSettings.coreOptions)
+        } else if session.game.system == .nds {
+            session.applyOptions(DSSettings.coreOptions)
         } else if session.game.system == .n64 {
             // Lu seulement au démarrage du jeu : moteur rechargé à la reprise, partie gardée.
             session.requestCoreReload()

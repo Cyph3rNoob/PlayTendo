@@ -305,7 +305,7 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "melonds_show_camera_state": "disabled",
                 "melonds_show_lid_state": "disabled",
                 "melonds_show_sensor_reading": "disabled",
-            ]
+            ].merging(DSSettings.coreOptions) { $1 }
         case .n3ds:
             // Vulkan (MoltenVK) : le seul rendu matériel du moteur sur iPhone. Écrans toujours rendus empilés (le bas
             // centré sous le haut) ; l'app découpe et place ensuite chacun d'eux. Stick droit = stick C seulement

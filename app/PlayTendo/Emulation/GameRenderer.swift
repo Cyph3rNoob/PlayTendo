@@ -101,10 +101,14 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         var shownRect = CGRect.zero
         var flipped = self.flipped
         if let frame = texture {
-            // Zone affichée = la partie demandée (un écran de DS…) de la zone occupée par l'image.
-            shownRect = CGRect(x: region.minX + source.minX * region.width,
-                               y: region.minY + source.minY * region.height,
-                               width: source.width * region.width, height: source.height * region.height)
+            // Zone affichée = la partie demandée (un écran de DS…) de la zone occupée par l'image. Image à l'envers
+            // (OpenGL) : le shader ne retourne que cette partie, il faut donc la prendre à l'endroit symétrique
+            // (sinon les deux écrans de la DS sont échangés).
+            let part = flipped ? CGRect(x: source.minX, y: 1 - source.maxY, width: source.width, height: source.height)
+                               : source
+            shownRect = CGRect(x: region.minX + part.minX * region.width,
+                               y: region.minY + part.minY * region.height,
+                               width: part.width * region.width, height: part.height * region.height)
             if smoothing, let smoothed = smooth(frame, rect: shownRect, flipped: flipped, commands: commands) {
                 texture = smoothed
                 shownRect = CGRect(x: 0, y: 0, width: 1, height: 1)
