@@ -15,7 +15,8 @@ cores/mac/PS2Core.framework/
 cores/ios/DolphinCore.framework/
 cores/sim/DolphinCore.framework/
 cores/mac/DolphinCore.framework/
-# Moteur PS Vita : recompilé par scripts/build_vita3k.sh (iPhone seulement)
+# Moteur PS Vita : recompilé par scripts/build_vita3k.sh (iPhone) et scripts/build_vita3k.sh mac
 cores/ios/VitaCore.framework/
+cores/mac/VitaCore.framework/
 # Sons de démarrage proposés (WAV) : refaits par scripts/make_boot_sounds.py
 art/sons-proposes/

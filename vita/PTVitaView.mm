@@ -1,10 +1,15 @@
-// PTVitaView.mm — partie UIKit du pilote du moteur PS Vita de PlayTendo (voir PTVitaHost.cpp) : la vue où Vita3K
-// dessine et l'accès au MoltenVK de l'app. À part parce que les en-têtes d'Apple (MacTypes.h : `typedef char *Ptr`)
-// et ceux de Vita3K (`template <class T> class Ptr`) ne peuvent pas cohabiter dans un même fichier. ARC.
+// PTVitaView.mm — partie UIKit / AppKit du pilote du moteur PS Vita de PlayTendo (voir PTVitaHost.cpp) : la vue où
+// Vita3K dessine et l'accès au MoltenVK de l'app. À part parce que les en-têtes d'Apple (MacTypes.h : `typedef char
+// *Ptr`) et ceux de Vita3K (`template <class T> class Ptr`) ne peuvent pas cohabiter dans un même fichier. ARC.
 
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <TargetConditionals.h>
+#if TARGET_OS_IPHONE
 #import <UIKit/UIKit.h>
+#else
+#import <AppKit/AppKit.h>
+#endif
 
 #include <atomic>
 #include <cmath>
@@ -18,6 +23,7 @@ static std::atomic<int> s_height{ 0 };
 
 /// Vue où Vita3K dessine : sa couche est une CAMetalLayer, donnée au moteur pour la surface Vulkan (MoltenVK).
 /// Sa taille en pixels est lue par le moteur depuis son propre thread.
+#if TARGET_OS_IPHONE
 @interface PTVitaView : UIView
 @end
 
@@ -60,6 +66,60 @@ static std::atomic<int> s_height{ 0 };
 }
 
 @end
+#else
+@interface PTVitaView : NSView
+@end
+
+@implementation PTVitaView
+
+- (instancetype)initWithFrame:(NSRect)frame {
+    if ((self = [super initWithFrame:frame])) {
+        self.wantsLayer = YES;
+        self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
+    }
+    return self;
+}
+
+- (CALayer *)makeBackingLayer {
+    CAMetalLayer *layer = [CAMetalLayer layer];
+    layer.opaque = YES;
+    layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+    return layer;
+}
+
+- (BOOL)wantsUpdateLayer {
+    return YES;
+}
+
+/// Les clics passent par PlayTendo (écran tactile avant : PTVitaTouch), comme sur iPhone.
+- (NSView *)hitTest:(NSPoint)point {
+    return nil;
+}
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    [self updateDrawableSize];
+}
+
+- (void)viewDidChangeBackingProperties {
+    [super viewDidChangeBackingProperties];
+    [self updateDrawableSize];
+}
+
+- (void)setFrameSize:(NSSize)size {
+    [super setFrameSize:size];
+    [self updateDrawableSize];
+}
+
+- (void)updateDrawableSize {
+    const CGFloat scale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
+    self.layer.contentsScale = scale;
+    s_width.store((int)std::lround(self.bounds.size.width * scale));
+    s_height.store((int)std::lround(self.bounds.size.height * scale));
+}
+
+@end
+#endif
 
 static PTVitaView *s_view;
 

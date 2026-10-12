@@ -261,6 +261,11 @@ enum KeyboardMap {
     @MainActor static var consoleNotes: [(String, String)] {
         let bindings = KeyBindings.shared
         func keys(_ commands: KeyCommand...) -> String { commands.map(bindings.label).joined(separator: "  ") }
+#if PLAYTENDO_VITA
+        let touchScreens = tr("Écran tactile (DS, 3DS, PS Vita)")
+#else
+        let touchScreens = tr("Écran tactile (DS, 3DS)")
+#endif
         return [
             (tr("A, B, Z (N64)"), keys(.b, .y, .l2)),
             (tr("A, B, X, Y (GameCube)"), keys(.b, .y, .a, .x)),
@@ -268,13 +273,13 @@ enum KeyboardMap {
             (tr("Viser, A, B (Wii)"), tr("souris, clic, clic droit")),
             (tr("1, 2, secouer (Wii)"), keys(.y, .x, .r)),
             (tr("C, Z du Nunchuk, HOME (Wii)"), keys(.l, .l2, .home)),
-            (tr("Écran tactile (DS, 3DS)"), tr("clic")),
+            (touchScreens, tr("clic")),
         ]
     }
 }
 
 /// Calque invisible posé sur l'écran de jeu : lit le clavier (il prend le focus de la fenêtre) et la souris (écran
-/// tactile de la DS, pointeur de la Wiimote).
+/// tactile de la DS et de la PS Vita, pointeur de la Wiimote).
 final class MacInputView: NSView {
     var layout = ControlLayout()
     var scheme: ControlScheme = .nes
@@ -384,6 +389,9 @@ final class MacInputView: NSView {
 
     // MARK: Souris
 
+    /// Wii : la souris vise. PS Vita : comme la DS, un clic touche l'écran tactile (toute l'image).
+    private var aimsWithMouse: Bool { scheme == .wiimote }
+
     /// Wii : la souris vise sans cliquer (le pointeur suit la flèche au-dessus de l'image).
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -393,7 +401,7 @@ final class MacInputView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        guard scheme.usesPointer else { return }
+        guard aimsWithMouse else { return }
         let point = convert(event.locationInWindow, from: nil)
         if layout.touchScreen?.frame.contains(point) == true { sendPointer(point, pressed: false) }
     }
@@ -401,7 +409,7 @@ final class MacInputView: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
-        if scheme.usesPointer {
+        if aimsWithMouse {
             // Wiimote : clic = A (envoyé sur B, le bouton du bas, comme ses autres commandes).
             pressMouseButton(.b, true)
             sendPointer(point, pressed: false)
@@ -414,7 +422,7 @@ final class MacInputView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if scheme.usesPointer {
+        if aimsWithMouse {
             sendPointer(point, pressed: false)
             return
         }
@@ -423,7 +431,7 @@ final class MacInputView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if scheme.usesPointer {
+        if aimsWithMouse {
             pressMouseButton(.b, false)
             return
         }
@@ -434,17 +442,17 @@ final class MacInputView: NSView {
 
     /// Wiimote : clic droit = B (la gâchette, envoyée sur A).
     override func rightMouseDown(with event: NSEvent) {
-        guard scheme.usesPointer else { return super.rightMouseDown(with: event) }
+        guard aimsWithMouse else { return super.rightMouseDown(with: event) }
         pressMouseButton(.a, true)
     }
 
     override func rightMouseUp(with event: NSEvent) {
-        guard scheme.usesPointer else { return super.rightMouseUp(with: event) }
+        guard aimsWithMouse else { return super.rightMouseUp(with: event) }
         pressMouseButton(.a, false)
     }
 
     override func rightMouseDragged(with event: NSEvent) {
-        guard scheme.usesPointer else { return }
+        guard aimsWithMouse else { return }
         sendPointer(convert(event.locationInWindow, from: nil), pressed: false)
     }
 

@@ -5,8 +5,8 @@
 # sans « hardened runtime » : le mode turbo prépare lui-même sa mémoire. Compilée sur ce Mac, elle s'ouvre sans
 # avertissement ; envoyée à quelqu'un d'autre, macOS la bloquera au premier lancement (pas de notarisation, qui
 # demande un compte développeur payant).
-# Les moteurs viennent de cores/mac (scripts/build_cores_macos.sh), libarchive de libs/libarchive/mac
-# (scripts/build_libarchive.sh mac).
+# Les moteurs viennent de cores/mac (scripts/build_cores_macos.sh ; PS Vita : scripts/build_vita3k.sh mac), libarchive
+# de libs/libarchive/mac (scripts/build_libarchive.sh mac).
 set -e
 set -o pipefail
 
@@ -19,6 +19,20 @@ LOG="$ROOT/build/logs/app-mac-release.log"
 OUT="$ROOT/PlayTendo-Mac"
 mkdir -p "$ROOT/build/logs"
 
+# PS Vita : incluse par défaut, comme sur iPhone (scripts/build_app.sh) ; PLAYTENDO_VITA=0 la retire.
+VITA_SETTINGS=()
+if [ "${PLAYTENDO_VITA:-1}" = "1" ]; then
+  if [ ! -f "$ROOT/cores/mac/VitaCore.framework/VitaCore" ]; then
+    echo "!!! Moteur PS Vita absent : lance d'abord zsh scripts/build_vita3k.sh mac (ou PLAYTENDO_VITA=0 pour s'en passer)"
+    exit 1
+  fi
+  VITA_SETTINGS=('SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) PLAYTENDO_VITA'
+                 'GCC_PREPROCESSOR_DEFINITIONS=$(inherited) PLAYTENDO_VITA=1')
+  echo ">>> Avec la PS Vita"
+else
+  echo ">>> Sans la PS Vita"
+fi
+
 APP="$BUILD/Release/PlayTendo.app"
 # Repart d'une app vide : Xcode ne retire pas les fichiers d'une ancienne compilation.
 rm -rf "${APP:?}"
@@ -30,7 +44,7 @@ else
 fi
 echo ">>> Compilation de l'app Mac…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target "PlayTendo Mac" -configuration Release \
-    SYMROOT="$BUILD" OBJROOT="$BUILD/obj" build > "$LOG" 2>&1; then
+    SYMROOT="$BUILD" OBJROOT="$BUILD/obj" "${VITA_SETTINGS[@]}" build > "$LOG" 2>&1; then
   echo "!!! ECHEC — erreurs :"
   grep -E "error:" "$LOG" | sort -u | head -40
   exit 1

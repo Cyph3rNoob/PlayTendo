@@ -111,8 +111,8 @@ fi
 clone libarchive   https://github.com/libarchive/libarchive.git v3.8.9
 clone xz           https://github.com/tukaani-project/xz.git    v5.8.4
 
-# PS Vita (mise de côté le 2026-10-10) : seulement avec PLAYTENDO_VITA=1, comme scripts/build_app.sh.
-if [ "${PLAYTENDO_VITA:-0}" = "1" ]; then
+# PS Vita : incluse par défaut, comme dans scripts/build_app.sh (PLAYTENDO_VITA=0 pour s'en passer).
+if [ "${PLAYTENDO_VITA:-1}" = "1" ]; then
   # PS Vita : Vita3K n'a pas de version numérotée (seulement des versions automatiques en continu) : version figée le
   # 2026-10-07 (build 4135, accord de l'utilisateur). Sans les sous-modules propres à Android (libadrenotools), à
   # Windows (dirent) et à l'interface PC (nativefiledialog-extended).
@@ -164,7 +164,7 @@ if [ "${PLAYTENDO_VITA:-0}" = "1" ]; then
     echo "OK  vitahelloworld deja present"
   fi
 else
-  echo "--  PS Vita mise de côté : Vita3K, OpenSSL et Hello World non téléchargés (PLAYTENDO_VITA=1 pour les avoir)"
+  echo "--  Sans la PS Vita : Vita3K, OpenSSL et Hello World non téléchargés (PLAYTENDO_VITA=0)"
 fi
 
 # Bibliothèque : base libretro (No-Intro / Redump) pour reconnaître les jeux.

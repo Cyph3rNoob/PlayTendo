@@ -27,7 +27,7 @@ enum ControlScheme {
     case psVita
 #endif
 
-    /// PS Vita (seulement dans une app compilée avec elle : `PLAYTENDO_VITA=1 zsh scripts/build_app.sh`).
+    /// PS Vita (seulement dans une app compilée avec elle : PLAYTENDO_VITA, par défaut dans scripts/build_app.sh).
     var isPSVita: Bool {
 #if PLAYTENDO_VITA
         self == .psVita
@@ -89,8 +89,9 @@ struct NintendoLetters: Equatable {
 enum GameSystem: String, CaseIterable, Identifiable, Codable {
     case nes, snes, n64, gb, gbc, gba, nds, n3ds, psx, psp, ps2, gameCube, wii
 #if PLAYTENDO_VITA
-    /// PS Vita (Vita3K) : mise de côté le 2026-10-10 (rendu de Vita3K trop abîmé sur les puces Apple) ; seulement dans
-    /// une app compilée avec elle (`PLAYTENDO_VITA=1 zsh scripts/build_app.sh`).
+    /// PS Vita (Vita3K) : mise de côté le 2026-10-10 (rendu trop abîmé sur les puces Apple), remise le 2026-10-12
+    /// (mémoire mappée : Gravity Rush jouable) ; seulement dans une app compilée avec elle (PLAYTENDO_VITA, par
+    /// défaut dans scripts/build_app.sh).
     case vita
 #endif
 

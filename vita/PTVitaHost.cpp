@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -47,13 +48,14 @@
 #include <util/system.h>
 
 #include <SDL3/SDL.h>
+#include <TargetConditionals.h>
 // L'app a son propre point d'entrée : SDL ne doit pas le remplacer (SDL_main), seulement le savoir (SDL_SetMainReady).
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL_main.h>
 
 #define PTVITA_EXPORT extern "C" __attribute__((visibility("default")))
 
-// PTVitaView.mm (UIKit).
+// PTVitaView.mm (UIKit sur iPhone, AppKit sur Mac).
 extern "C" void *PTVitaCreateView(void);
 extern "C" void *PTVitaViewLayer(void);
 extern "C" int PTVitaViewPixelWidth(void);
@@ -67,8 +69,6 @@ static std::unique_ptr<app::AppSessionController> s_session;
 static std::atomic<int> s_state{ PTVitaStateStopped };
 static std::atomic<bool> s_stopRequested{ false };
 static std::atomic<bool> s_pauseRequested{ false };
-/// Précision du rendu demandée (réglage PRÉCISION de PlayTendo), lue au lancement de chaque jeu.
-static std::atomic<bool> s_highAccuracy{ false };
 static std::thread s_thread;
 /// Les installations et les parties ne se chevauchent pas (même mémoire de console).
 static std::mutex s_busy;
@@ -161,8 +161,9 @@ public:
 
     std::vector<std::string> font_dirs() const override {
         // Polices des fenêtres de la console (clavier, sauvegardes…) quand le paquet de polices PSP2UPDAT manque :
-        // Vita3K cherche « Arial.ttf », qu'iOS range dans WebFonts (sans lui, boutons sans texte, 2026-10-10).
-        return { "/System/Library/Fonts/", "/System/Library/Fonts/WebFonts/" };
+        // Vita3K cherche « Arial.ttf », qu'iOS range dans WebFonts (sans lui, boutons sans texte, 2026-10-10) et
+        // macOS dans Supplementary.
+        return { "/System/Library/Fonts/", "/System/Library/Fonts/WebFonts/", "/System/Library/Fonts/Supplementary/" };
     }
 };
 
@@ -197,6 +198,7 @@ PTVITA_EXPORT void *PTVitaSetup(const char *storageDir, const char *assetsDir) {
         SDL_SetMainReady();
         SDL_SetHint(SDL_HINT_JOYSTICK_MFI, "0");
         SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "0");
+        SDL_SetHint(SDL_HINT_JOYSTICK_IOKIT, "0"); // Mac : manettes USB lues par le système
         // Muet en mode silencieux, comme les autres consoles.
         SDL_SetHint(SDL_HINT_AUDIO_CATEGORY, "ambient");
         SDL_SetAppMetadata(window_title, app_version, "com.playtendo.vita");
@@ -234,7 +236,11 @@ PTVITA_EXPORT void *PTVitaSetup(const char *storageDir, const char *assetsDir) {
             s_lastError = message;
         });
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
         LOG_INFO("{} — PlayTendo (iPhone/iPad)", window_title);
+#else
+        LOG_INFO("{} — PlayTendo (Mac)", window_title);
+#endif
         LOG_INFO("CPU: {}", util::get_system_info());
         LOG_INFO("Available ram memory: {} MiB", SDL_GetSystemRAM());
 
@@ -404,12 +410,12 @@ static void PTVitaRunSession(std::string title_id) {
         relaunch = false;
         PTVitaFrameHost frame_host;
         refresh_controllers(emuenv.ctrl, emuenv);
-        // Précision : relue par Vita3K à chaque lancement (begin_launch → set_current_config).
-        emuenv.cfg.high_accuracy = s_highAccuracy.load();
-        emuenv.cfg.disable_surface_sync = !s_highAccuracy.load();
-        // Mémoire mappée (retouche 15 de patch_vita3k.py) : sans elle, pas de synchro des surfaces.
+        // Relus par Vita3K à chaque lancement (begin_launch → set_current_config). Mémoire mappée (retouche 15 de
+        // patch_vita3k.py) : sans elle, Vita3K ignore les écritures en mémoire des shaders (Gravity Rush). Précision
+        // normale : la haute (« high-accuracy » et synchro des surfaces) ne changeait rien de visible (2026-10-12).
         emuenv.cfg.memory_mapping = "double-buffer";
-        LOG_INFO("[PlayTendo] Précision du rendu : {}", s_highAccuracy.load() ? "haute" : "normale");
+        emuenv.cfg.high_accuracy = false;
+        emuenv.cfg.disable_surface_sync = true;
         LOG_INFO("[PlayTendo] Démarrage de {}", request.app_path);
 
         if (!controller.begin_launch(request, request.reason != AppLaunchReason::LoadExec)) {
@@ -509,10 +515,6 @@ PTVITA_EXPORT bool PTVitaBoot(const char *titleID) {
     return true;
 }
 
-PTVITA_EXPORT void PTVitaSetHighAccuracy(bool high) {
-    s_highAccuracy.store(high);
-}
-
 PTVITA_EXPORT PTVitaState PTVitaGetState(void) {
     return static_cast<PTVitaState>(s_state.load());
 }
@@ -532,6 +534,17 @@ PTVITA_EXPORT void PTVitaStop(void) {
     // Une partie en pause doit reprendre pour que ses threads puissent s'arrêter.
     if (s_session && s_session->is_running())
         s_session->set_pause_reason(app::AppSessionPauseReason::User, false);
+}
+
+PTVITA_EXPORT void PTVitaShutdown(void) {
+    if (s_state.load() != PTVitaStateStopped)
+        PTVitaStop();
+    for (int i = 0; i < 500 && s_state.load() != PTVitaStateStopped; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (s_thread.joinable())
+        s_thread.join();
+    LOG_INFO("[PlayTendo] Moteur arrêté (fermeture de l'app)");
+    spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) { logger->flush(); });
 }
 
 // MARK: - Commandes

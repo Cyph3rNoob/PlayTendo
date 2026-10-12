@@ -4,25 +4,30 @@ retouche déjà faite est sautée : relancer le script ne change rien.
 
 Vita3K n'existe pas pour iPhone : on part de sa version Android (une bibliothèque sans l'interface Qt, pilotée de
 l'extérieur), que l'app charge comme les moteurs PS2 et GameCube/Wii (VitaCore.framework, pilote vita/PTVitaHost.cpp).
-1. CMake : sur iOS (IOS), pas d'interface Qt ; la bibliothèque `vita3k` est faite du cœur et du pilote de PlayTendo
-   (PLAYTENDO_VITA_HOST, PLAYTENDO_VITA_VIEW) ; version d'iOS minimale laissée au script ; Objective-C++ activé ; PLAYTENDO_IOS défini.
-2. Boost.Filesystem compilé directement par CMake (l'outil b2 de Boost ne sait pas viser l'iPhone ici).
-3. OpenSSL : celui compilé pour iPhone par build_vita3k.sh (PLAYTENDO_OPENSSL), sans Homebrew ni téléchargement.
+La même bibliothèque est compilée pour Mac (2026-10-12) : build_vita3k.sh donne `-DPLAYTENDO=ON` dans les deux cas.
+Dans le code : `PLAYTENDO` = moteur de PlayTendo (iPhone et Mac), `PLAYTENDO_IOS` = iPhone seulement.
+1. CMake : pour PlayTendo (PLAYTENDO), pas d'interface Qt ; la bibliothèque `vita3k` est faite du cœur et du pilote
+   (PLAYTENDO_VITA_HOST, PLAYTENDO_VITA_VIEW ; UIKit sur iPhone, AppKit sur Mac) ; version d'iOS minimale laissée au
+   script ; Objective-C++ activé ; PLAYTENDO et PLAYTENDO_IOS définis.
+2. Boost.Filesystem compilé directement par CMake (l'outil b2 de Boost ne sait pas viser l'iPhone ; sur Mac, pas de
+   Boost de Homebrew).
+3. OpenSSL : celui compilé par build_vita3k.sh pour iPhone ou Mac (PLAYTENDO_OPENSSL), sans Homebrew ni téléchargement.
 4. MoltenVK : les en-têtes de celui déjà téléchargé pour la 3DS (PLAYTENDO_MOLTENVK_INCLUDE), sans téléchargement ;
    le moteur trouve Vulkan par PTVitaVkGetInstanceProcAddr (pilote), dans le MoltenVK.framework de l'app.
-5. curl absent sur iPhone : Vita3K ne s'en sert que pour vérifier ses mises à jour et la liste de compatibilité.
-6. Couche Metal (metal_layer.mm) : UIKit au lieu de Cocoa ; le pilote donne directement sa CAMetalLayer.
+5. curl absent : Vita3K ne s'en sert que pour vérifier ses mises à jour et la liste de compatibilité.
+6. Couche Metal (metal_layer.mm) : UIKit sur iPhone ; le pilote donne directement sa CAMetalLayer.
 7. Réseau (macos_net_helper.cpp) : SCDynamicStore n'existe pas sur iPhone.
-8. Turbo (JIT) : comme pour la 3DS (patch_azahar.py, même dynarmic/oaknut), le code compilé va dans la réserve JIT de
-   l'app (PTJITAlloc/PTJITFree, deux vues : écriture et exécution) ; verrou ARM64 de dynarmic créé au premier usage.
-9. dynarmic_cpu.cpp : Vita3K crée un recompilateur par fil d'exécution du jeu (des dizaines), 128 Mo de code chacun
-   par défaut → 8 Mo (le minimum de dynarmic) pour tenir dans la réserve de 352 Mo partagée.
+8. Turbo (JIT), sur iPhone : comme pour la 3DS (patch_azahar.py, même dynarmic/oaknut), le code compilé va dans la
+   réserve JIT de l'app (PTJITAlloc/PTJITFree, deux vues : écriture et exécution) ; verrou ARM64 de dynarmic créé au
+   premier usage. Sur Mac, dynarmic prend lui-même sa mémoire exécutable (MAP_JIT).
+9. dynarmic_cpu.cpp, sur iPhone : Vita3K crée un recompilateur par fil d'exécution du jeu (des dizaines), 128 Mo de
+   code chacun par défaut → 8 Mo (le minimum de dynarmic) pour tenir dans la réserve de 352 Mo partagée.
 10. Son (sdl_audio.cpp) : compteur de PlayTendo (pilote) sur ce que le jeu envoie et sur ce que SDL donne à l'appareil
    (mélange final), noté dans vita3k.log.
 11. Pipelines refusés par MoltenVK (pipeline_cache.cpp) : vulkan-hpp signale l'échec par une exception que rien ne
    rattrapait → l'app se fermait (LittleBigPlanet, 2026-10-10, « createGraphicsPipeline: ErrorInitializationFailed »).
    L'effet est sauté (nullptr, comme Vita3K le prévoit), marqué pour ne pas être recompilé à chaque image.
-12. Messages de MoltenVK (renderer.cpp) : pas de couche de validation sur iPhone, mais MoltenVK donne la raison de ses
+12. Messages de MoltenVK (renderer.cpp) : pas de couche de validation, mais MoltenVK donne la raison de ses
    refus par VK_EXT_debug_utils → branchée sur vita3k.log (« [PlayTendo] MoltenVK : … »).
 13. Masque de la Vita (scene.cpp) : sans l'émulation de la retouche 14 (appareil sans shader interlock), ses dessins
    sont sautés, comme le fait le rendu OpenGL de Vita3K quand il n'a pas de tampon de masque (gl/draw.cpp).
@@ -40,11 +45,12 @@ l'extérieur), que l'app charge comme les moteurs PS2 et GameCube/Wii (VitaCore.
      partagent ce programme de sommets ne dessinaient plus rien (menus invisibles même sans masque) ;
    - `use_mask_bit` entre dans la signature du cache des shaders (renderer.cpp) : les shaders déjà enregistrés,
      dont ceux cassés par le point précédent, sont effacés au premier lancement.
-15. Mémoire mappée gardée sur iPhone (essai, 2026-10-12) : Vita3K la coupe sur tous les appareils Apple (renderer.cpp,
+15. Mémoire mappée gardée sur Apple (2026-10-12) : Vita3K la coupe sur tous les appareils Apple (renderer.cpp,
    « we need to make a copy of the vertex buffer for moltenvk »), seulement parce que Metal veut des flux de sommets
-   au pas multiple de 4. Or sans elle, pas de synchro des surfaces : textures de Gravity Rush qui clignotent selon
-   l'angle de la caméra (son correctif sur PC : précision haute + Surface Sync). MoltenVK a ce qu'il faut (adresses de
-   tampons, lecture de vec4 alignées sur 4 octets : essai sur le Mac M3, 2026-10-12). Méthode « double tampon ».
+   au pas multiple de 4. Or sans elle, Vita3K ignore les écritures en mémoire des shaders (« Store opcode is not
+   supported without memory mapping ») : textures de Gravity Rush qui clignotaient selon l'angle de la caméra, corrigé
+   sur iPhone. MoltenVK a ce qu'il faut (adresses de tampons, lecture de vec4 alignées sur 4 octets : essai sur le Mac
+   M3). Méthode « double tampon ».
    - les flux de sommets au pas ou au début non multiple de 4 sont copiés et réalignés à part, comme sans mémoire
      mappée (scene.cpp) ; de même les indices dont le début n'est pas multiple de 4 (leur plus grand indice est
      calculé ici : il fixe la taille des flux de sommets) ; tampons tournants créés aussi dans ce mode (creation.cpp) ;
@@ -85,15 +91,19 @@ patch("CMakeLists.txt", [
      "endif()\n"),
     ("if(APPLE)\n    enable_language(OBJC)\nendif()\n",
      "if(APPLE)\n    enable_language(OBJC)\n"
-     "    # PlayTendo : fichiers Objective-C++ (.mm) de la couche Metal et du pilote iPhone.\n"
+     "    # PlayTendo : fichiers Objective-C++ (.mm) de la couche Metal et du pilote.\n"
      "    enable_language(OBJCXX)\n"
+     "endif()\n"
+     "if(PLAYTENDO)\n"
+     "    add_compile_definitions(PLAYTENDO)\n"
      "endif()\n"
      "if(IOS)\n"
      "    add_compile_definitions(PLAYTENDO_IOS)\n"
      "endif()\n"),
     ("macro(get_boost)\n\tif(NOT VITA3K_FORCE_SYSTEM_BOOST)\n",
-     "# PlayTendo : sur iPhone, Boost.Filesystem (seule partie compilée de Boost dont Vita3K a besoin) est compilé\n"
-     "# directement, avec les possibilités du système d'Apple que son propre CMake détecterait.\n"
+     "# PlayTendo : Boost.Filesystem (seule partie compilée de Boost dont Vita3K a besoin) est compilé directement,\n"
+     "# avec les possibilités du système d'Apple que son propre CMake détecterait (b2 ne vise pas l'iPhone ; sur Mac,\n"
+     "# pas de Boost de Homebrew, absent de l'app).\n"
      "macro(playtendo_boost_filesystem)\n"
      "\tset(PT_BOOST_DIR \"${CMAKE_SOURCE_DIR}/external/boost\")\n"
      "\tadd_library(boost_filesystem_playtendo STATIC\n"
@@ -125,7 +135,7 @@ patch("CMakeLists.txt", [
      "endmacro()\n"
      "\n"
      "macro(get_boost)\n"
-     "\tif(IOS)\n"
+     "\tif(PLAYTENDO)\n"
      "\t\tif(NOT TARGET boost_filesystem_playtendo)\n"
      "\t\t\tplaytendo_boost_filesystem()\n"
      "\t\tendif()\n"
@@ -135,29 +145,34 @@ patch("CMakeLists.txt", [
 # 1. CMake du dossier vita3k : sans Qt, bibliothèque partagée avec le pilote de PlayTendo.
 patch("vita3k/CMakeLists.txt", [
     ("if(NOT ANDROID)\n\tinclude(${CMAKE_SOURCE_DIR}/cmake/qt6.cmake)\n",
-     "if(NOT ANDROID AND NOT IOS) # PlayTendo : pas d'interface Qt sur iPhone\n"
+     "if(NOT ANDROID AND NOT PLAYTENDO) # PlayTendo : pas d'interface Qt\n"
      "\tinclude(${CMAKE_SOURCE_DIR}/cmake/qt6.cmake)\n"),
     ("if(NOT ANDROID)\n\tadd_subdirectory(gui-qt)\n",
-     "if(NOT ANDROID AND NOT IOS)\n\tadd_subdirectory(gui-qt)\n"),
+     "if(NOT ANDROID AND NOT PLAYTENDO)\n\tadd_subdirectory(gui-qt)\n"),
     ("if(ANDROID)\n\tadd_library(vita3k SHARED\n",
-     "if(IOS)\n"
+     "if(PLAYTENDO)\n"
      "\t# PlayTendo : le cœur et le pilote vita/PTVitaHost.cpp + PTVitaView.mm (à la place de main.cpp et de\n"
      "\t# l'interface Qt).\n"
      "\tadd_library(vita3k SHARED interface.cpp performance.cpp ${PLAYTENDO_VITA_HOST} ${PLAYTENDO_VITA_VIEW})\n"
      "\tset_source_files_properties(${PLAYTENDO_VITA_VIEW} PROPERTIES COMPILE_OPTIONS \"-fobjc-arc\")\n"
      "\ttarget_include_directories(vita3k PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${PLAYTENDO_INCLUDE})\n"
-     "\ttarget_link_libraries(vita3k PRIVATE SDL3::SDL3 pugixml::pugixml \"-framework UIKit\" \"-framework QuartzCore\"\n"
+     "\tif(IOS)\n"
+     "\t\tset(PLAYTENDO_UI_FRAMEWORK \"-framework UIKit\")\n"
+     "\telse()\n"
+     "\t\tset(PLAYTENDO_UI_FRAMEWORK \"-framework AppKit\")\n"
+     "\tendif()\n"
+     "\ttarget_link_libraries(vita3k PRIVATE SDL3::SDL3 pugixml::pugixml ${PLAYTENDO_UI_FRAMEWORK} \"-framework QuartzCore\"\n"
      "\t\t\"-framework Metal\" \"-framework Foundation\")\n"
      "elseif(ANDROID)\n\tadd_library(vita3k SHARED\n"),
     ("if(NOT ANDROID)\n\ttarget_link_libraries(vita3k PRIVATE gui-qt)\n",
-     "if(NOT ANDROID AND NOT IOS)\n\ttarget_link_libraries(vita3k PRIVATE gui-qt)\n"),
+     "if(NOT ANDROID AND NOT PLAYTENDO)\n\ttarget_link_libraries(vita3k PRIVATE gui-qt)\n"),
     ("if(NOT ANDROID)\n\tfile(GLOB VITA3K_QT_TS_FILES CONFIGURE_DEPENDS\n",
-     "if(NOT ANDROID AND NOT IOS)\n\tfile(GLOB VITA3K_QT_TS_FILES CONFIGURE_DEPENDS\n"),
+     "if(NOT ANDROID AND NOT PLAYTENDO)\n\tfile(GLOB VITA3K_QT_TS_FILES CONFIGURE_DEPENDS\n"),
     ("if(APPLE)\n\tadd_custom_command(\n\t\tOUTPUT Vita3K.icns\n",
-     "if(APPLE AND NOT IOS) # PlayTendo : paquet d'app macOS\n\tadd_custom_command(\n\t\tOUTPUT Vita3K.icns\n"),
+     "if(APPLE AND NOT PLAYTENDO) # PlayTendo : paquet de l'app Vita3K pour Mac, inutile ici\n\tadd_custom_command(\n\t\tOUTPUT Vita3K.icns\n"),
 ])
 
-# 6. Couche Metal : UIKit sur iPhone.
+# 6. Couche Metal : UIKit sur iPhone ; la couche donnée par le pilote est acceptée telle quelle.
 patch("vita3k/renderer/CMakeLists.txt", [
     ("\ttarget_link_libraries(renderer PRIVATE \"-framework QuartzCore\" \"-framework Cocoa\")\n",
      "\tif(IOS) # PlayTendo\n"
@@ -171,39 +186,40 @@ patch("vita3k/renderer/src/vulkan/metal_layer.mm", [
     ("#import <Cocoa/Cocoa.h>\n#import <QuartzCore/CAMetalLayer.h>\n\n"
      "extern \"C\" void *get_metal_layer_from_view(void *nsview) {\n"
      "    return (__bridge void *)((__bridge NSView *)nsview).layer;\n}\n",
-     "#import <QuartzCore/CAMetalLayer.h>\n#import <TargetConditionals.h>\n\n"
+     "#import <QuartzCore/CAMetalLayer.h>\n#import <TargetConditionals.h>\n"
      "#if TARGET_OS_IPHONE\n"
-     "// PlayTendo : le pilote iPhone (vita/PTVitaView.mm) donne directement sa CAMetalLayer (ou une UIView).\n"
-     "#import <UIKit/UIKit.h>\n\n"
+     "#import <UIKit/UIKit.h>\n"
+     "#define PT_PLATFORM_VIEW UIView\n"
+     "#else\n"
+     "#import <Cocoa/Cocoa.h>\n"
+     "#define PT_PLATFORM_VIEW NSView\n"
+     "#endif\n\n"
+     "// PlayTendo : le pilote (vita/PTVitaView.mm) donne directement sa CAMetalLayer ; une vue (UIView ou NSView, comme\n"
+     "// l'interface de Vita3K) donne la sienne.\n"
      "extern \"C\" void *get_metal_layer_from_view(void *view) {\n"
      "    id object = (__bridge id)view;\n"
      "    if ([object isKindOfClass:[CAMetalLayer class]])\n"
      "        return view;\n"
-     "    if ([object isKindOfClass:[UIView class]])\n"
-     "        return (__bridge void *)((UIView *)object).layer;\n"
+     "    if ([object isKindOfClass:[PT_PLATFORM_VIEW class]])\n"
+     "        return (__bridge void *)((PT_PLATFORM_VIEW *)object).layer;\n"
      "    return nullptr;\n"
-     "}\n"
-     "#else\n"
-     "#import <Cocoa/Cocoa.h>\n\n"
-     "extern \"C\" void *get_metal_layer_from_view(void *nsview) {\n"
-     "    return (__bridge void *)((__bridge NSView *)nsview).layer;\n}\n"
-     "#endif\n"),
+     "}\n"),
 ])
 
 # 4. Vulkan : MoltenVK de l'app (le chargeur de vulkan.hpp chercherait une bibliothèque libvulkan absente).
 patch("vita3k/renderer/src/vulkan/renderer.cpp", [
     ("#ifdef __APPLE__\n#include <MoltenVK/mvk_vulkan.h>\n#endif\n",
      "#ifdef __APPLE__\n#include <MoltenVK/mvk_vulkan.h>\n#endif\n\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "// PlayTendo : vkGetInstanceProcAddr du MoltenVK.framework de l'app (vita/PTVitaView.mm).\n"
      "extern \"C\" void *PTVitaVkGetInstanceProcAddr(void);\n"
      "#endif\n"),
     ("#else\n        VULKAN_HPP_DEFAULT_DISPATCHER.init();\n#endif\n",
-     "#elif defined(PLAYTENDO_IOS)\n"
+     "#elif defined(PLAYTENDO)\n"
      "        VULKAN_HPP_DEFAULT_DISPATCHER.init(reinterpret_cast<PFN_vkGetInstanceProcAddr>(PTVitaVkGetInstanceProcAddr()));\n"
      "#else\n        VULKAN_HPP_DEFAULT_DISPATCHER.init();\n#endif\n"),
     ("#else\n        dispatch.init();\n#endif\n",
-     "#elif defined(PLAYTENDO_IOS)\n"
+     "#elif defined(PLAYTENDO)\n"
      "        dispatch.init(reinterpret_cast<PFN_vkGetInstanceProcAddr>(PTVitaVkGetInstanceProcAddr()));\n"
      "#else\n        dispatch.init();\n#endif\n"),
 ])
@@ -214,18 +230,19 @@ patch("external/CMakeLists.txt", [
      "endfunction()\n\n"
      "# PlayTendo : les sous-modules propres à Android (libadrenotools), à Windows (dirent) et à l'interface PC\n"
      "# (nativefiledialog-extended) ne sont pas téléchargés (scripts/fetch_sources.sh).\n"
-     "if(NOT IOS)\n\tcheck_submodules_present()\nendif()\n"),
+     "if(NOT PLAYTENDO)\n\tcheck_submodules_present()\nendif()\n"),
     ("if(NOT ANDROID)\n\t# nativefiledialog-extended\n",
-     "if(NOT ANDROID AND NOT IOS) # PlayTendo : fenêtres de choix de fichier de l'interface PC seulement\n"
+     "if(NOT ANDROID AND NOT PLAYTENDO) # PlayTendo : fenêtres de choix de fichier de l'interface PC seulement\n"
      "\t# nativefiledialog-extended\n"),
     ("if(APPLE)\n\tif(NOT EXISTS \"${CMAKE_BINARY_DIR}/external/MoltenVK-macos.tar\")\n",
-     "if(IOS)\n"
-     "\t# PlayTendo : en-têtes du MoltenVK pour iPhone déjà téléchargé (sources/MoltenVK, celui de la 3DS).\n"
+     "if(PLAYTENDO)\n"
+     "\t# PlayTendo : en-têtes du MoltenVK déjà téléchargé pour la 3DS (sources/MoltenVK pour iPhone,\n"
+     "\t# sources/MoltenVK-macos pour Mac) ; l'app a son MoltenVK.framework.\n"
      "\ttarget_include_directories(vulkan INTERFACE \"${PLAYTENDO_MOLTENVK_INCLUDE}\")\n"
      "elseif(APPLE)\n\tif(NOT EXISTS \"${CMAKE_BINARY_DIR}/external/MoltenVK-macos.tar\")\n"),
     ("if(APPLE OR NOT FORCE_BUILD_OPENSSL_MAC)\n\texecute_process(\n\t\tCOMMAND brew --prefix openssl\n",
-     "if(IOS)\n"
-     "\t# PlayTendo : OpenSSL compilé pour iPhone par build_vita3k.sh (sans Homebrew ni téléchargement).\n"
+     "if(PLAYTENDO)\n"
+     "\t# PlayTendo : OpenSSL compilé par build_vita3k.sh pour iPhone ou Mac (sans Homebrew ni téléchargement).\n"
      "\tadd_library(OpenSSL::Crypto STATIC IMPORTED GLOBAL)\n"
      "\tset_target_properties(OpenSSL::Crypto PROPERTIES IMPORTED_LOCATION \"${PLAYTENDO_OPENSSL}/lib/libcrypto.a\"\n"
      "\t\tINTERFACE_INCLUDE_DIRECTORIES \"${PLAYTENDO_OPENSSL}/include\")\n"
@@ -239,11 +256,11 @@ patch("external/CMakeLists.txt", [
      "\tset(OPENSSL_LIBRARIES \"${OPENSSL_SSL_LIBRARY};${OPENSSL_CRYPTO_LIBRARY}\")\n"
      "elseif(APPLE OR NOT FORCE_BUILD_OPENSSL_MAC)\n\texecute_process(\n\t\tCOMMAND brew --prefix openssl\n"),
     ("if(NOT FORCE_BUILD_OPENSSL_MAC)\n\tfind_package(OpenSSL QUIET)\nendif()\n",
-     "if(NOT FORCE_BUILD_OPENSSL_MAC AND NOT IOS)\n\tfind_package(OpenSSL QUIET)\nendif()\n"),
+     "if(NOT FORCE_BUILD_OPENSSL_MAC AND NOT PLAYTENDO)\n\tfind_package(OpenSSL QUIET)\nendif()\n"),
     ("find_package(CURL QUIET)\nif(NOT CURL_FOUND)\n",
-     "if(NOT IOS)\n\tfind_package(CURL QUIET)\nendif()\n"
-     "if(IOS)\n"
-     "\t# PlayTendo : pas de curl sur iPhone (Vita3K ne s'en sert que pour ses mises à jour et sa liste de\n"
+     "if(NOT PLAYTENDO)\n\tfind_package(CURL QUIET)\nendif()\n"
+     "if(PLAYTENDO)\n"
+     "\t# PlayTendo : pas de curl (Vita3K ne s'en sert que pour ses mises à jour et sa liste de\n"
      "\t# compatibilité ; net_utils.cpp retouché).\n"
      "\tadd_library(libcurl INTERFACE)\n"
      "elseif(NOT CURL_FOUND)\n"),
@@ -264,11 +281,11 @@ patch("external/ffmpeg/CMakeLists.txt", [
 
 patch("vita3k/util/src/net_utils.cpp", [
     ("#include <curl/curl.h>\n",
-     "#ifndef PLAYTENDO_IOS\n#include <curl/curl.h>\n#endif\n"),
+     "#ifndef PLAYTENDO\n#include <curl/curl.h>\n#endif\n"),
     ("std::string get_web_response(const std::string &url) {\n    auto curl = curl_easy_init();\n",
      "std::string get_web_response(const std::string &url) {\n"
-     "#ifdef PLAYTENDO_IOS\n"
-     "    return {}; // PlayTendo : rien n'est téléchargé sur iPhone\n"
+     "#ifdef PLAYTENDO\n"
+     "    return {}; // PlayTendo : rien n'est téléchargé par le moteur\n"
      "#else\n"
      "    auto curl = curl_easy_init();\n"),
     ("    if (response_code / 100 == 2)\n        return response_string;\n\n    return {};\n}\n",
@@ -389,19 +406,19 @@ patch("vita3k/audio/src/impl/sdl_audio.cpp", [
     ("#include <SDL3/SDL_hints.h>\n",
      "#include <SDL3/SDL_hints.h>\n"
      "\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "// PlayTendo : compteur du son de la partie (vita/PTVitaHost.cpp), noté dans vita3k.log.\n"
      "extern \"C\" void PTVitaAudioQueued(const void *buffer, int bytes, uint64_t microseconds);\n"
      "extern \"C\" void SDLCALL PTVitaAudioPostmix(void *userdata, const SDL_AudioSpec *spec, float *buffer, int buflen);\n"
      "#endif\n"),
     ("    SDL_CHECK_EXT(device_id > 0, false);\n    return true;\n",
      "    SDL_CHECK_EXT(device_id > 0, false);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    SDL_SetAudioPostmixCallback(device_id, PTVitaAudioPostmix, nullptr);\n"
      "#endif\n"
      "    return true;\n"),
     ("    SDL_CHECK_VOID(SDL_PutAudioStreamData(port.stream.get(), buffer, out_port.len_bytes));\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    PTVitaAudioQueued(buffer, out_port.len_bytes, out_port.len_microseconds);\n"
      "#endif\n"
      "    SDL_CHECK_VOID(SDL_PutAudioStreamData(port.stream.get(), buffer, out_port.len_bytes));\n"),
@@ -417,7 +434,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
      "    }\n"
      "\n"
      "    return result.value;\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : MoltenVK peut refuser un pipeline (shader non traduit en Metal) ; vulkan-hpp le signale par une\n"
      "    // exception que rien ne rattrapait (l'app se fermait). La raison donnée par MoltenVK est au journal juste avant.\n"
      "    try {\n"
@@ -429,21 +446,21 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
      "    }\n"
      "\n"
      "    return result.value;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    } catch (const vk::SystemError &error) {\n"
      "        LOG_ERROR(\"[PlayTendo] Effet graphique refusé par MoltenVK, sauté : {}\", error.what());\n"
      "        return nullptr;\n"
      "    }\n"
      "#endif\n"),
     ("        *request->pipeline = pipeline;\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        // PlayTendo : un pipeline refusé reste marqué « en cours » : sauté, jamais recompilé.\n"
      "        *request->pipeline = pipeline ? pipeline : std::bit_cast<vk::Pipeline, uint64_t>(~0ULL);\n"
      "#else\n"
      "        *request->pipeline = pipeline;\n"
      "#endif\n"),
     ("        it->second = result;\n\n        return result;\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        // PlayTendo : un pipeline refusé reste marqué « en cours » : sauté, pas recompilé à chaque image.\n"
      "        it->second = result ? result : pipeline_compiling;\n"
      "#else\n"
@@ -453,7 +470,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
      "        return result;\n"),
     ("    for (auto &[hash, pipeline] : pipelines)\n        state.device.destroy(pipeline);\n",
      "    for (auto &[hash, pipeline] : pipelines)\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        // PlayTendo : sans les marqueurs « en cours / refusé » (~0), qui ne sont pas de vrais pipelines.\n"
      "        if (pipeline && pipeline != std::bit_cast<vk::Pipeline, uint64_t>(~0ULL))\n"
      "#endif\n"
@@ -463,7 +480,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
 # 12. Messages de MoltenVK dans vita3k.log.
 patch("vita3k/renderer/src/vulkan/renderer.cpp", [
     ("static vk::DebugReportCallbackEXT debug_report;\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "// PlayTendo : avertissements et erreurs de MoltenVK (raison d'un pipeline refusé…), sans couche de validation.\n"
      "static VKAPI_ATTR VkBool32 VKAPI_CALL playtendo_moltenvk_callback(\n"
      "    vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity,\n"
@@ -483,7 +500,7 @@ patch("vita3k/renderer/src/vulkan/renderer.cpp", [
      "                LOG_INFO(\"Disabling Vulkan validation layers (may improve performance but provides limited error messages)\");\n"
      "            }\n"
      "        }\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        bool playtendo_debug_utils = false;\n"
      "        if (!has_validation_layer) {\n"
      "            for (const vk::ExtensionProperties &prop : vk::enumerateInstanceExtensionProperties())\n"
@@ -495,7 +512,7 @@ patch("vita3k/renderer/src/vulkan/renderer.cpp", [
     ("        instance = vk::createInstance(instance_info);\n        VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);\n",
      "        instance = vk::createInstance(instance_info);\n"
      "        VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        if (playtendo_debug_utils) {\n"
      "            debug_messenger = instance.createDebugUtilsMessengerEXT(vk::DebugUtilsMessengerCreateInfoEXT{\n"
      "                .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning\n"
@@ -513,7 +530,7 @@ patch("vita3k/renderer/src/vulkan/scene.cpp", [
     ("    Ptr<void> indices, size_t count, uint32_t instance_count, MemState &mem, const Config &config) {\n"
      "    void *indices_ptr = indices.get(mem);\n",
      "    Ptr<void> indices, size_t count, uint32_t instance_count, MemState &mem, const Config &config) {\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : sans émulation du masque, son dessin peindrait 0 ou 1 dans l'image (menus de Minecraft recouverts\n"
      "    // de noir). Sauté, comme le rendu OpenGL de Vita3K sans tampon de masque.\n"
      "    if (context.record.is_maskupdate && !context.state.features.use_mask_bit) {\n"
@@ -528,14 +545,14 @@ patch("vita3k/renderer/src/vulkan/scene.cpp", [
 patch("vita3k/renderer/include/renderer/vulkan/types.h", [
     ("    vk::DescriptorSet rendertarget_set;\n",
      "    vk::DescriptorSet rendertarget_set;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : masque à remettre à sa valeur de fond au prochain début de passe (nouvelle scène).\n"
      "    bool playtendo_mask_clear = false;\n"
      "    float playtendo_mask_value = 1.0f;\n"
      "#endif\n"),
     ("    vkutil::Image depthstencil;\n",
      "    vkutil::Image depthstencil;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : masque de la Vita (1 = visible), lu et écrit par les shaders de pixels.\n"
      "    vkutil::Image mask;\n"
      "#endif\n"),
@@ -543,7 +560,7 @@ patch("vita3k/renderer/include/renderer/vulkan/types.h", [
 patch("vita3k/renderer/src/vulkan/creation.cpp", [
     ("    depthstencil.init_image(vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment);\n",
      "    depthstencil.init_image(vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : masque de la Vita, à la taille de la profondeur (doublée en MSAA 4x).\n"
      "    if (state.features.use_mask_bit) {\n"
      "        mask = vkutil::Image(depthstencil.width, depthstencil.height, vk::Format::eR8G8B8A8Unorm);\n"
@@ -552,7 +569,7 @@ patch("vita3k/renderer/src/vulkan/creation.cpp", [
      "#endif\n"),
     ("    depthstencil.transition_to_discard(cmd_buffer, vkutil::ImageLayout::DepthStencilAttachment, vkutil::ds_subresource_range);\n",
      "    depthstencil.transition_to_discard(cmd_buffer, vkutil::ImageLayout::DepthStencilAttachment, vkutil::ds_subresource_range);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    if (mask.image) {\n"
      "        // tout visible au départ\n"
      "        mask.transition_to_discard(cmd_buffer, vkutil::ImageLayout::TransferDst);\n"
@@ -563,7 +580,7 @@ patch("vita3k/renderer/src/vulkan/creation.cpp", [
      "#endif\n"),
     ("    frame.destroy_queue.add_image(render_target.depthstencil);\n",
      "    frame.destroy_queue.add_image(render_target.depthstencil);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    if (render_target.mask.image)\n"
      "        frame.destroy_queue.add_image(render_target.mask);\n"
      "#endif\n"),
@@ -571,7 +588,7 @@ patch("vita3k/renderer/src/vulkan/creation.cpp", [
 patch("vita3k/renderer/src/vulkan/context.cpp", [
     ("    context.render_target = rt;\n",
      "    context.render_target = rt;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : nouvelle scène → masque remis à la valeur de fond de la surface de profondeur (comme\n"
      "    // gl::sync_mask) ; « tout visible » sans surface de profondeur (valeur alors non fiable).\n"
      "    {\n"
@@ -582,7 +599,7 @@ patch("vita3k/renderer/src/vulkan/context.cpp", [
      "    }\n"
      "#endif\n"),
     ("    descriptor_pool_info.setPoolSizes(pool_size);\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : plus une image de stockage par jeu de descripteurs pour le masque.\n"
      "    const std::array<vk::DescriptorPoolSize, 2> pool_sizes = { pool_size,\n"
      "        vk::DescriptorPoolSize{ .type = vk::DescriptorType::eStorageImage, .descriptorCount = DESCRIPTOR_PACK_SIZE * MAX_FRAMES_RENDERING } };\n"
@@ -591,7 +608,7 @@ patch("vita3k/renderer/src/vulkan/context.cpp", [
      "    descriptor_pool_info.setPoolSizes(pool_size);\n"
      "#endif\n"),
     ("    render_cmd.beginRenderPass(curr_renderpass_info, vk::SubpassContents::eInline);\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : remise du masque, hors passe de rendu, au premier début de passe de la scène.\n"
      "    if (playtendo_mask_clear && render_target->mask.image) {\n"
      "        playtendo_mask_clear = false;\n"
@@ -606,7 +623,7 @@ patch("vita3k/renderer/src/vulkan/context.cpp", [
     ("    write_descr.setImageInfo(descr_color_info);\n    state.device.updateDescriptorSets(write_descr, {});\n}\n",
      "    write_descr.setImageInfo(descr_color_info);\n"
      "    state.device.updateDescriptorSets(write_descr, {});\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : masque de la cible de rendu (set 1, binding 1).\n"
      "    if (state.features.use_mask_bit && render_target->mask.view) {\n"
      "        vk::DescriptorImageInfo descr_mask_info{\n"
@@ -631,7 +648,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
      "    if (maskupdate && !state.features.use_mask_bit) // PlayTendo : émulé si use_mask_bit\n"
      "        LOG_WARN_ONCE(\"Mask not implemented in the vulkan renderer!\");\n"),
     ("    const vk::PipelineShaderStageCreateInfo vertex_shader = retrieve_shader(vertex_program_gxm.program.get(mem), vertex_program.hash, true, fragment_program_gxm.is_maskupdate, mem, hints);\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : le shader de sommets d'un dessin de masque est un shader ordinaire. Compilé « en mode masque », il\n"
      "    // n'écrivait aucune position et restait en cache sous l'identifiant du programme, cassant les autres dessins.\n"
      "    const vk::PipelineShaderStageCreateInfo vertex_shader = retrieve_shader(vertex_program_gxm.program.get(mem), vertex_program.hash, true, false, mem, hints);\n"
@@ -644,7 +661,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
     ("        .back = convert_op_state(two_sided ? record.back_stencil_state_op : record.front_stencil_state_op)\n    };\n",
      "        .back = convert_op_state(two_sided ? record.back_stencil_state_op : record.front_stencil_state_op)\n"
      "    };\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : un dessin du masque n'écrit que le masque, sans tests de profondeur ni de stencil (gl/draw.cpp).\n"
      "    const bool playtendo_mask_draw = fragment_program_gxm.is_maskupdate && state.features.use_mask_bit;\n"
      "    if (playtendo_mask_draw) {\n"
@@ -654,7 +671,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
      "    }\n"
      "#endif\n"),
     ("    if (is_fragment_disabled || frag_has_no_output || use_shader_interlock) {\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    if (is_fragment_disabled || frag_has_no_output || use_shader_interlock || playtendo_mask_draw) {\n"
      "#else\n"
      "    if (is_fragment_disabled || frag_has_no_output || use_shader_interlock) {\n"
@@ -663,7 +680,7 @@ patch("vita3k/renderer/src/vulkan/pipeline_cache.cpp", [
 patch("vita3k/shader/src/spirv_recompiler.cpp", [
     ("    b.createStore(mask_v, out);\n}\n",
      "    b.createStore(mask_v, out);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : en Vulkan, la valeur va dans l'image du masque (set 1, binding 1) au pixel courant ; la couleur\n"
      "    // n'est pas écrite (pipeline sans écriture de couleur).\n"
      "    if (translate_state.is_vulkan && translate_state.mask_id != spv::NoResult && translate_state.frag_coord_id != spv::NoResult) {\n"
@@ -676,13 +693,13 @@ patch("vita3k/shader/src/spirv_recompiler.cpp", [
      "}\n"),
     ("    std::vector<spv::Id> empty_args;\n",
      "    std::vector<spv::Id> empty_args;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    bool playtendo_mask_interlock = false;\n"
      "#endif\n"),
     ("            b.createNoResultOp(spv::OpBeginInvocationInterlockEXT);\n        }\n    }\n\n    // Generate parameters\n",
      "            b.createNoResultOp(spv::OpBeginInvocationInterlockEXT);\n"
      "        }\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        // PlayTendo : masque en Vulkan, lu (tous les shaders de pixels) ou écrit (dessins du masque) dans l'ordre de\n"
      "        // rastérisation : verrou sur tout le shader (raster order groups de Metal, par MoltenVK).\n"
      "        else if (translation_state.is_vulkan && features.use_mask_bit) {\n"
@@ -699,7 +716,7 @@ patch("vita3k/shader/src/spirv_recompiler.cpp", [
     ("        generate_update_mask_body(b, translation_state);\n    }\n    b.leaveFunction();\n",
      "        generate_update_mask_body(b, translation_state);\n"
      "    }\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    if (playtendo_mask_interlock)\n"
      "        b.createNoResultOp(spv::OpEndInvocationInterlockEXT);\n"
      "#endif\n"
@@ -708,7 +725,7 @@ patch("vita3k/shader/src/spirv_recompiler.cpp", [
 patch("vita3k/renderer/src/vulkan/renderer.cpp", [
     ("    bool use_high_accuracy = cfg.current_config.high_accuracy;\n",
      "    bool use_high_accuracy = cfg.current_config.high_accuracy;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : masque de la Vita émulé si l'appareil a le shader interlock (lu ici avant d'être coupé en précision\n"
      "    // normale ; l'état du rendu est recréé à chaque lancement).\n"
      "    features.use_mask_bit = features.support_shader_interlock;\n"
@@ -722,15 +739,15 @@ patch("vita3k/renderer/src/vulkan/renderer.cpp", [
      "    features_mask.use_mask_bit = features.use_mask_bit; // PlayTendo : shaders refaits quand le masque change\n"),
 ])
 
-# 15. Mémoire mappée gardée sur iPhone ; sommets et indices mal alignés pour Metal copiés à part.
+# 15. Mémoire mappée gardée sur Apple ; sommets et indices mal alignés pour Metal copiés à part.
 patch("vita3k/renderer/src/vulkan/renderer.cpp", [
     ("#ifdef __APPLE__\n        // we need to make a copy of the vertex buffer for moltenvk, so disable memory mapping\n"
      "        support_memory_mapping = false;\n#endif\n",
-     "#if defined(__APPLE__) && !defined(PLAYTENDO_IOS)\n"
+     "#if defined(__APPLE__) && !defined(PLAYTENDO)\n"
      "        // we need to make a copy of the vertex buffer for moltenvk, so disable memory mapping\n"
      "        support_memory_mapping = false;\n"
      "#endif\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        // PlayTendo : mémoire mappée gardée (sans elle, pas de synchro des surfaces) ; seuls les sommets et indices\n"
      "        // mal alignés pour Metal sont copiés à part (scene.cpp).\n"
      "        LOG_INFO(\"[PlayTendo] Mémoire mappée possible : {} (adresses de tampons {}, disposition standard {})\",\n"
@@ -740,7 +757,7 @@ patch("vita3k/renderer/src/vulkan/renderer.cpp", [
 patch("vita3k/renderer/src/vulkan/creation.cpp", [
     ("        std::fill_n(vertex_stream_buffers, SCE_GXM_MAX_VERTEX_STREAMS, state.default_buffer.buffer);\n",
      "        std::fill_n(vertex_stream_buffers, SCE_GXM_MAX_VERTEX_STREAMS, state.default_buffer.buffer);\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "        // PlayTendo : copies des sommets et indices mal alignés pour Metal (scene.cpp).\n"
      "        vertex_stream_ring_buffer.create();\n"
      "        index_stream_ring_buffer.create();\n"
@@ -749,7 +766,7 @@ patch("vita3k/renderer/src/vulkan/creation.cpp", [
 patch("vita3k/renderer/src/vulkan/scene.cpp", [
     ("            if (context.state.features.enable_memory_mapping) {\n"
      "                auto [buffer, offset] = context.state.get_matching_mapping(state.vertex_streams[i].data.cast<void>());\n",
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "            // PlayTendo : Metal veut un pas et un début de flux multiples de 4 ; sinon copie réalignée, comme sans\n"
      "            // mémoire mappée.\n"
      "            const bool playtendo_aligned = vertex_program.streams[i].stride % 4 == 0 && state.vertex_streams[i].data.address() % 4 == 0;\n"
@@ -765,7 +782,7 @@ patch("vita3k/renderer/src/vulkan/scene.cpp", [
      "                auto [buffer, offset] = context.state.get_matching_mapping(state.vertex_streams[i].data.cast<void>());\n"),
     ("    uint32_t max_index = 0;\n    if (use_memory_mapping) {\n",
      "    uint32_t max_index = 0;\n"
-     "#ifdef PLAYTENDO_IOS\n"
+     "#ifdef PLAYTENDO\n"
      "    // PlayTendo : indices au début non multiple de 4 copiés à part pour Metal ; leur plus grand indice (taille des\n"
      "    // flux de sommets) est alors calculé ici.\n"
      "    const bool playtendo_copy_indices = use_memory_mapping && (indices.address() % 4) != 0;\n"

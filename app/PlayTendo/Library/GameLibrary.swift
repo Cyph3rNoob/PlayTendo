@@ -33,6 +33,7 @@ final class GameLibrary: ObservableObject {
     }
 
     nonisolated private static func scan(_ root: URL) -> [Game] {
+        removeEmptyFoldersOnce(in: root)
         let manager = FileManager.default
         guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
                                                   options: [.skipsHiddenFiles]) else { return [] }
@@ -367,6 +368,11 @@ final class GameLibrary: ObservableObject {
     /// Copie un fichier dans Jeux (ou BIOS), en décompressant les archives.
     nonisolated private static func importFile(_ url: URL, stats: inout ImportStats,
                                                update: ImportUpdate) throws -> ImportResult {
+#if PLAYTENDO_VITA
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            return try importVitaFolder(url, stats: &stats, update: update)
+        }
+#endif
         let ext = url.pathExtension.lowercased()
         if archiveExtensions.contains(ext) {
             return try importArchive(url, stats: &stats, update: update)
@@ -388,6 +394,71 @@ final class GameLibrary: ObservableObject {
         stats.files = 1
         return .added(1, moveIfPS2BIOS(target) ? [] : [target])
     }
+
+#if PLAYTENDO_VITA
+    /// Dossier glissé (sur Mac surtout, sans app Fichiers) : les jeux PS Vita extraits de la console (dossier avec
+    /// sce_sys/param.sfo), le dossier lui-même ou jusqu'à deux niveaux dessous (« VitaiOS/app/PCSA00011 »), et les .PUP
+    /// et .vpk qu'il contient. Copie du système : sur le même disque (APFS), un clone immédiat qui ne prend pas de place.
+    nonisolated private static func importVitaFolder(_ url: URL, stats: inout ImportStats,
+                                                     update: ImportUpdate) throws -> ImportResult {
+        stats.format = "dossier"
+        var folders: [URL] = []
+        var files: [URL] = []
+        collectVitaContent(url, depth: 0, folders: &folders, files: &files)
+        let manager = FileManager.default
+        let games = Paths.games.resolvingSymlinksInPath().path + "/"
+        var added = 0
+        var kept: [URL] = []
+        var present: [URL] = []
+        for folder in folders {
+            if folder.resolvingSymlinksInPath().path.hasPrefix(games) {
+                present.append(folder)
+                continue
+            }
+            let target = Paths.games.appendingPathComponent(folder.lastPathComponent)
+            if manager.fileExists(atPath: target.path), VitaGame.titleID(of: target) == VitaGame.titleID(of: folder) {
+                present.append(target)
+                continue
+            }
+            let destination = uniqueURL(target)
+            guard update(.copying, folder.lastPathComponent, 0, 0) else { throw PTArchiveError(.cancelled) }
+            try manager.copyItem(at: folder, to: destination)
+            stats.files += 1
+            added += 1
+            kept.append(destination)
+        }
+        for file in files {
+            switch try importFile(file, stats: &stats, update: update) {
+            case .added(let count, let urls):
+                added += count
+                kept += urls
+            case .alreadyThere(let urls):
+                present += urls
+            default:
+                break
+            }
+        }
+        if added > 0 { return .added(added, kept) }
+        return present.isEmpty ? .unsupported : .alreadyThere(present)
+    }
+
+    nonisolated private static func collectVitaContent(_ url: URL, depth: Int, folders: inout [URL], files: inout [URL]) {
+        if VitaGame.isGameFolder(url) {
+            folders.append(url)
+            return
+        }
+        guard depth < 2,
+              let entries = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey],
+                                                                         options: [.skipsHiddenFiles]) else { return }
+        for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            if (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                collectVitaContent(entry, depth: depth + 1, folders: &folders, files: &files)
+            } else if ["pup", "vpk"].contains(entry.pathExtension.lowercased()) {
+                files.append(entry)
+            }
+        }
+    }
+#endif
 
     /// Décompresse dans Jeux (ou BIOS) chaque jeu, BIOS ou piste de l'archive ; le reste est sauté.
     nonisolated private static func importArchive(_ url: URL, stats: inout ImportStats,
@@ -481,6 +552,34 @@ final class GameLibrary: ObservableObject {
         }
     }
 
+    /// Une fois (2026-10-12) : les dossiers vides restés dans Jeux, laissés par les jeux PS Vita installés ou supprimés
+    /// avant que l'app retire elle-même les dossiers devenus vides (« app ( Little Big Planet ) »…). Sans entrer dans
+    /// les jeux PS Vita en dossier.
+    nonisolated private static func removeEmptyFoldersOnce(in root: URL) {
+        let key = "dossiersVidesRetires"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        let manager = FileManager.default
+        guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey],
+                                                  options: [.skipsHiddenFiles]) else { return }
+        var folders: [URL] = []
+        for case let url as URL in enumerator where (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+#if PLAYTENDO_VITA
+            if VitaGame.isGameFolder(url) {
+                enumerator.skipDescendants()
+                continue
+            }
+#endif
+            folders.append(url)
+        }
+        // Les plus profonds d'abord : un dossier qui ne contenait que des dossiers vides le devient à son tour.
+        for folder in folders.sorted(by: { $0.pathComponents.count > $1.pathComponents.count }) {
+            guard let rest = try? manager.contentsOfDirectory(atPath: folder.path), rest.allSatisfy({ $0.hasPrefix(".") }),
+                  (try? manager.removeItem(at: folder)) != nil else { continue }
+            PTLogLine("Dossier vide retiré de Jeux : \(folder.lastPathComponent)")
+        }
+    }
+
 #if PLAYTENDO_VITA
     /// Un fichier de mise à jour PS Vita (.PUP) arrivé dans Jeux est rangé dans BIOS, où le moteur le cherche.
     @discardableResult
@@ -539,10 +638,12 @@ final class GameLibrary: ObservableObject {
 
     /// Supprime le jeu avec ses fichiers associés (pistes .bin d'un .cue, disques d'un .m3u). Un jeu PS Vita est
     /// aussi désinstallé de la mémoire de la console. Les sauvegardes sont conservées.
-    func delete(_ game: Game) {
+    /// `removingSaves` : PS Vita, ses sauvegardes partent aussi (choisi dans la confirmation).
+    func delete(_ game: Game, removingSaves: Bool = false) {
 #if PLAYTENDO_VITA
         if game.system == .vita, let titleID = VitaGame.titleID(of: game.url) {
-            VitaGame.uninstall(titleID: titleID)
+            VitaGame.uninstall(titleID: titleID,
+                               removingSavesIn: removingSaves ? VitaGame.saveFolderName(of: game.url) : nil)
         }
 #endif
         for file in Self.files(of: game) {
@@ -550,7 +651,7 @@ final class GameLibrary: ObservableObject {
         }
 #if PLAYTENDO_VITA
         if game.system == .vita {
-            VitaGame.removeEmptyAppFolder(containing: game.url)
+            VitaGame.removeEmptyFolders(containing: game.url)
         }
 #endif
         games.removeAll { $0.id == game.id }

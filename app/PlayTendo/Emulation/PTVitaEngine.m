@@ -1,4 +1,4 @@
-// PS Vita : compilé seulement avec PLAYTENDO_VITA (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).
+// PS Vita : compilé seulement avec PLAYTENDO_VITA (par défaut dans scripts/build_app.sh).
 #if PLAYTENDO_VITA
 #import "PTVitaEngine.h"
 #import <dlfcn.h>
@@ -7,7 +7,7 @@
 #define PT_VITA_FUNCTIONS(X) \
     X(PTVitaSetup) X(PTVitaGetFirmware) X(PTVitaInstallFirmware) X(PTVitaInstallGame) X(PTVitaIsInstalled) \
     X(PTVitaBoot) X(PTVitaGetState) X(PTVitaSetPaused) X(PTVitaStop) X(PTVitaSetButton) X(PTVitaSetStick) \
-    X(PTVitaTouch) X(PTVitaCopyLastError) X(PTVitaSetHighAccuracy)
+    X(PTVitaTouch) X(PTVitaCopyLastError) X(PTVitaShutdown)
 
 typedef struct {
 #define PT_FIELD(name) __typeof__(&name) name;
@@ -50,8 +50,11 @@ static void PTVitaReportProgress(float progress, void *context) {
     PT_VITA_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
 
-    // Les fichiers fixes du moteur (shaders, icônes) sont rangés dans son framework.
+    // Les fichiers fixes du moteur (shaders, icônes) sont rangés dans son framework (dans Resources sur Mac).
     NSString *assets = path.stringByDeletingLastPathComponent;
+#if TARGET_OS_OSX
+    assets = [assets stringByAppendingPathComponent:@"Resources"];
+#endif
     void *view = engine->_fn.PTVitaSetup(storageDirectory.fileSystemRepresentation, assets.fileSystemRepresentation);
     if (!view) {
         char *reason = engine->_fn.PTVitaCopyLastError();
@@ -103,10 +106,6 @@ static void PTVitaReportProgress(float progress, void *context) {
     return _fn.PTVitaIsInstalled(titleID.UTF8String);
 }
 
-- (void)setHighAccuracy:(BOOL)high {
-    _fn.PTVitaSetHighAccuracy(high);
-}
-
 - (BOOL)bootTitle:(NSString *)titleID {
     _touching = NO;
     return _fn.PTVitaBoot(titleID.UTF8String);
@@ -118,6 +117,10 @@ static void PTVitaReportProgress(float progress, void *context) {
 
 - (void)stop {
     _fn.PTVitaStop();
+}
+
+- (void)shutdown {
+    _fn.PTVitaShutdown();
 }
 
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed {

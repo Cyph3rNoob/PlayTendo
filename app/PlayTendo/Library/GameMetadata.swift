@@ -27,12 +27,23 @@ final class GameMetadata: ObservableObject {
         .appendingPathComponent("Bibliotheque/infos.json")
     private static let lastPlayedKey = "dernieresParties"
     private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
+#if PLAYTENDO_VITA
+    /// Jaquettes PS Vita cherchées (2026-10-12) : avant, l'icône du jeu était rangée comme jaquette, sous le titre de
+    /// la fiche (« GRAVITY RUSH »). Effacées une fois ; les jeux sont reconnus de nouveau sous leur nouveau nom.
+    private static let vitaCoversKey = "jaquettesVitaCherchees"
+#endif
 
     init() {
         if let data = try? Data(contentsOf: Self.infosFile),
            let saved = try? JSONDecoder().decode([String: Info].self, from: data) {
             infos = saved
         }
+#if PLAYTENDO_VITA
+        if !UserDefaults.standard.bool(forKey: Self.vitaCoversKey) {
+            try? FileManager.default.removeItem(at: Self.coverFolder(for: .vita))
+            UserDefaults.standard.set(true, forKey: Self.vitaCoversKey)
+        }
+#endif
         lastPlayed = UserDefaults.standard.dictionary(forKey: Self.lastPlayedKey) as? [String: Double] ?? [:]
         forgetMissingGames()
     }
@@ -77,7 +88,15 @@ final class GameMetadata: ObservableObject {
     func coverFile(for game: Game) -> URL? {
         guard let name = officialName(for: game) else { return nil }
         let url = Self.coverURL(name: name, system: game.system)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+#if PLAYTENDO_VITA
+        // PS Vita sans vraie jaquette (pas encore trouvée, ou introuvable) : l'icône du jeu.
+        if game.system == .vita {
+            let icon = Self.vitaIconURL(name: name)
+            if FileManager.default.fileExists(atPath: icon.path) { return icon }
+        }
+#endif
+        return nil
     }
 
     /// Jeux joués récemment, du plus récent au plus ancien.
@@ -130,17 +149,32 @@ final class GameMetadata: ObservableObject {
                 let values = try? game.url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
                 let size = Int64(values?.fileSize ?? 0)
                 let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+#if PLAYTENDO_VITA
+                // PS Vita : pas de base de jeux ; le nom vient de la fiche du jeu (param.sfo), relue à chaque fois (un
+                // dossier ne change ni de taille ni de date quand son contenu change). Son icône sert de jaquette en
+                // attendant une vraie, ou à défaut.
+                let vitaName = game.system == .vita ? VitaGame.officialName(of: game.url) : nil
+                let unchanged: Bool
+                if game.system == .vita {
+                    unchanged = known[game.key]?.name == vitaName
+                        && vitaName.map { FileManager.default.fileExists(atPath: Self.vitaIconURL(name: $0).path) } == true
+                } else {
+                    unchanged = known[game.key].map { $0.size == size && $0.modified == modified } == true
+                }
+                if !forced.contains(game.key), unchanged {
+                    continue
+                }
+#else
                 if !forced.contains(game.key), let info = known[game.key], info.size == size, info.modified == modified {
                     continue
                 }
+#endif
                 let name: String?
 #if PLAYTENDO_VITA
                 if game.system == .vita {
-                    // PS Vita : pas de base de jeux ; le nom vient de la fiche du jeu (param.sfo) et son icône sert
-                    // de jaquette.
-                    name = VitaGame.title(of: game.url)
+                    name = vitaName
                     if let name, let icon = VitaGame.icon(of: game.url) {
-                        let file = Self.coverURL(name: name, system: game.system)
+                        let file = Self.vitaIconURL(name: name)
                         try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
                         try? icon.write(to: file, options: .atomic)
                     }
@@ -196,7 +230,8 @@ final class GameMetadata: ObservableObject {
         var wanted: [(key: String, name: String, system: GameSystem)] = []
         var seen = Set<String>()
         for game in games {
-            guard let info = infos[game.key], let name = info.name, coverFile(for: game) == nil,
+            guard let info = infos[game.key], let name = info.name,
+                  !FileManager.default.fileExists(atPath: Self.coverURL(name: name, system: game.system).path),
                   now - (info.coverMissing ?? 0) > week, seen.insert("\(game.system.rawValue)/\(name)").inserted else { continue }
             wanted.append((game.key, name, game.system))
         }
@@ -278,10 +313,23 @@ final class GameMetadata: ObservableObject {
     }
 
     nonisolated static func coverURL(name: String, system: GameSystem) -> URL {
-        let safe = String(name.map { "/:\\".contains($0) ? "_" : $0 })
-        return Paths.support
-            .appendingPathComponent("Jaquettes/\(system.folderName)/\(safe).png")
+        coverFolder(for: system).appendingPathComponent("\(safeFileName(name)).png")
     }
+
+    nonisolated private static func coverFolder(for system: GameSystem) -> URL {
+        Paths.support.appendingPathComponent("Jaquettes/\(system.folderName)", isDirectory: true)
+    }
+
+    nonisolated private static func safeFileName(_ name: String) -> String {
+        String(name.map { "/:\\".contains($0) ? "_" : $0 })
+    }
+
+#if PLAYTENDO_VITA
+    /// Icône d'un jeu PS Vita (icon0.png de sa fiche), rangée à part de sa vraie jaquette.
+    nonisolated private static func vitaIconURL(name: String) -> URL {
+        coverFolder(for: .vita).appendingPathComponent("Icones/\(safeFileName(name)).png")
+    }
+#endif
 }
 
 /// Titre affiché : nom officiel découpé (« God of War » / « Ghost of Sparta », région « Europe »),

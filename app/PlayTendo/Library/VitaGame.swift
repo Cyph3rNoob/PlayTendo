@@ -1,4 +1,4 @@
-// PS Vita : compilé seulement avec PLAYTENDO_VITA (PLAYTENDO_VITA=1 zsh scripts/build_app.sh).
+// PS Vita : compilé seulement avec PLAYTENDO_VITA (par défaut dans scripts/build_app.sh).
 #if PLAYTENDO_VITA
 import Foundation
 
@@ -21,12 +21,35 @@ enum VitaGame {
         parameters(of: url)["TITLE_ID"].flatMap { $0.isEmpty ? nil : $0 }
     }
 
-    /// Nom du jeu, sans les symboles de marque (« GRAVITY RUSH™ » → « GRAVITY RUSH »).
+    /// Nom du jeu, sans les symboles de marque (« GRAVITY RUSH™ » → « GRAVITY RUSH » ; « PlayStation®Vita » →
+    /// « PlayStation Vita »).
     static func title(of url: URL) -> String? {
         guard let title = parameters(of: url)["TITLE"] else { return nil }
-        let cleaned = title.replacingOccurrences(of: "™", with: "").replacingOccurrences(of: "®", with: "")
-            .replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        let cleaned = title.replacingOccurrences(of: "™", with: " ").replacingOccurrences(of: "®", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(separator: " ").joined(separator: " ")
         return cleaned.isEmpty ? nil : cleaned
+    }
+
+    /// Nom du jeu à la façon des bases de jeux (« Gravity Rush (USA) ») : titre de la fiche, remis en casse de titre
+    /// s'il est tout en majuscules, et région d'après l'identifiant. Sert à chercher la jaquette (libretro, puis
+    /// SteamGridDB) et à l'affichage (titre et région).
+    static func officialName(of url: URL) -> String? {
+        guard var title = title(of: url) else { return nil }
+        if title == title.uppercased(), title != title.lowercased() { title = title.capitalized }
+        guard let region = titleID(of: url).flatMap(region(of:)) else { return title }
+        return "\(title) (\(region))"
+    }
+
+    /// Région d'un jeu du commerce d'après les 4 premières lettres de son identifiant.
+    private static func region(of titleID: String) -> String? {
+        switch titleID.prefix(4) {
+        case "PCSA", "PCSE": "USA"
+        case "PCSB", "PCSF": "Europe"
+        case "PCSC", "PCSG": "Japan"
+        case "PCSD", "PCSH": "Asia"
+        default: nil
+        }
     }
 
     /// Icône du jeu (sce_sys/icon0.png, 128 × 128).
@@ -56,18 +79,45 @@ enum VitaGame {
 
     /// Désinstalle un jeu (le jeu, ses mises à jour, ses contenus additionnels et sa licence). Ses sauvegardes,
     /// dans ux0/user, restent.
-    static func uninstall(titleID: String) {
+    /// `saveFolder` (nom donné par saveFolderName, lu avant la désinstallation) : ses sauvegardes sont supprimées
+    /// aussi, sauf si un autre jeu installé se sert du même dossier.
+    static func uninstall(titleID: String, removingSavesIn saveFolder: String? = nil) {
         guard !titleID.isEmpty, !titleID.contains("/"), !titleID.hasPrefix(".") else { return }
+        let manager = FileManager.default
         let ux0 = Paths.vitaEngine.appendingPathComponent("vita/ux0", isDirectory: true)
-        for folder in ["app", "patch", "addcont", "license"] {
-            try? FileManager.default.removeItem(at: ux0.appendingPathComponent(folder).appendingPathComponent(titleID))
+        var saves = "sauvegardes conservées"
+        if let saveFolder {
+            let sharing = installedGames().filter { $0.lastPathComponent != titleID && saveFolderName(of: $0) == saveFolder }
+            if sharing.isEmpty {
+                // Un dossier par compte de la console (« 00 » chez PlayTendo).
+                let users = ux0.appendingPathComponent("user", isDirectory: true)
+                for user in (try? manager.contentsOfDirectory(atPath: users.path)) ?? [] where !user.hasPrefix(".") {
+                    try? manager.removeItem(at: users.appendingPathComponent("\(user)/savedata/\(saveFolder)"))
+                }
+                saves = "sauvegardes supprimées (\(saveFolder))"
+            } else {
+                saves = "sauvegardes conservées : \(saveFolder) sert aussi à "
+                    + sharing.map(\.lastPathComponent).joined(separator: ", ")
+            }
         }
-        PTLogLine("Vita : \(titleID) désinstallé (sauvegardes conservées)")
+        for folder in ["app", "patch", "addcont", "license"] {
+            try? manager.removeItem(at: ux0.appendingPathComponent(folder).appendingPathComponent(titleID))
+        }
+        PTLogLine("Vita : \(titleID) désinstallé (\(saves))")
+    }
+
+    /// Dossier des sauvegardes d'un jeu (ux0/user/00/savedata/…) : INSTALL_DIR_SAVEDATA de sa fiche s'il y en a un
+    /// (LittleBigPlanet Marvel, PCSA00549, se sert de PCSA00017), sinon son identifiant, comme Vita3K (sfo.cpp).
+    static func saveFolderName(of url: URL) -> String? {
+        let parameters = parameters(of: url)
+        let name = parameters["INSTALL_DIR_SAVEDATA"].flatMap { $0.isEmpty ? nil : $0 } ?? parameters["TITLE_ID"]
+        guard let name, !name.isEmpty, !name.contains("/"), !name.hasPrefix(".") else { return nil }
+        return name
     }
 
     /// Retire du dossier Jeux l'original d'un jeu installé, si la copie installée est complète (au moins 90 % de
-    /// la taille de l'original : une installation interrompue garde son original). Le dossier qui le contenait
-    /// (« app » extrait d'une Vita) est retiré aussi s'il ne contient plus rien.
+    /// la taille de l'original : une installation interrompue garde son original). Les dossiers qui le contenaient
+    /// sont retirés aussi s'ils ne contiennent plus rien.
     static func removeOriginal(_ original: URL, titleID: String) {
         let manager = FileManager.default
         let games = Paths.games.resolvingSymlinksInPath().path + "/"
@@ -87,18 +137,21 @@ enum VitaGame {
         }
         PTLogLine(String(format: "Vita : original retiré du dossier Jeux (%@, %.2f Go libérés), le jeu reste installé",
                          original.lastPathComponent, Double(originalSize) / 1e9))
-        removeEmptyAppFolder(containing: original)
+        removeEmptyFolders(containing: original)
     }
 
-    /// Dossier « app » (celui qu'on obtient en extrayant un jeu d'une Vita) resté vide dans Jeux : retiré. Les
-    /// autres dossiers, rangés par l'utilisateur, restent même vides.
-    static func removeEmptyAppFolder(containing game: URL) {
-        let parent = game.deletingLastPathComponent()
+    /// Dossiers de Jeux devenus vides après le départ d'un jeu (« app » extrait d'une Vita, « app ( Gravity Rush ) »…) :
+    /// retirés en remontant, jamais le dossier Jeux lui-même. Avant le 2026-10-12, seul un dossier nommé « app » l'était.
+    static func removeEmptyFolders(containing game: URL) {
         let games = Paths.games.resolvingSymlinksInPath().path + "/"
-        guard parent.lastPathComponent.lowercased() == "app", parent.resolvingSymlinksInPath().path.hasPrefix(games),
-              let rest = try? FileManager.default.contentsOfDirectory(atPath: parent.path),
-              rest.allSatisfy({ $0.hasPrefix(".") }) else { return }
-        try? FileManager.default.removeItem(at: parent)
+        var folder = game.deletingLastPathComponent()
+        while folder.resolvingSymlinksInPath().path.hasPrefix(games),
+              let rest = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+              rest.allSatisfy({ $0.hasPrefix(".") }),
+              (try? FileManager.default.removeItem(at: folder)) != nil {
+            PTLogLine("Dossier vide retiré de Jeux : \(folder.lastPathComponent)")
+            folder = folder.deletingLastPathComponent()
+        }
     }
 
     /// Taille d'un fichier ou d'un dossier (somme de ses fichiers), en octets.

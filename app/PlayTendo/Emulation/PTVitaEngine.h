@@ -31,12 +31,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)installGameAtPath:(NSString *)path progress:(nullable void (^)(float progress))progress;
 - (BOOL)isGameInstalled:(NSString *)titleID;
 
-/// Précision du rendu au prochain lancement (haute : plus juste, plus lente).
-- (void)setHighAccuracy:(BOOL)high;
 /// Démarre un jeu installé, d'après son identifiant (« PCSA00011 »).
 - (BOOL)bootTitle:(NSString *)titleID;
 - (void)setPaused:(BOOL)paused;
 - (void)stop;
+/// Arrêt complet avant la sortie de l'app (Mac) : partie arrêtée, son fil rattaché.
+- (void)shutdown;
 /// Bouton RetroPad (PTButton).
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed;
 /// Stick 0 (gauche) ou 1 (droit), de -1 à 1.

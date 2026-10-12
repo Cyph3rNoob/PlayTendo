@@ -45,13 +45,13 @@ bool PTVitaIsInstalled(const char *titleID);
 /// Démarre un jeu installé (identifiant). Faux si le démarrage n'a pas pu être lancé. Le turbo (réserve JIT de
 /// l'app) est obligatoire : Vita3K n'a pas d'interpréteur.
 bool PTVitaBoot(const char *titleID);
-/// Précision du rendu au prochain lancement d'un jeu : haute (« high-accuracy » de Vita3K et synchronisation des
-/// surfaces : plus juste, plus lente) ou normale (par défaut).
-void PTVitaSetHighAccuracy(bool high);
 PTVitaState PTVitaGetState(void);
 void PTVitaSetPaused(bool paused);
 /// Demande l'arrêt du jeu ; l'état repasse à « arrêté » quand c'est fait.
 void PTVitaStop(void);
+/// Mac : arrêt complet avant la sortie du programme (partie arrêtée, son fil rattaché). Sans lui, la sortie du
+/// programme restait bloquée après une partie (essai sans interface, 2026-10-12).
+void PTVitaShutdown(void);
 
 /// Bouton RetroPad de PlayTendo (PTButton), placé par position : bas = ✕, droite = ○, gauche = □, haut = △,
 /// L1/R1 = L/R, Start, Select, croix ; L2/R2/L3/R3 pour les manettes (PS TV).

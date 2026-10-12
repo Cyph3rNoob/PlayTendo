@@ -10,13 +10,20 @@ BUILD="$ROOT/build/xcode"
 LOG="$ROOT/build/logs/app.log"
 mkdir -p "$ROOT/build/logs"
 
-# PS Vita, mise de côté le 2026-10-10 : seulement avec PLAYTENDO_VITA=1 (son moteur se compile d'abord avec
-# scripts/build_vita3k.sh). Sans elle, ni son code ni VitaCore.framework n'entrent dans l'app.
+# PS Vita : incluse par défaut depuis le 2026-10-12 (mémoire mappée : Gravity Rush jouable). Son moteur se compile
+# d'abord avec scripts/build_vita3k.sh. PLAYTENDO_VITA=0 la retire : ni son code ni VitaCore.framework n'entrent
+# alors dans l'app, et l'app efface au lancement ce que la Vita avait installé.
 VITA_SETTINGS=()
-if [ "${PLAYTENDO_VITA:-0}" = "1" ]; then
+if [ "${PLAYTENDO_VITA:-1}" = "1" ]; then
+  if [ ! -f "$ROOT/cores/ios/VitaCore.framework/VitaCore" ]; then
+    echo "!!! Moteur PS Vita absent : lance d'abord zsh scripts/build_vita3k.sh (ou PLAYTENDO_VITA=0 pour s'en passer)"
+    exit 1
+  fi
   VITA_SETTINGS=('SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) PLAYTENDO_VITA'
                  'GCC_PREPROCESSOR_DEFINITIONS=$(inherited) PLAYTENDO_VITA=1')
   echo ">>> Avec la PS Vita"
+else
+  echo ">>> Sans la PS Vita"
 fi
 
 APP="$BUILD/Release-iphoneos/PlayTendo.app"

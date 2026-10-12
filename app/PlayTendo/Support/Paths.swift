@@ -31,13 +31,15 @@ enum Paths {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         writeReadme()
+        // Ancien réglage PRÉCISION de la PS Vita (retiré le 2026-10-12 : sans effet visible).
+        UserDefaults.standard.removeObject(forKey: "precisionVita")
 #if !PLAYTENDO_VITA
         removeVitaLeftovers()
 #endif
     }
 
 #if !PLAYTENDO_VITA
-    /// PS Vita mise de côté (2026-10-10, rendu de Vita3K trop abîmé sur les puces Apple) : ce qu'une version précédente
+    /// App compilée sans la PS Vita (PLAYTENDO_VITA=0 zsh scripts/build_app.sh) : ce qu'une version précédente
     /// de l'app avait installé (jeux, sauvegardes, firmware, réglages et journal du moteur, icônes) est effacé, à sa
     /// demande. Ne trouve plus rien une fois fait.
     private static func removeVitaLeftovers() {
@@ -57,7 +59,6 @@ enum Paths {
                 PTLogLine("PS Vita : \(folder.lastPathComponent) impossible à effacer (\(error.localizedDescription))")
             }
         }
-        UserDefaults.standard.removeObject(forKey: "precisionVita")
         if freed > 0 {
             PTLogLine(String(format: "PS Vita retirée de l'app : jeux installés et sauvegardes effacés (%.2f Go libérés)",
                              Double(freed) / 1e9))
@@ -354,7 +355,7 @@ enum Paths {
     /// Lisez-moi du Mac : seulement les consoles déjà dans l'app (elles arrivent étape par étape).
     private static func macReadme(english: Bool) -> String {
         let installed = { (systems: [GameSystem]) in systems.contains(where: EmulatorSession.engineInstalled) }
-        let games: [([GameSystem], String, String)] = [
+        var games: [([GameSystem], String, String)] = [
             ([.nes], "NES .nes", "NES .nes"),
             ([.snes], "Super Nintendo .sfc .smc", "Super Nintendo .sfc .smc"),
             ([.n64], "Nintendo 64 .z64 .n64 .v64", "Nintendo 64 .z64 .n64 .v64"),
@@ -370,13 +371,27 @@ enum Paths {
             ([.n3ds], "Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)",
              "Nintendo 3DS .3ds .cci .cxi .3dsx (decrypted games)"),
         ]
-        let bios: [([GameSystem], String, String)] = [
+        var bios: [([GameSystem], String, String)] = [
             ([.psx], "PlayStation : scph5501.bin (ou scph1001.bin…)", "PlayStation: scph5501.bin (or scph1001.bin…)"),
             ([.nds], "Nintendo DS : bios7.bin, bios9.bin, firmware.bin", "Nintendo DS: bios7.bin, bios9.bin, firmware.bin"),
             ([.gba], "Game Boy Advance : gba_bios.bin", "Game Boy Advance: gba_bios.bin"),
             ([.ps2], "PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo\n    (« SCPH-70004… », n'importe quel nom), ou Réglages › BIOS PS2 › Importer un BIOS PS2",
              "PlayStation 2 (required): your console's BIOS, a 4 MB .bin file\n    (“SCPH-70004…”, any name), or Settings › PS2 BIOS › Import a PS2 BIOS"),
         ]
+#if PLAYTENDO_VITA
+        games.append(([.vita],
+            "PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa licence\n"
+            + "    sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk ; installé dans PlayTendo\n"
+            + "    au premier lancement, puis retiré de ce dossier",
+            "PlayStation Vita: the game folder extracted from your Vita (“PCSA00011”…, with its license\n"
+            + "    sce_sys/package/work.bin for a retail game) or a .vpk; installed into PlayTendo\n"
+            + "    on first launch, then removed from this folder"))
+        bios.append(([.vita],
+            "PlayStation Vita (obligatoire) : PSVUPDAT.PUP, la mise à jour officielle de la console,\n"
+            + "    et si possible ses polices PSP2UPDAT.PUP",
+            "PlayStation Vita (required): PSVUPDAT.PUP, the console's official update,\n"
+            + "    and if possible its PSP2UPDAT.PUP fonts"))
+#endif
         let gameLines = games.filter { installed($0.0) }.map { "  " + (english ? $0.2 : $0.1) }.joined(separator: "\n")
         let biosLines = bios.filter { installed($0.0) }.map { "  " + (english ? $0.2 : $0.1) }.joined(separator: "\n")
         if english {

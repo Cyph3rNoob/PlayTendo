@@ -167,10 +167,14 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Moteurs GameCube/Wii et PS2 arrêtés en règle (manettes, réglages, cartes mémoire, journal) avant la sortie
-        // du programme.
+        // Moteurs GameCube/Wii, PS2 et PS Vita arrêtés en règle (manettes, réglages, cartes mémoire, journal) avant
+        // la sortie du programme.
         PTDolphinEngine.loaded?.shutdown()
         PTPS2Engine.loaded?.shutdown()
+#if PLAYTENDO_VITA
+        // PS Vita : sans cet arrêt, la sortie du programme restait bloquée après une partie.
+        PTVitaEngine.loaded?.shutdown()
+#endif
         PTLogFlush()
     }
 

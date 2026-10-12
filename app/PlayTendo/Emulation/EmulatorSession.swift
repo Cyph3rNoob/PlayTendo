@@ -34,10 +34,6 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published var toast: String?
     /// Étape longue en cours pendant le chargement (installation du firmware ou d'un jeu PS Vita), montrée sous la roue.
     @Published private(set) var loadingDetail: String?
-#if PLAYTENDO_VITA
-    /// PS Vita : précision du rendu de la partie en cours (le réglage choisi ne vaut qu'au prochain lancement).
-    @Published private(set) var vitaAccuracy: VitaSettings.Accuracy?
-#endif
     /// PS2, GameCube/Wii : vue Metal où le moteur dessine, placée par l'écran de jeu.
     @Published private(set) var engineView: PlatformView?
 
@@ -678,14 +674,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
 #if PLAYTENDO_VITA
-    /// Charge le moteur PS Vita à la première partie Vita (thread principal), puis le garde. Il n'existe que pour
-    /// iPhone et iPad (son affichage passe par MoltenVK, qui ne marche pas au simulateur).
+    /// Charge le moteur PS Vita à la première partie Vita (thread principal), puis le garde. Il existe pour iPhone,
+    /// iPad et Mac, pas pour le simulateur (son affichage passe par MoltenVK, qui n'y marche pas).
     private static func loadVitaEngine() throws -> PTVitaEngine {
         if let engine = PTVitaEngine.loaded { return engine }
         guard let frameworks = Bundle.main.privateFrameworksPath,
               FileManager.default.fileExists(atPath: "\(frameworks)/VitaCore.framework/VitaCore") else {
             throw NSError(domain: "PlayTendo", code: 2, userInfo: [NSLocalizedDescriptionKey:
-                tr("La PS Vita n'est pas dans cette version de l'app (elle marche sur iPhone et iPad, pas au simulateur).")])
+                tr("La PS Vita n'est pas dans cette version de l'app (elle marche sur iPhone, iPad et Mac, pas au simulateur).")])
         }
         Paths.prepareVitaEngine()
         let engine = try PTVitaEngine.load(withFrameworkPath: "\(frameworks)/VitaCore.framework/VitaCore",
@@ -785,15 +781,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
 #if PLAYTENDO_VITA
-    /// PS Vita : installe ce qu'il faut puis règle la précision. Renvoie l'identifiant du jeu à démarrer, ou nil.
+    /// PS Vita : installe ce qu'il faut. Renvoie l'identifiant du jeu à démarrer, ou nil.
     private func vitaBootTitle(_ vita: PTVitaEngine) -> String? {
         PTLogLine("Vita : lancement de \(game.url.lastPathComponent)")
-        guard let titleID = prepareVita(vita) else { return nil }
-        let accuracy = VitaSettings.accuracy
-        vita.setHighAccuracy(accuracy == .high)
-        PTLogLine("Vita : précision du rendu \(accuracy == .high ? "haute" : "normale")")
-        DispatchQueue.main.async { self.vitaAccuracy = accuracy }
-        return titleID
+        return prepareVita(vita)
     }
 #endif
 

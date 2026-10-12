@@ -127,17 +127,22 @@ struct LibraryView: View {
         }
         .alert(tr("Supprimer ce jeu ?"), isPresented: Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } }),
                presenting: gameToDelete) { game in
+#if PLAYTENDO_VITA
+            // PS Vita : ses sauvegardes peuvent partir aussi (sinon gardées pour le réinstaller sans perdre la partie).
+            if game.system == .vita {
+                Button(tr("Supprimer, garder les sauvegardes")) { library.delete(game) }
+                Button(tr("Tout supprimer, sauvegardes comprises"), role: .destructive) {
+                    library.delete(game, removingSaves: true)
+                }
+            } else {
+                Button(tr("Supprimer"), role: .destructive) { library.delete(game) }
+            }
+#else
             Button(tr("Supprimer"), role: .destructive) { library.delete(game) }
+#endif
             Button(tr("Annuler"), role: .cancel) {}
         } message: { game in
-            let extra = GameLibrary.files(of: game).count - 1
-            let companions = extra == 1 ? tr(" avec son fichier associé")
-                : extra > 1 ? tr(" avec ses \(extra) fichiers associés") : ""
-#if os(iOS)
-            Text(tr("« \(metadata.display(for: game).title) » sera supprimé de l'iPhone\(companions). Ses sauvegardes sont conservées."))
-#else
-            Text(tr("« \(metadata.display(for: game).title) » sera supprimé de ce Mac\(companions). Ses sauvegardes sont conservées."))
-#endif
+            Text(deleteMessage(for: game))
         }
         .alert(library.importFailures.count == 1 ? tr("Fichier non ajouté") : tr("Fichiers non ajoutés"),
                isPresented: Binding(get: { !library.importFailures.isEmpty },
@@ -184,6 +189,28 @@ struct LibraryView: View {
                 }
             }
         }
+#endif
+    }
+
+    /// Message de la confirmation de suppression (fichiers associés, sauvegardes).
+    private func deleteMessage(for game: Game) -> String {
+        let title = metadata.display(for: game).title
+#if PLAYTENDO_VITA
+        if game.system == .vita {
+#if os(iOS)
+            return tr("« \(title) » sera supprimé de l'iPhone. Tu peux garder ses sauvegardes, pour le réinstaller sans perdre ta partie, ou les supprimer aussi.")
+#else
+            return tr("« \(title) » sera supprimé de ce Mac. Tu peux garder ses sauvegardes, pour le réinstaller sans perdre ta partie, ou les supprimer aussi.")
+#endif
+        }
+#endif
+        let extra = GameLibrary.files(of: game).count - 1
+        let companions = extra == 1 ? tr(" avec son fichier associé")
+            : extra > 1 ? tr(" avec ses \(extra) fichiers associés") : ""
+#if os(iOS)
+        return tr("« \(title) » sera supprimé de l'iPhone\(companions). Ses sauvegardes sont conservées.")
+#else
+        return tr("« \(title) » sera supprimé de ce Mac\(companions). Ses sauvegardes sont conservées.")
 #endif
     }
 
