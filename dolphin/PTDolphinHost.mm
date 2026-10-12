@@ -5,12 +5,20 @@
 // DolphiniOS (Source/iOS/Library : Host.mm, HostQueue.mm) sont repris tels quels. Compilé dans
 // DolphinCore.framework par scripts/build_dolphin.sh ; l'app y accède par dlopen/dlsym
 // (app/PlayTendo/Emulation/PTDolphinEngine.m). Compilé avec ARC, comme tout DolphiniOS.
+//
+// Le même fichier sert à l'app Mac (build_dolphin.sh mac) : vue AppKit, son par Cubeb (celui de Dolphin pour Mac),
+// turbo par la mémoire MAP_JIT de Dolphin (l'app Mac n'a pas besoin de la réserve à deux vues de l'iPhone).
 
 #include "PTDolphin.h"
 
-#import <AVFoundation/AVFoundation.h>
 #import <MetalKit/MetalKit.h>
+#import <TargetConditionals.h>
+#if TARGET_OS_IOS
+#import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
+#else
+#import <AppKit/AppKit.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -67,11 +75,24 @@ using ciface::iOS::StateManager;
 @end
 
 @implementation PTDolphinView
+#if TARGET_OS_IOS
 - (void)layoutSubviews {
   [super layoutSubviews];
   if (g_presenter)
     g_presenter->ResizeSurface();
 }
+#else
+- (void)layout {
+  [super layout];
+  if (g_presenter)
+    g_presenter->ResizeSurface();
+}
+
+/// La souris et le clavier vont à l'écran de jeu de PlayTendo, posé par-dessus.
+- (NSView*)hitTest:(NSPoint)point {
+  return nil;
+}
+#endif
 @end
 
 static PTDolphinView* s_view;
@@ -80,7 +101,9 @@ static std::mutex s_errorMutex;
 static std::string s_lastError;
 /// Format de l'image du jeu (largeur / hauteur), relevé à chaque image par Dolphin ; 0 = pas encore connu.
 static std::atomic<float> s_aspectRatio{0};
-static Common::EventHook s_presentHook;
+/// Relevé du format à chaque image. Jamais détruit à la sortie du programme : son événement (et son verrou) l'est
+/// peut-être déjà à ce moment-là (plantage « recursive_mutex lock failed » en quittant l'app Mac).
+static Common::EventHook& s_presentHook = *new Common::EventHook();
 /// Mémoire rapide : disponible, et plus grand bloc d'adresses libre mesuré au démarrage (en Go).
 static bool s_fastmem = false;
 static float s_largestBlockGB = 0;
@@ -203,10 +226,12 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
   const std::string gcSaves = gcSaveDir;
   const std::string wiiSaves = wiiSaveDir;
 
+#if TARGET_OS_IOS
   // Son : comme le reste de PlayTendo (respecte le bouton silencieux, se mélange aux autres apps).
   AVAudioSession* session = [AVAudioSession sharedInstance];
   [session setCategory:AVAudioSessionCategoryAmbient error:nil];
   [session setActive:YES error:nil];
+#endif
 
   const bool fastmem = PTDolphinFastmemAvailable();
   const vm_size_t largest = PTDolphinLargestFreeBlock();
@@ -238,7 +263,11 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
     PTDolphinImportProfile(Wiimote::GetConfig(), true);
 
     // N'envoie rien (statistiques désactivées) mais doit être fait avant tout jeu Wii (DolphiniOS).
+#if TARGET_OS_IOS
     DolphinAnalytics::Instance().ReportDolphinStart("ios");
+#else
+    DolphinAnalytics::Instance().ReportDolphinStart("macos");
+#endif
     Config::Save();
     NOTICE_LOG_FMT(CORE, "[PlayTendo] Mémoire rapide (fastmem) : {} — plus grand bloc d'adresses libre : {:.2f} Go",
                    fastmem ? "oui" : "non", static_cast<double>(largest) / double(1ull << 30));
@@ -252,6 +281,7 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
       },
       "PlayTendo");
 
+#if TARGET_OS_IOS
   // Mémoire du turbo : la réserve JIT de l'app (PTJIT.m), exportée par l'exécutable de PlayTendo.
   auto jitAlloc = reinterpret_cast<void* (*)(size_t, void**)>(dlsym(RTLD_DEFAULT, "PTJITAlloc"));
   auto jitFree = reinterpret_cast<void (*)(void*)>(dlsym(RTLD_DEFAULT, "PTJITFree"));
@@ -269,7 +299,19 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
   s_view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
   // Passage en arrière-plan : réglages écrits (iOS peut fermer l'app sans prévenir).
-  [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification
+  NSNotificationName saveMoment = UIApplicationDidEnterBackgroundNotification;
+#else
+  // Mac : Dolphin prend sa mémoire exécutable lui-même (MAP_JIT, permis à l'app signée localement).
+  s_scale = NSScreen.mainScreen.backingScaleFactor;
+  s_view = [[PTDolphinView alloc] initWithFrame:NSZeroRect device:MTLCreateSystemDefaultDevice()];
+  s_view.paused = YES;  // Dolphin présente lui-même ses images dans la couche
+  s_view.enableSetNeedsDisplay = NO;
+  s_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+
+  // Fermeture de l'app : réglages écrits.
+  NSNotificationName saveMoment = NSApplicationWillTerminateNotification;
+#endif
+  [[NSNotificationCenter defaultCenter] addObserverForName:saveMoment
                                                     object:nil
                                                      queue:nil
                                                 usingBlock:^(NSNotification*) {
@@ -278,6 +320,25 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
                                                   });
                                                 }];
   return (__bridge void*)s_view;
+}
+
+/// Fermeture de l'app : Dolphin arrêté en règle (manettes, réglages, journal). Sans cela, à la sortie du programme,
+/// ses fils encore actifs se heurtent à des objets déjà détruits (« recursive_mutex lock failed » : plantage en
+/// quittant l'app Mac).
+PTDOLPHIN_EXPORT void PTDolphinShutdown(void)
+{
+  if (!s_view)
+    return;
+  DOLHostQueueRunSync(^{
+    auto& system = Core::System::GetInstance();
+    if (Core::IsRunningOrStarting(system))
+      Core::Stop(system);
+    Config::Save();
+    UICommon::ShutdownControllers();
+    UICommon::Shutdown();
+  });
+  s_presentHook.reset();
+  s_view = nil;
 }
 
 // MARK: - Partie
@@ -289,13 +350,19 @@ PTDOLPHIN_EXPORT bool PTDolphinBoot(const char* path, bool jit)
   PTDolphinClearError();
   const std::string file = path;
   CAMetalLayer* layer = (CAMetalLayer*)s_view.layer;
+#if !TARGET_OS_IOS
+  // Mac : l'écran de la fenêtre (Retina ou non) ; la vue est déjà dans la fenêtre à ce moment-là.
+  if (s_view.window)
+    s_scale = s_view.window.backingScaleFactor;
+#endif
   const CGFloat scale = s_scale;
   __block bool started = false;
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
     if (Core::IsRunningOrStarting(system))
       return;
-    // Turbo : recompilateur ARM64 dans la réserve de l'app. Sinon interpréteur « en cache » (très lent).
+    // Turbo : recompilateur ARM64 (iPhone : dans la réserve de l'app ; Mac : mémoire MAP_JIT de Dolphin). Sinon
+    // interpréteur « en cache » (très lent).
     Config::SetBase(Config::MAIN_CPU_CORE, jit ? PowerPC::CPUCore::JITARM64 : PowerPC::CPUCore::CachedInterpreter);
     Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, jit ? VertexLoaderType::Native : VertexLoaderType::Software);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, 1.0f);

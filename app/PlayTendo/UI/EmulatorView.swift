@@ -321,8 +321,7 @@ private struct PauseMenu: View {
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
     private var hasImageSettings: Bool {
-        [.psp, .ps2, .gameCube, .wii, .n3ds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
-            || (session.game.system == .nds && DSSettings.isAvailable)
+        [.psp, .ps2, .gameCube, .wii, .n3ds, .nds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
     }
     /// Vita3K n'a ni sauvegarde rapide, ni avance rapide, ni « recommencer » : seules les sauvegardes des jeux existent.
     private var hasEngineExtras: Bool { !session.game.system.isVita }

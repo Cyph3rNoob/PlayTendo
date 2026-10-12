@@ -16,6 +16,13 @@ Appelé par build_dolphin.sh. Une retouche déjà faite est sautée : relancer l
    garde de 2 Go ne servent qu'au recompilateur x86-64 (le commentaire de Dolphin le dit), et iOS limite les
    adresses d'une app sans le droit « extended-virtual-addressing » (réservé aux comptes développeur payants).
 6. FrameDumper.h : capture d'écran attendue (`SaveScreenshotAndWait`), pour la vignette « Continuer ».
+Mac (app PlayTendo pour Mac, build_dolphin.sh mac, avec -DPLAYTENDO_DOLPHIN_HOST) :
+7. CMakeLists.txt et Source/CMakeLists.txt : PLAYTENDO_MAC défini, bibliothèque « dolphin » (Source/iOS/Library) aussi
+   compilée pour le Mac, avec GameController et CoreHaptics.
+8. InputCommon : le module de commandes de DolphiniOS (ControllerInterface/iOS : « écran tactile » que PlayTendo
+   remplit, manettes MFi) aussi sur Mac, à la place du module clavier/souris de Dolphin (Quartz) : PlayTendo lit
+   lui-même le clavier et la souris, et donne les boutons comme sur iPhone.
+   (FileUtil.cpp, retouche 2 : aussi sur Mac, dossier Sys dans DolphinCore.framework/Resources/Sys.)
 """
 import os
 import sys
@@ -46,8 +53,12 @@ patch("Source/iOS/Library/CMakeLists.txt", [
      "  # PlayTendo : pilote du moteur (fonctions PTDolphin* appelées par l'app).\n"
      "  target_sources(dolphin PRIVATE ${PLAYTENDO_DOLPHIN_HOST})\n"
      "  target_include_directories(dolphin PRIVATE ${PLAYTENDO_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR})\n"
-     "  target_link_libraries(dolphin PRIVATE \"-framework UIKit\" \"-framework MetalKit\" \"-framework AVFoundation\"\n"
-     "    \"-framework CoreGraphics\")\n"
+     "  if(IOS)\n"
+     "    target_link_libraries(dolphin PRIVATE \"-framework UIKit\" \"-framework MetalKit\" \"-framework AVFoundation\"\n"
+     "      \"-framework CoreGraphics\")\n"
+     "  else()\n"
+     "    target_link_libraries(dolphin PRIVATE \"-framework AppKit\" \"-framework MetalKit\" \"-framework CoreGraphics\")\n"
+     "  endif()\n"
      "endif()\n"
      "\n"
      "target_link_libraries(dolphin\n"),
@@ -55,7 +66,7 @@ patch("Source/iOS/Library/CMakeLists.txt", [
 
 patch("Source/Core/Common/FileUtil.cpp", [
     ("static std::string CreateSysDirectoryPath()\n{\n",
-     "#ifdef IPHONEOS\n"
+     "#if defined(IPHONEOS) || defined(PLAYTENDO_MAC)\n"
      "// PlayTendo : moteur dans DolphinCore.framework, avec son dossier Sys (sinon : l'app, comme DolphiniOS).\n"
      "static std::string GetCoreDirectory()\n"
      "{\n"
@@ -74,9 +85,12 @@ patch("Source/Core/Common/FileUtil.cpp", [
      "static std::string CreateSysDirectoryPath()\n{\n"),
     ("#if defined(__APPLE__)\n  const std::string sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;\n",
      "#if defined(IPHONEOS)\n  const std::string sys_directory = GetCoreDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;\n"
+     "#elif defined(PLAYTENDO_MAC)\n"
+     "  // PlayTendo (Mac) : dossier Sys rangé dans les ressources de DolphinCore.framework.\n"
+     "  const std::string sys_directory = GetCoreDirectory() + DIR_SEP \"Resources\" DIR_SEP \"Sys\" DIR_SEP;\n"
      "#elif defined(__APPLE__)\n  const std::string sys_directory = GetBundleDirectory() + DIR_SEP SYSDATA_DIR DIR_SEP;\n"),
     ("#include \"Common/FileUtil.h\"\n",
-     "#include \"Common/FileUtil.h\"\n\n#ifdef IPHONEOS\n#include <dlfcn.h>\n#endif\n"),
+     "#include \"Common/FileUtil.h\"\n\n#if defined(IPHONEOS) || defined(PLAYTENDO_MAC)\n#include <dlfcn.h>\n#endif\n"),
 ])
 
 patch("Source/Core/Common/MemoryUtil_iOS_LuckTXM.cpp", [
@@ -154,4 +168,49 @@ patch("Source/Core/VideoBackends/Metal/MTLUtil.mm", [
      "  // PlayTendo : le Metal du simulateur se dit « GPU Apple » mais ne lit pas l'image en cours dans un shader.\n"
      "  backend_info->bSupportsFramebufferFetch = false;\n"
      "#endif\n"),
+])
+
+# --- Mac ---------------------------------------------------------------------------------------------------------
+
+patch("CMakeLists.txt", [
+    ("if(ENABLE_HEADLESS)\n",
+     "if(PLAYTENDO_DOLPHIN_HOST AND APPLE AND NOT IOS)\n"
+     "  # PlayTendo : moteur de l'app Mac (bibliothèque « dolphin » de DolphiniOS, commandes données par l'app).\n"
+     "  message(STATUS \"PlayTendo : moteur GameCube/Wii pour Mac\")\n"
+     "  add_definitions(-DPLAYTENDO_MAC)\n"
+     "  find_library(COREHAPTICS_LIBRARY CoreHaptics)\n"
+     "  find_library(GAMECONTROLLER_LIBRARY GameController)\n"
+     "endif()\n"
+     "\n"
+     "if(ENABLE_HEADLESS)\n"),
+])
+
+patch("Source/CMakeLists.txt", [
+    ("if (IOS)\n  add_subdirectory(iOS/Library)\n",
+     "if (IOS OR PLAYTENDO_DOLPHIN_HOST)  # PlayTendo : aussi sur Mac\n  add_subdirectory(iOS/Library)\n"),
+])
+
+patch("Source/Core/InputCommon/CMakeLists.txt", [
+    ("    ControllerInterface/Quartz/QuartzKeyboardAndMouse.mm\n  )\n",
+     "    ControllerInterface/Quartz/QuartzKeyboardAndMouse.mm\n  )\n"
+     "  if(PLAYTENDO_DOLPHIN_HOST)\n"
+     "    # PlayTendo : module de commandes de DolphiniOS (écran tactile rempli par l'app, manettes MFi).\n"
+     "    target_sources(inputcommon PRIVATE\n"
+     "      ControllerInterface/iOS/MFiController.mm\n"
+     "      ControllerInterface/iOS/MFiControllerScanner.mm\n"
+     "      ControllerInterface/iOS/MFiKeyboard.mm\n"
+     "      ControllerInterface/iOS/Motor.mm\n"
+     "      ControllerInterface/iOS/iOS.mm\n"
+     "      ControllerInterface/iOS/StateManager.cpp\n"
+     "      ControllerInterface/iOS/Touchscreen.mm\n"
+     "    )\n"
+     "    target_link_libraries(inputcommon PRIVATE ${COREHAPTICS_LIBRARY} ${GAMECONTROLLER_LIBRARY})\n"
+     "  endif()\n"),
+])
+
+patch("Source/Core/InputCommon/ControllerInterface/ControllerInterface.h", [
+    ("#if defined(__APPLE__) && !defined(IPHONEOS)\n#define CIFACE_USE_OSX\n#endif\n#ifdef IPHONEOS\n#define CIFACE_USE_IOS\n#endif\n",
+     "// PlayTendo (Mac) : commandes de DolphiniOS (données par l'app) au lieu du clavier et de la souris de Dolphin.\n"
+     "#if defined(__APPLE__) && !defined(IPHONEOS) && !defined(PLAYTENDO_MAC)\n#define CIFACE_USE_OSX\n#endif\n"
+     "#if defined(IPHONEOS) || defined(PLAYTENDO_MAC)\n#define CIFACE_USE_IOS\n#endif\n"),
 ])

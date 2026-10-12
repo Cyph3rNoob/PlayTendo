@@ -20,19 +20,9 @@ enum DSSettings {
         Resolution(rawValue: UserDefaults.standard.integer(forKey: resolutionKey)) ?? .x2
     }
 
-    /// Le rendu OpenGL (définition au choix) n'est pas encore dans le moteur DS du Mac : rendu logiciel, en 256×192.
-    static var isAvailable: Bool {
-#if os(iOS)
-        true
-#else
-        false
-#endif
-    }
-
-    /// Réglages correspondants du moteur melonDS DS.
+    /// Réglages correspondants du moteur melonDS DS (OpenGL ES sur iPhone, OpenGL « core » sur Mac).
     static var coreOptions: [String: String] {
-        guard isAvailable else { return ["melonds_render_mode": "software"] }
-        return [
+        [
             "melonds_render_mode": "opengl",
             "melonds_opengl_resolution": "\(resolution.rawValue)",
         ]

@@ -3,7 +3,7 @@
 # - cores/mac/<nom>.framework : embarqués dans l'app Mac (phase « Embed cores » de la cible PlayTendo Mac) ;
 # - cores/macos/<nom>.dylib : mêmes moteurs pour le banc d'essai (scripts/test/test_buttons.py).
 # Même version des sources que pour l'iPhone (scripts/fetch_sources.sh).
-#   zsh scripts/build_cores_macos.sh [mesen bsnes mgba melondsds pcsx_rearmed]
+#   zsh scripts/build_cores_macos.sh [mesen bsnes mgba melondsds pcsx_rearmed mupen64plus_next ppsspp]
 set -e
 set -o pipefail
 
@@ -64,7 +64,7 @@ EOF
   printf "OK (macOS %s, %d Ko) " "$minos" $(( $(stat -f %z "$fw/Versions/A/$name") / 1024 ))
 }
 
-ALL=(mesen bsnes mgba melondsds pcsx_rearmed)
+ALL=(mesen bsnes mgba melondsds pcsx_rearmed mupen64plus_next ppsspp)
 if (( $# )); then CORES=("$@"); else CORES=($ALL); fi
 
 for core in $CORES; do
@@ -94,10 +94,16 @@ for core in $CORES; do
       run mgba-macos cmake --build "$WORK/mgba" --target mgba_libretro
       package mgba "$WORK/mgba/mgba_libretro.dylib" ;;
     melondsds)
-      # Rendu logiciel pour l'instant (le rendu OpenGL viendra avec la N64 et la PSP).
-      rm -rf "${WORK:?}/melondsds"
+      # Rendu OpenGL de melonDS (résolution augmentée) avec l'OpenGL « core » du Mac : les retouches OpenGL ES de
+      # l'iPhone (patch_melonds.py) ne s'appliquent qu'avec PT_GLES_COMPAT, et le melonDS téléchargé dans ce dossier
+      # de travail n'est pas retouché. Dossier gardé d'une fois sur l'autre : ses dépendances déjà téléchargées
+      # resservent (aucun nouveau téléchargement).
+      disconnected=()
+      [ -d "$WORK/melondsds/_deps/melonds-src" ] && disconnected=(-DFETCHCONTENT_FULLY_DISCONNECTED=ON)
+      python3 "$ROOT/scripts/patch_melonds.py" "$SRC/melonds-ds" > /dev/null
       run melondsds-macos cmake -S "$SRC/melonds-ds" -B "$WORK/melondsds" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        "${CMAKE_MAC[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_OPENGL=OFF -DENABLE_JIT=OFF -DBUILD_TESTING=OFF
+        "${CMAKE_MAC[@]}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_OPENGL=ON -DOPENGL_PROFILE=OpenGL \
+        -DENABLE_JIT=OFF -DBUILD_TESTING=OFF "${disconnected[@]}"
       run melondsds-macos cmake --build "$WORK/melondsds"
       package melondsds "$(find "$WORK/melondsds" -name 'melondsds_libretro*.dylib' | head -1)" ;;
     pcsx_rearmed)
@@ -106,6 +112,33 @@ for core in $CORES; do
       run pcsx_rearmed-macos make -f Makefile.libretro -j$JOBS platform=osx ARCHFLAGS="-arch arm64"
       package pcsx_rearmed pcsx_rearmed_libretro.dylib
       run pcsx_rearmed-macos make -f Makefile.libretro clean platform=osx ;;
+    mupen64plus_next)
+      # Mêmes sources et retouches que pour l'iPhone (scripts/build_cores.sh : libpng, zlib, libco). Rendu GLideN64 en
+      # OpenGL « core » 3.3 ; ni ParaLLEl-RDP (Vulkan) ni ParaLLEl-RSP (recompilateur) : l'app impose GLideN64 et le
+      # RSP « hle ». Le Makefile mélange les fichiers compilés des deux plateformes : nettoyé avant et après.
+      cd "$SRC/mupen64plus-nx"
+      sed -i '' 's/mmacosx-version-min=[0-9.]*/mmacosx-version-min='$MIN_MACOS'/' Makefile
+      python3 "$ROOT/scripts/patch_libco.py" libretro-common/libco/aarch64.c asm > /dev/null
+      # GLideN64 activait l'attribut « barycoords » des rectangles sans lui donner de tampon quand la « coverage »
+      # n'est pas disponible (cas du Mac) : l'OpenGL du Mac refuse alors tout dessin (GL_INVALID_OPERATION, image
+      # noire). Activé seulement avec la coverage, comme pour les triangles. Sans effet ailleurs.
+      sed -i '' 's|enableVertexAttribArray(rectAttrib::barycoords, true);|enableVertexAttribArray(rectAttrib::barycoords, _glinfo.coverage); // PlayTendo|' \
+        GLideN64/src/Graphics/OpenGLContext/opengl_BufferedDrawer.cpp
+      run mupen64plus_next-macos make clean platform=osx
+      run mupen64plus_next-macos make -j$JOBS platform=osx HAVE_PARALLEL_RSP=0 HAVE_PARALLEL_RDP=0
+      package mupen64plus_next mupen64plus_next_libretro.dylib
+      run mupen64plus_next-macos make clean platform=osx ;;
+    ppsspp)
+      # JIT sur la réserve préparée par PlayTendo (même retouche que pour l'iPhone) ; rendu OpenGL « core » (l'app
+      # règle ppsspp_backend sur « auto » : avec « opengl », PPSSPP demande l'ancien OpenGL, absent du Mac). Les
+      # fichiers d'accompagnement (cores/assets/PPSSPP) sont ceux de l'iPhone.
+      python3 "$ROOT/scripts/patch_ppsspp_jit.py" "$SRC/ppsspp" > /dev/null
+      # Shaders avec leur « #version », exigée par l'OpenGL d'Apple (scripts/patch_ppsspp_mac.py).
+      python3 "$ROOT/scripts/patch_ppsspp_mac.py" "$SRC/ppsspp" > /dev/null
+      run ppsspp-macos cmake -S "$SRC/ppsspp" -B "$WORK/ppsspp" -G Ninja -DCMAKE_BUILD_TYPE=Release "${CMAKE_MAC[@]}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DLIBRETRO=ON
+      run ppsspp-macos cmake --build "$WORK/ppsspp" --target ppsspp_libretro
+      package ppsspp "$(find "$WORK/ppsspp" -name 'ppsspp_libretro*.dylib' | head -1)" ;;
   esac
   echo
 done

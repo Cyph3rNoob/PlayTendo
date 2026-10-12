@@ -28,6 +28,8 @@ PTDolphinState PTDolphinGetState(void);
 void PTDolphinSetPaused(bool paused);
 /// Demande l'arrêt du jeu ; l'état repasse à « arrêté » quand c'est fait.
 void PTDolphinStop(void);
+/// Arrêt en règle de Dolphin avant la fermeture de l'app (Mac). Facultative : absente des moteurs compilés avant.
+void PTDolphinShutdown(void);
 void PTDolphinReset(void);
 /// Avance rapide (vitesse ×3).
 void PTDolphinSetTurbo(bool enabled);

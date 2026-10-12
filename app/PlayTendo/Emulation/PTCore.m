@@ -518,7 +518,7 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         }
         _pendingGLWidth = 0;
         _pendingGLHeight = 0;
-        PTLogLine([NSString stringWithFormat:@"Rendu 3D OpenGL ES prêt (%u×%u)", _gl.width, _gl.height]);
+        PTLogLine([NSString stringWithFormat:@"Rendu 3D OpenGL prêt (%u×%u)", _gl.width, _gl.height]);
         // Indispensable même en cas de souci : certains moteurs (N64) plantent à la fermeture
         // s'ils n'ont jamais été prévenus que leur contexte existe.
         if (_hw.context_reset) _hw.context_reset();
@@ -910,12 +910,15 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
                 _wantsVulkan = YES;
                 return true;
             }
+#if TARGET_OS_IOS
             BOOL supported = callback->context_type == RETRO_HW_CONTEXT_OPENGLES2
                 || callback->context_type == RETRO_HW_CONTEXT_OPENGLES3
                 || (callback->context_type == RETRO_HW_CONTEXT_OPENGLES_VERSION
                     && (callback->version_major < 3 || (callback->version_major == 3 && callback->version_minor == 0)));
-#if !TARGET_OS_IOS
-            supported = NO;
+#else
+            // Mac : OpenGL « core » jusqu'à 4.1 (ni OpenGL ES, ni ancien profil, ni 4.3 du rendu « compute » de melonDS).
+            BOOL supported = callback->context_type == RETRO_HW_CONTEXT_OPENGL_CORE
+                && (callback->version_major < 4 || (callback->version_major == 4 && callback->version_minor <= 1));
 #endif
             if (!supported) {
                 PTLogLine([NSString stringWithFormat:@"[%@] type d'affichage 3D refusé (%d)", _libraryName, callback->context_type]);
@@ -925,7 +928,7 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             // abandonne proprement le chargement (le N64 plante sinon à la fermeture).
             if (!_gl) _gl = [[PTGLContext alloc] initWithWidth:640 height:480];
             if (!_gl) {
-                PTLogLine([NSString stringWithFormat:@"[%@] affichage 3D (OpenGL ES) impossible à créer", _libraryName]);
+                PTLogLine([NSString stringWithFormat:@"[%@] affichage 3D (OpenGL) impossible à créer", _libraryName]);
                 return false;
             }
             callback->get_current_framebuffer = PTHardwareFramebuffer;
@@ -935,7 +938,11 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
             return true;
         }
         case PT_ENV(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER):
+#if TARGET_OS_IOS
             *(unsigned *)data = _prefersVulkan ? RETRO_HW_CONTEXT_VULKAN : RETRO_HW_CONTEXT_OPENGLES3;
+#else
+            *(unsigned *)data = _prefersVulkan ? RETRO_HW_CONTEXT_VULKAN : RETRO_HW_CONTEXT_OPENGL_CORE;
+#endif
             return true;
         case PT_ENV(RETRO_ENVIRONMENT_SET_HW_RENDER_CONTEXT_NEGOTIATION_INTERFACE): {
             const struct retro_hw_render_context_negotiation_interface_vulkan *negotiation = data;

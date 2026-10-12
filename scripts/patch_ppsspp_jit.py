@@ -11,6 +11,9 @@ sa méthode sur Switch) : il suffit que chaque bloc de code y prenne sa place.
 L'app exporte PTJITIsActive, PTJITAlloc et PTJITFree (Emulation/PTJIT.c), retrouvées ici par dlsym.
 Sans réserve active, rien ne change (W^X par mprotect, comme avant).
 
+Sur Mac aussi (app PlayTendo pour Mac, 2026-10-12) : la réserve à deux vues y est préparée par l'app elle-même,
+et PPSSPP y garde ses liens directs entre blocs, que son mode W^X du Mac coupe.
+
   patch_ppsspp_jit.py <dossier source de PPSSPP>
 
 Sans effet si les fichiers sont déjà corrigés.
@@ -50,7 +53,7 @@ void PlayTendoJITFree(uint8_t *writable);
 
 patch("Common/MemoryUtil.cpp", [
     ("bool PlatformIsWXExclusive() {\n",
-     """#if PPSSPP_PLATFORM(IOS)
+     """#if PPSSPP_PLATFORM(IOS) || PPSSPP_PLATFORM(MAC)
 #include <dlfcn.h>
 
 // PlayTendo : fonctions exportées par l'app hôte, absentes ailleurs (dlsym renvoie alors NULL).
@@ -96,7 +99,7 @@ void PlayTendoJITFree(uint8_t *) {}
 bool PlatformIsWXExclusive() {
 """),
     ("#if PPSSPP_PLATFORM(IOS) || PPSSPP_PLATFORM(UWP) || defined(__OpenBSD__)\n\treturn true;\n",
-     """#if PPSSPP_PLATFORM(IOS)
+     """#if PPSSPP_PLATFORM(IOS) || PPSSPP_PLATFORM(MAC)
 	// PlayTendo : avec la réserve à deux vues, le code s'écrit d'un côté et s'exécute de l'autre.
 	return !PlayTendoJITActive();
 #elif PPSSPP_PLATFORM(UWP) || defined(__OpenBSD__)
@@ -109,7 +112,7 @@ patch("Common/CodeBlock.h", [
 		region = (u8 *)AllocateExecutableMemory(region_size);
 		writableRegion = region;
 """,
-     """#if PPSSPP_PLATFORM(IOS)
+     """#if PPSSPP_PLATFORM(IOS) || PPSSPP_PLATFORM(MAC)
 		// PlayTendo : réserve JIT préparée par l'app (seule mémoire exécutable sous TXM).
 		if (PlayTendoJITActive()) {
 			fromPlayTendoPool_ = PlayTendoJITAlloc(region_size, &region, &writableRegion);
@@ -127,7 +130,7 @@ patch("Common/CodeBlock.h", [
 #if !PPSSPP_PLATFORM(SWITCH)
 """,
      """	void FreeCodeSpace() {
-#if PPSSPP_PLATFORM(IOS)
+#if PPSSPP_PLATFORM(IOS) || PPSSPP_PLATFORM(MAC)
 		if (fromPlayTendoPool_) {
 			PlayTendoJITFree(writableRegion);
 			fromPlayTendoPool_ = false;

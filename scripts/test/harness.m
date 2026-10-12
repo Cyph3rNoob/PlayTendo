@@ -5,14 +5,34 @@
 //     --touch 0.5,0.8:30-40  touche l'écran (DS) entre deux images
 //     --probe 100          affiche la couleur du centre de l'image à l'image 100
 //     --opt cle=valeur     réglage du moteur
+//     --system dossier     dossier système donné au moteur (fichiers de PPSSPP…)
+//     --jit 1              prépare la réserve JIT de l'app et la propose au moteur (PSP)
+//   Dans --sequence, en plus des boutons : sup/sdown/sleft/sright (stick gauche), cup/cdown/cleft/cright (stick
+//   droit, boutons C de la N64). Les images 3D (OpenGL) sont lues comme les autres.
 
 #import "PTCore.h"
+#import "PTJIT.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
 
 typedef struct { PTButton button; int from, to; } Press;
 typedef struct { double x, y; int from, to; } Touch;
+typedef struct { unsigned stick; int16_t x, y; int from, to; } Stick;
+
+/// Direction d'un stick nommée dans --sequence (stick 0 = gauche, 1 = droit), ou NO.
+static BOOL StickNamed(NSString *name, Stick *stick) {
+    NSDictionary<NSString *, NSArray<NSNumber *> *> *map = @{
+        @"sup": @[@0, @0, @-32767], @"sdown": @[@0, @0, @32767], @"sleft": @[@0, @-32767, @0], @"sright": @[@0, @32767, @0],
+        @"cup": @[@1, @0, @-32767], @"cdown": @[@1, @0, @32767], @"cleft": @[@1, @-32767, @0], @"cright": @[@1, @32767, @0],
+    };
+    NSArray<NSNumber *> *v = map[name];
+    if (!v) return NO;
+    stick->stick = v[0].unsignedIntValue;
+    stick->x = (int16_t)v[1].intValue;
+    stick->y = (int16_t)v[2].intValue;
+    return YES;
+}
 
 static PTButton ButtonNamed(NSString *name) {
     NSDictionary *map = @{@"a": @(PTButtonA), @"b": @(PTButtonB), @"x": @(PTButtonX), @"y": @(PTButtonY),
@@ -71,6 +91,9 @@ int main(int argc, const char *argv[]) {
         int frames = atoi(argv[3]);
         NSMutableArray<NSValue *> *presses = [NSMutableArray array];
         NSMutableArray<NSValue *> *touches = [NSMutableArray array];
+        NSMutableArray<NSValue *> *sticks = [NSMutableArray array];
+        NSString *systemOverride = nil;
+        BOOL jit = NO;
         NSMutableSet<NSNumber *> *probes = [NSMutableSet set];
         NSMutableDictionary<NSString *, NSString *> *options = [NSMutableDictionary dictionary];
         NSArray<NSString *> *sequence = @[];
@@ -105,11 +128,15 @@ int main(int argc, const char *argv[]) {
             } else if ([flag isEqualToString:@"--opt"]) {
                 NSArray *kv = [value componentsSeparatedByString:@"="];
                 options[kv[0]] = kv[1];
+            } else if ([flag isEqualToString:@"--system"]) {
+                systemOverride = value;
+            } else if ([flag isEqualToString:@"--jit"]) {
+                jit = [value boolValue];
             }
         }
 
         NSString *work = [NSTemporaryDirectory() stringByAppendingPathComponent:@"playtendo-harness"];
-        NSString *system = [work stringByAppendingPathComponent:@"BIOS"];
+        NSString *system = systemOverride ?: [work stringByAppendingPathComponent:@"BIOS"];
         NSString *saves = [work stringByAppendingPathComponent:@"Sauvegardes"];
         [[NSFileManager defaultManager] createDirectoryAtPath:system withIntermediateDirectories:YES attributes:nil error:nil];
         [[NSFileManager defaultManager] createDirectoryAtPath:saves withIntermediateDirectories:YES attributes:nil error:nil];
@@ -117,6 +144,12 @@ int main(int argc, const char *argv[]) {
         NSError *error = nil;
         PTCore *core = [[PTCore alloc] initWithLibraryPath:corePath error:&error];
         if (!core) { printf("ECHEC chargement moteur : %s\n", error.localizedDescription.UTF8String); return 1; }
+        if (jit) {
+            char reason[256] = {0};
+            BOOL ready = PTJITPrepareSimulatedPool((size_t)352 << 20, reason, sizeof reason);
+            printf("JIT      : %s\n", ready ? "réserve prête" : reason);
+            core.allowsJIT = ready;
+        }
 
         __block NSMutableData *frame = [NSMutableData data];
         __block unsigned fw = 0, fh = 0;
@@ -127,6 +160,20 @@ int main(int argc, const char *argv[]) {
             [frame setLength:0];
             [frame appendBytes:pixels length:pitch * h];
             fw = w; fh = h; fpitch = pitch; fformat = format;
+            videoFrames++;
+        };
+        // Image 3D (OpenGL) : tampon BGRA partagé, lu ligne à ligne (remis à l'endroit) comme une image XRGB8888.
+        core.hardwareVideoHandler = ^(CVPixelBufferRef buffer, unsigned w, unsigned h, BOOL flipped) {
+            CVPixelBufferLockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+            const uint8_t *base = CVPixelBufferGetBaseAddress(buffer);
+            size_t rowBytes = CVPixelBufferGetBytesPerRow(buffer);
+            [frame setLength:(NSUInteger)w * h * 4];
+            uint8_t *out = frame.mutableBytes;
+            for (unsigned y = 0; y < h; y++) {
+                memcpy(out + (size_t)y * w * 4, base + (size_t)(flipped ? h - 1 - y : y) * rowBytes, (size_t)w * 4);
+            }
+            CVPixelBufferUnlockBaseAddress(buffer, kCVPixelBufferLock_ReadOnly);
+            fw = w; fh = h; fpitch = (size_t)w * 4; fformat = PTPixelFormatXRGB8888;
             videoFrames++;
         };
         core.audioHandler = ^(const int16_t *samples, size_t count) { audioFrames += count; };
@@ -141,9 +188,14 @@ int main(int argc, const char *argv[]) {
         for (NSUInteger s = 0; s < sequence.count; s++) {
             int from = sequenceStart + (int)s * 30;
             [probes addObject:@(from + 15)];
+            Stick stick = {0};
             if ([sequence[s] isEqualToString:@"touch"]) {
                 Touch t = {0.5, 0.75, from, from + 20};
                 [touches addObject:[NSValue valueWithBytes:&t objCType:@encode(Touch)]];
+            } else if (StickNamed(sequence[s], &stick)) {
+                stick.from = from;
+                stick.to = from + 20;
+                [sticks addObject:[NSValue valueWithBytes:&stick objCType:@encode(Stick)]];
             } else {
                 Press p = {ButtonNamed(sequence[s]), from, from + 20};
                 [presses addObject:[NSValue valueWithBytes:&p objCType:@encode(Press)]];
@@ -162,6 +214,11 @@ int main(int argc, const char *argv[]) {
                 Touch t; [v getValue:&t];
                 if (i == t.from) [core setPointerX:(int16_t)((t.x * 2 - 1) * 32767) y:(int16_t)((t.y * 2 - 1) * 32767) pressed:YES];
                 if (i == t.to) [core setPointerX:0 y:0 pressed:NO];
+            }
+            for (NSValue *v in sticks) {
+                Stick st; [v getValue:&st];
+                if (i == st.from) [core setAnalogStick:st.stick x:st.x y:st.y port:0];
+                if (i == st.to) [core setAnalogStick:st.stick x:0 y:0 port:0];
             }
             if (updates[@(i)]) [core updateOptions:updates[@(i)]];
             [core runFrame];
@@ -204,6 +261,7 @@ int main(int argc, const char *argv[]) {
         printf("état     : %lu octets, rechargement %s\n", (unsigned long)state.length, restored ? "OK" : "ECHEC");
         printf("SRAM     : %lu octets\n", (unsigned long)[core saveRAM].length);
 
+        if (jit) printf("JIT      : %zu Mo libres sur 352 dans la réserve\n", PTJITLargestFree() >> 20);
         if (fw > 0) WritePNG(frame, fw, fh, fpitch, fformat, pngPath);
         [core unloadGame];
         printf("RESULTAT : %s\n", (videoFrames > 0 && fw > 0) ? "OK" : "PAS D'IMAGE");

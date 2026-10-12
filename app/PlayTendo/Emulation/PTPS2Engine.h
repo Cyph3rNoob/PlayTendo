@@ -30,6 +30,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)reset;
 /// Rend la mémoire de la console PS2 en veille (avant de lancer une autre console). Bloquant.
 - (void)releaseMemory;
+/// Fermeture de l'app (Mac) : arrêt de la partie et du thread de la console.
+- (void)shutdown;
 - (void)setTurbo:(BOOL)enabled;
 /// Bouton RetroPad (PTButton).
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed;

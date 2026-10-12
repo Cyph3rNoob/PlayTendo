@@ -1,4 +1,5 @@
-// OpenGL ES est marqué « obsolète » par Apple mais reste fourni par iOS ; les moteurs 3D l'utilisent.
+// OpenGL ES (iPhone) et OpenGL (Mac) sont marqués « obsolètes » par Apple mais restent fournis ; les moteurs 3D
+// les utilisent.
 // (Les en-têtes système sont des modules : un #define ne suffit pas à taire l'avertissement.)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #import "PTGLContext.h"
@@ -225,13 +226,204 @@ static void PTSetTextureParameters(void) {
 
 #else
 
-// Sur Mac (banc d'essai), pas d'OpenGL ES : les moteurs 3D ne sont testés que dans le simulateur.
-@implementation PTGLContext
-- (instancetype)initWithWidth:(unsigned)width height:(unsigned)height { return nil; }
-- (unsigned)framebuffer { return 0; }
-- (void)makeCurrent {}
-- (BOOL)ensureWidth:(unsigned)width height:(unsigned)height { return NO; }
-- (CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height { return NULL; }
+// Mac : OpenGL « core » 4.1 (OpenGL ES n'existe pas sur Mac ; les moteurs y demandent un profil core 3.1 à 3.3,
+// que 4.1 satisfait). Le moteur dessine dans un framebuffer ordinaire (texture 2D, ce qu'ils attendent tous : la N64
+// échouait sur une texture « rectangle ») ; à chaque image, la puce graphique le recopie dans un CVPixelBuffer posé
+// sur une IOSurface (texture rectangle, seul type qu'OpenGL sait poser sur une IOSurface), que Metal lit sans copie.
+#import <OpenGL/OpenGL.h>
+#import <OpenGL/CGLIOSurface.h>
+#import <OpenGL/gl3.h>
+
+#define PT_GL_BUFFERS 4
+
+@implementation PTGLContext {
+    CGLContextObj _context;
+    CVPixelBufferRef _buffers[PT_GL_BUFFERS];
+    // Image partagée avec Metal : texture rectangle sur l'IOSurface, et son framebuffer (destination de la copie).
+    GLuint _surfaceTextures[PT_GL_BUFFERS];
+    GLuint _surfaceFramebuffers[PT_GL_BUFFERS];
+    // Copie peut-être pas encore terminée par la puce graphique (marqueur à attendre).
+    GLsync _fences[PT_GL_BUFFERS];
+    // Là où dessine le moteur.
+    GLuint _framebuffer;
+    GLuint _colorTexture;
+    GLuint _depthStencil;
+    int _current;
+}
+
+- (instancetype)initWithWidth:(unsigned)width height:(unsigned)height {
+    self = [super init];
+    if (!self) return nil;
+    CGLPixelFormatAttribute attributes[] = {
+        kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_GL4_Core,
+        kCGLPFAAccelerated, kCGLPFAColorSize, 24, kCGLPFAAlphaSize, 8,
+        kCGLPFADepthSize, 24, kCGLPFAStencilSize, 8,
+        kCGLPFAAllowOfflineRenderers,
+        0,
+    };
+    CGLPixelFormatObj format = NULL;
+    GLint count = 0;
+    CGLError error = CGLChoosePixelFormat(attributes, &format, &count);
+    if (error != kCGLNoError || !format) {
+        PTLogLine([NSString stringWithFormat:@"OpenGL 4.1 indisponible (%s)", CGLErrorString(error)]);
+        return nil;
+    }
+    error = CGLCreateContext(format, NULL, &_context);
+    CGLReleasePixelFormat(format);
+    if (error != kCGLNoError || !_context) {
+        PTLogLine([NSString stringWithFormat:@"Contexte OpenGL impossible (%s)", CGLErrorString(error)]);
+        return nil;
+    }
+    CGLSetCurrentContext(_context);
+    PTLogLine([NSString stringWithFormat:@"OpenGL %s (%s)", glGetString(GL_VERSION), glGetString(GL_RENDERER)]);
+    glGenFramebuffers(1, &_framebuffer);
+    glGenRenderbuffers(1, &_depthStencil);
+    glGenTextures(1, &_colorTexture);
+    glGenFramebuffers(PT_GL_BUFFERS, _surfaceFramebuffers);
+    if (![self allocateWidth:width height:height]) return nil;
+    return self;
+}
+
+- (void)dealloc {
+    if (!_context) return;
+    CGLSetCurrentContext(_context);
+    [self releaseBuffers];
+    if (_framebuffer) glDeleteFramebuffers(1, &_framebuffer);
+    if (_depthStencil) glDeleteRenderbuffers(1, &_depthStencil);
+    if (_colorTexture) glDeleteTextures(1, &_colorTexture);
+    glDeleteFramebuffers(PT_GL_BUFFERS, _surfaceFramebuffers);
+    CGLSetCurrentContext(NULL);
+    CGLReleaseContext(_context);
+}
+
+- (unsigned)framebuffer {
+    return _framebuffer;
+}
+
+- (void)makeCurrent {
+    if (CGLGetCurrentContext() != _context) CGLSetCurrentContext(_context);
+}
+
+- (void)releaseBuffers {
+    for (int i = 0; i < PT_GL_BUFFERS; i++) {
+        if (_fences[i]) glDeleteSync(_fences[i]);
+        _fences[i] = NULL;
+        if (_surfaceTextures[i]) glDeleteTextures(1, &_surfaceTextures[i]);
+        _surfaceTextures[i] = 0;
+        if (_buffers[i]) CVPixelBufferRelease(_buffers[i]);
+        _buffers[i] = NULL;
+    }
+}
+
+/// Framebuffer complet, ou NO (noté au journal).
+static BOOL PTCheckFramebuffer(NSString *name) {
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status == GL_FRAMEBUFFER_COMPLETE) return YES;
+    PTLogLine([NSString stringWithFormat:@"Framebuffer OpenGL %@ incomplet (0x%x, erreur GL 0x%x)", name, status, glGetError()]);
+    return NO;
+}
+
+- (BOOL)allocateWidth:(unsigned)width height:(unsigned)height {
+    [self releaseBuffers];
+    GLint previous = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous);
+    BOOL ok = YES;
+
+    // Images partagées avec Metal.
+    NSDictionary *attributes = @{
+        (id)kCVPixelBufferIOSurfacePropertiesKey: @{},
+        (id)kCVPixelBufferOpenGLCompatibilityKey: @YES,
+        (id)kCVPixelBufferMetalCompatibilityKey: @YES,
+    };
+    glGenTextures(PT_GL_BUFFERS, _surfaceTextures);
+    glClearColor(0, 0, 0, 1);
+    for (int i = 0; i < PT_GL_BUFFERS && ok; i++) {
+        CVReturn status = CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
+                                              (__bridge CFDictionaryRef)attributes, &_buffers[i]);
+        IOSurfaceRef surface = status == kCVReturnSuccess ? CVPixelBufferGetIOSurface(_buffers[i]) : NULL;
+        if (!surface) {
+            PTLogLine([NSString stringWithFormat:@"Image partagée %u×%u impossible (%d)", width, height, status]);
+            ok = NO;
+            break;
+        }
+        glBindTexture(GL_TEXTURE_RECTANGLE, _surfaceTextures[i]);
+        CGLError error = CGLTexImageIOSurface2D(_context, GL_TEXTURE_RECTANGLE, GL_RGBA8, (GLsizei)width, (GLsizei)height,
+                                                GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, surface, 0);
+        if (error != kCGLNoError) {
+            PTLogLine([NSString stringWithFormat:@"Image partagée OpenGL refusée (%s)", CGLErrorString(error)]);
+            ok = NO;
+            break;
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, _surfaceFramebuffers[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE, _surfaceTextures[i], 0);
+        ok = PTCheckFramebuffer(@"de l'image partagée");
+        // Images neuves = mémoire non effacée : noires plutôt que des pixels parasites.
+        if (ok) glClear(GL_COLOR_BUFFER_BIT);
+    }
+    glBindTexture(GL_TEXTURE_RECTANGLE, 0);
+
+    // Là où dessine le moteur : couleur (texture 2D), profondeur et stencil.
+    if (ok) {
+        glBindTexture(GL_TEXTURE_2D, _colorTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, _depthStencil);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, (GLsizei)width, (GLsizei)height);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _colorTexture, 0);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, _depthStencil);
+        ok = PTCheckFramebuffer(@"du moteur");
+        if (ok) glClear(GL_COLOR_BUFFER_BIT);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous);
+    if (!ok) return NO;
+    _width = width;
+    _height = height;
+    _current = 0;
+    return YES;
+}
+
+- (BOOL)ensureWidth:(unsigned)width height:(unsigned)height {
+    if (width <= _width && height <= _height) return YES;
+    return [self allocateWidth:MAX(width, _width) height:MAX(height, _height)];
+}
+
+- (CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height {
+    // Copie de l'image du moteur dans l'image partagée en cours, sans toucher à l'état OpenGL du moteur (la copie
+    // ne dépend que du découpage « scissor », coupé le temps de la faire).
+    GLint read = 0, draw = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw);
+    GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
+    if (scissor) glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, _framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _surfaceFramebuffers[_current]);
+    glBlitFramebuffer(0, 0, (GLint)width, (GLint)height, 0, 0, (GLint)width, (GLint)height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)read);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)draw);
+    if (scissor) glEnable(GL_SCISSOR_TEST);
+
+    // Comme sur iPhone : la copie est marquée et c'est l'image précédente, terminée depuis (ou presque), qui est
+    // affichée (une image de décalage, sans faire attendre le processeur).
+    int drawn = _current;
+    if (_fences[drawn]) glDeleteSync(_fences[drawn]);
+    _fences[drawn] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glFlush();
+    _current = (_current + 1) % PT_GL_BUFFERS;
+
+    int ready = (drawn + PT_GL_BUFFERS - 1) % PT_GL_BUFFERS;
+    if (!_fences[ready]) return NULL;   // première image : rien de terminé à montrer encore
+    glClientWaitSync(_fences[ready], GL_SYNC_FLUSH_COMMANDS_BIT, 100000000ull);   // 100 ms au plus
+    glDeleteSync(_fences[ready]);
+    _fences[ready] = NULL;
+    return _buffers[ready];
+}
+
 @end
 
 #endif

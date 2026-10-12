@@ -11,8 +11,10 @@ Captures/
 # Moteur PS2 (≈ 100 Mo) : recompilé par scripts/build_ps2.sh
 cores/ios/PS2Core.framework/
 cores/sim/PS2Core.framework/
+cores/mac/PS2Core.framework/
 cores/ios/DolphinCore.framework/
 cores/sim/DolphinCore.framework/
+cores/mac/DolphinCore.framework/
 # Moteur PS Vita : recompilé par scripts/build_vita3k.sh (iPhone seulement)
 cores/ios/VitaCore.framework/
 # Sons de démarrage proposés (WAV) : refaits par scripts/make_boot_sounds.py

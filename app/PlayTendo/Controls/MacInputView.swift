@@ -20,6 +20,8 @@ enum KeyboardMap {
         (kVK_ANSI_X, .a), (kVK_ANSI_Z, .b), (kVK_ANSI_S, .x), (kVK_ANSI_A, .y),
         (kVK_ANSI_Q, .l), (kVK_ANSI_W, .r), (kVK_ANSI_E, .l2), (kVK_ANSI_R, .r2),
         (kVK_Return, .start), (kVK_ANSI_KeypadEnter, .start), (kVK_Delete, .select),
+        // R3 : HOME de la Wiimote.
+        (kVK_Tab, .r3),
     ]
 
     /// Flèches : la croix ; pour les consoles à stick, le stick gauche (la croix passe alors sur T F G H).
@@ -51,6 +53,7 @@ enum KeyboardMap {
         switch keyCode {
         case kVK_Return, kVK_ANSI_KeypadEnter: return "↩"
         case kVK_Delete: return "⌫"
+        case kVK_Tab: return "⇥"
         case kVK_Escape: return tr("Échap")
         case kVK_UpArrow: return "↑"
         case kVK_DownArrow: return "↓"
@@ -83,11 +86,21 @@ enum KeyboardMap {
         func keys(_ button: PTButton) -> String {
             buttons.filter { $0.button == button }.map { label($0.keyCode) }.joined(separator: " ")
         }
+        func directions(_ list: [(Int, CDirection)]) -> String { list.map { label($0.0) }.joined(separator: " ") }
         return [
             (tr("Croix"), "← ↑ → ↓"),
             ("A", keys(.a)), ("B", keys(.b)), ("X", keys(.x)), ("Y", keys(.y)),
             ("L", keys(.l)), ("R", keys(.r)), ("L2 / ZL", keys(.l2)), ("R2 / ZR", keys(.r2)),
             ("Start", keys(.start)), ("Select", keys(.select)),
+            (tr("Stick gauche (N64, PSP)"), "← ↑ → ↓"),
+            (tr("Croix (N64, PSP)"), directions(dpadKeys)),
+            (tr("Boutons C (N64)"), directions(rightStickKeys)),
+            (tr("A, B, Z (N64)"), [keys(.b), keys(.y), keys(.l2)].joined(separator: " ")),
+            (tr("A, B, X, Y (GameCube)"), [keys(.b), keys(.y), keys(.a), keys(.x)].joined(separator: " ")),
+            (tr("Z, L, R (GameCube)"), [keys(.r), keys(.l2), keys(.r2)].joined(separator: " ")),
+            (tr("Viser, A, B (Wii)"), tr("souris, clic, clic droit")),
+            (tr("1, 2, secouer (Wii)"), [keys(.y), keys(.x), keys(.r)].joined(separator: " ")),
+            (tr("C, Z du Nunchuk, HOME (Wii)"), [keys(.l), keys(.l2), keys(.r3)].joined(separator: " ")),
             (tr("Menu pause"), label(kVK_Escape)),
             (tr("Écran tactile (DS)"), tr("clic")),
         ]
@@ -119,6 +132,8 @@ final class MacInputView: NSView {
 
     private var heldKeys: [UInt16: KeyboardMap.Action] = [:]
     private var pointerDown = false
+    /// Wii : boutons tenus par la souris (clic = A, clic droit = B).
+    private var mouseButtons: Set<PTButton> = []
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -182,7 +197,7 @@ final class MacInputView: NSView {
     private func apply(_ action: KeyboardMap.Action) {
         switch action {
         case .button(let button):
-            onButton?(button, heldKeys.values.contains(.button(button)))
+            onButton?(button, heldKeys.values.contains(.button(button)) || mouseButtons.contains(button))
         case .stick(let index, _):
             let held = Set(heldKeys.values)
             let x = (held.contains(.stick(index, .right)) ? 1.0 : 0) - (held.contains(.stick(index, .left)) ? 1.0 : 0)
@@ -197,6 +212,8 @@ final class MacInputView: NSView {
         let actions = Set(heldKeys.values)
         heldKeys.removeAll()
         actions.forEach(apply)
+        for button in mouseButtons { onButton?(button, false) }
+        mouseButtons.removeAll()
         if pointerDown {
             pointerDown = false
             onPointer?(.zero, false)
@@ -205,23 +222,78 @@ final class MacInputView: NSView {
 
     // MARK: Souris
 
+    /// Wii : la souris vise sans cliquer (le pointeur suit la flèche au-dessus de l'image).
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard scheme.usesPointer else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if layout.touchScreen?.frame.contains(point) == true { sendPointer(point, pressed: false) }
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
+        if scheme.usesPointer {
+            // Wiimote : clic = A (envoyé sur B, le bouton du bas, comme ses autres commandes).
+            pressMouseButton(.b, true)
+            sendPointer(point, pressed: false)
+            return
+        }
         guard let touchScreen = layout.touchScreen, touchScreen.frame.contains(point) else { return }
         pointerDown = true
         sendPointer(point, pressed: true)
     }
 
     override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if scheme.usesPointer {
+            sendPointer(point, pressed: false)
+            return
+        }
         guard pointerDown else { return }
-        sendPointer(convert(event.locationInWindow, from: nil), pressed: true)
+        sendPointer(point, pressed: true)
     }
 
     override func mouseUp(with event: NSEvent) {
+        if scheme.usesPointer {
+            pressMouseButton(.b, false)
+            return
+        }
         guard pointerDown else { return }
         pointerDown = false
         sendPointer(convert(event.locationInWindow, from: nil), pressed: false)
+    }
+
+    /// Wiimote : clic droit = B (la gâchette, envoyée sur A).
+    override func rightMouseDown(with event: NSEvent) {
+        guard scheme.usesPointer else { return super.rightMouseDown(with: event) }
+        pressMouseButton(.a, true)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        guard scheme.usesPointer else { return super.rightMouseUp(with: event) }
+        pressMouseButton(.a, false)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        guard scheme.usesPointer else { return }
+        sendPointer(convert(event.locationInWindow, from: nil), pressed: false)
+    }
+
+    private func pressMouseButton(_ button: PTButton, _ pressed: Bool) {
+        if pressed {
+            mouseButtons.insert(button)
+        } else {
+            mouseButtons.remove(button)
+        }
+        // Une touche du clavier peut tenir le même bouton.
+        onButton?(button, pressed || heldKeys.values.contains(.button(button)))
     }
 
     /// Comme le doigt sur iPhone : la position reste dans l'écran tactile même si la souris en sort, puis elle est

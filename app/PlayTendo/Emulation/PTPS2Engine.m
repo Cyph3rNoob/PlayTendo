@@ -20,6 +20,8 @@ static NSString *loadFailure;
 
 @implementation PTPS2Engine {
     PTPS2Functions _fn;
+    /// Facultative (moteur Mac seulement).
+    __typeof__(&PTPS2Shutdown) _shutdown;
 }
 
 + (PTPS2Engine *)loadedEngine {
@@ -46,6 +48,7 @@ static NSString *loadFailure;
     if (!engine->_fn.name) return [self failAfterLoad:@"Moteur PS2 incomplet : " #name " manquant" error:error];
     PT_PS2_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
+    engine->_shutdown = (__typeof__(&PTPS2Shutdown))dlsym(handle, "PTPS2Shutdown");
 
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);
@@ -115,6 +118,10 @@ static NSString *loadFailure;
 
 - (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing widescreen:(BOOL)widescreen {
     _fn.PTPS2SetImageOptions((int)upscale, smoothing, widescreen);
+}
+
+- (void)shutdown {
+    if (_shutdown) _shutdown();
 }
 
 - (float)aspectRatio {

@@ -134,6 +134,10 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Moteurs GameCube/Wii et PS2 arrêtés en règle (manettes, réglages, cartes mémoire, journal) avant la sortie
+        // du programme.
+        PTDolphinEngine.loaded?.shutdown()
+        PTPS2Engine.loaded?.shutdown()
         PTLogFlush()
     }
 

@@ -17,6 +17,11 @@ Appelé par build_ps2.sh. Une retouche déjà faite est sautée : relancer le sc
    PlayTendo (PTJIT.m), préparée en un seul passage de StikDebug pour toutes les consoles, au lieu qu'ARMSX2
    rappelle le débogueur lui-même (il serait déjà parti). Au simulateur : la réserve si elle est prête, sinon
    MAP_JIT comme avant.
+6. CMakeLists.txt (Mac, -DPLAYTENDO_PS2_MAC=ON) : framework « PS2Core » pour l'app PlayTendo du Mac, fait du cœur
+   PCSX2 seul (sans la couche iOS d'ARMSX2) et du pilote ps2/PTPS2HostMac.mm. Shaders Metal et fichiers du moteur :
+   ajoutés par build_ps2.sh mac.
+7. libjpeg-turbo (copie d'ARMSX2) : la fabrication de son installeur Mac (.dmg) est sautée quand ses fichiers
+   manquent (retirés de la copie) ; elle bloquait la préparation du projet Mac.
 """
 import os
 import sys
@@ -206,4 +211,48 @@ patch("pcsx2/Memory.cpp", [
      "\t\t// PlayTendo (simulateur) : réserve JIT de l'app quand elle est prête, sinon MAP_JIT ci-dessous.\n"
      "\t}\n"
      "\telse if (force_dual_map && std::atoi(force_dual_map) == 1)\n"),
+], base=ARMSX2)
+
+# --- Mac ---------------------------------------------------------------------------------------------------------
+
+patch("CMakeLists.txt", [
+    ("project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX)\n",
+     "project(ARMSX2iOS VERSION ${ARMSX2_VERSION} LANGUAGES C CXX)\n"
+     "if(PLAYTENDO_PS2_MAC)\n"
+     "\t# PlayTendo (Mac) : fichiers Objective-C du cœur et de SDL (Metal, Cocoa) compilés sans Xcode.\n"
+     "\tenable_language(OBJC OBJCXX)\n"
+     "endif()\n"),
+    ("include(SearchForStuff)\n",
+     "include(SearchForStuff)\n"
+     "\n"
+     "if(PLAYTENDO_PS2_MAC)\n"
+     "\t# PlayTendo (Mac) : curl et libpcap fournis par macOS (le cœur pour Mac s'en sert : téléchargements, réseau de\n"
+     "\t# la console).\n"
+     "\tfind_package(CURL REQUIRED)\n"
+     "\tfind_package(PCAP REQUIRED)\n"
+     "endif()\n"),
+    ("#-------------------------------------------------------------------------------\nif(NOT IS_SUPPORTED_COMPILER)\n",
+     "if(PLAYTENDO_PS2_MAC)\n"
+     "\t# PlayTendo (Mac) : le cœur PCSX2 et le pilote ps2/PTPS2HostMac.mm, en bibliothèque chargée par l'app Mac\n"
+     "\t# (framework emballé par scripts/build_ps2.sh mac, avec les shaders Metal et les fichiers du moteur).\n"
+     "\t# Avec ARC, sans l'en-tête précompilé du cœur (compilé sans ARC : les deux refusent de se mélanger).\n"
+     "\tset_source_files_properties(${PLAYTENDO_PS2_HOST} PROPERTIES COMPILE_FLAGS \"-fobjc-arc\"\n"
+     "\t\tSKIP_PRECOMPILE_HEADERS ON)\n"
+     "\tadd_library(PS2Core SHARED ${PLAYTENDO_PS2_HOST})\n"
+     "\ttarget_include_directories(PS2Core PRIVATE ${PLAYTENDO_INCLUDE} ${ARMSX2_ROOT} ${ARMSX2_ROOT}/pcsx2\n"
+     "\t\t${CMAKE_BINARY_DIR}/common/include ${CMAKE_BINARY_DIR}/pcsx2)\n"
+     "\ttarget_compile_definitions(PS2Core PRIVATE PCSX2_NO_PCAP=1)\n"
+     "\ttarget_link_libraries(PS2Core PRIVATE PCSX2_FLAGS PCSX2 \"-framework AppKit\" \"-framework Metal\" \"-framework QuartzCore\"\n"
+     "\t\t\"-framework GameController\" \"-framework CoreHaptics\" \"-framework IOKit\" \"-framework CoreAudio\"\n"
+     "\t\t\"-framework AudioToolbox\" \"-framework CoreText\" \"-framework CoreGraphics\" \"-framework ImageIO\")\n"
+     "\tadd_dependencies(PS2Core PCSX2)\n"
+     "endif()\n"
+     "\n"
+     "#-------------------------------------------------------------------------------\nif(NOT IS_SUPPORTED_COMPILER)\n"),
+])
+
+patch("platforms/android/app/src/main/cpp/3rdparty/libjpeg-turbo/cmakescripts/BuildPackages.cmake", [
+    ("if(APPLE AND NOT IOS)\n",
+     "# PlayTendo : installeur Mac sauté si ses fichiers manquent (copie d'ARMSX2 sans le dossier release).\n"
+     "if(APPLE AND NOT IOS AND EXISTS \"${CMAKE_CURRENT_SOURCE_DIR}/release/makemacpkg.in\")\n"),
 ], base=ARMSX2)

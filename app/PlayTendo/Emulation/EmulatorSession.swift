@@ -451,7 +451,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         if JITManager.benefits(system) {
             let jit = PTJITIsActive()
             PTLogLine(jit ? "Mode turbo (JIT) utilisé" : "Sans JIT : interpréteur")
+#if os(iOS)
+            // Sur Mac, le turbo est toujours là : rien à signaler.
             if jit { showToast(tr("Mode turbo (JIT) actif")) }
+#endif
         }
 
         let clock = MachClock()
@@ -768,12 +771,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     /// démarrer (l'erreur est déjà affichée).
     private func prepareDolphin(_ engine: ExternalEngine) -> Bool {
         PTLogLine("\(game.system.shortName) : lancement de \(game.url.lastPathComponent)")
+#if os(iOS)
         // Le recompilateur de Dolphin prend 256 Mo d'un seul tenant (TOTAL_CODE_SIZE, JitArm64/Jit.cpp) : sans
-        // cette place, il écrirait son code dans le vide et l'app planterait.
+        // cette place, il écrirait son code dans le vide et l'app planterait. (Mac : Dolphin prend sa mémoire
+        // exécutable lui-même, hors de la réserve.)
         if PTJITIsActive() && PTJITLargestFree() < 256 << 20 {
             fail(tr("La \(game.system.name) ne peut pas démarrer : \(Self.jitFullMessage)"))
             return false
         }
+#endif
         Self.applyDolphinImage(to: engine as? PTDolphinEngine)
         return true
     }
@@ -803,7 +809,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #endif
         if let ps2 = engine as? PTPS2Engine {
             guard let bios = ps2.pickBIOS() else {
+#if os(iOS)
                 fail(tr("Aucun BIOS PS2 trouvé. Importe celui de ta PS2 dans Réglages (roue dentée) › BIOS PS2, ou copie-le (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier BIOS de PlayTendo avec l'app Fichiers."))
+#else
+                fail(tr("Aucun BIOS PS2 trouvé. Importe celui de ta PS2 dans Réglages › BIOS PS2, ou copie-le (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier BIOS de PlayTendo (Réglages › Dossiers)."))
+#endif
                 return
             }
             PTLogLine("PS2 : lancement de \(game.url.lastPathComponent) avec le BIOS \(bios)")
@@ -874,7 +884,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #else
                     PTLogLine(jit ? "\(name) : mode turbo (JIT) utilisé" : "\(name) : sans JIT, interpréteur (très lent)")
 #endif
+#if os(iOS)
                     if jit { showToast(tr("Mode turbo (JIT) actif")) }
+#endif
                     DispatchQueue.main.async { self.state = .running }
                 } else if engineState == .stopped && (seenActivity || clock.now - bootStart > 20) {
                     failure = engine.lastError().map(trMessage) ?? tr("La console n'a pas pu démarrer le jeu.")

@@ -336,7 +336,9 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
             // rapide sans recompilation. Résolution et lissage des textures : réglages de l'utilisateur.
             [
                 "ppsspp_cpu_core": PTJITIsActive() ? "JIT" : "IR JIT",
-                "ppsspp_backend": "opengl",
+                // iPhone : « opengl » = OpenGL ES. Mac : « auto » = l'OpenGL « core » que propose l'app (avec « opengl »,
+                // PPSSPP y demanderait l'ancien OpenGL, absent du Mac).
+                "ppsspp_backend": Self.pspBackend,
                 // Aucun accès réseau (jeu en ligne) : évite toute demande d'autorisation d'iOS.
                 "ppsspp_enable_wlan": "disabled",
                 "ppsspp_enable_upnp": "disabled",
@@ -344,6 +346,14 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         default:
             [:]
         }
+    }
+
+    private static var pspBackend: String {
+#if os(iOS)
+        "opengl"
+#else
+        "auto"
+#endif
     }
 
     /// Ordre d'affichage dans la bibliothèque et la présentation (choisi par l'utilisateur le 2026-10-07) : Nintendo de

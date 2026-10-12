@@ -109,7 +109,9 @@ struct WelcomeView: View {
                         text: tr("Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, PS2), 3 fois (GameCube, Wii, 3DS) ou 2 fois (PS1)."))
             WelcomeLine(icon: "rectangle.ratio.16.to.9", text: tr("L'écran large 16:9 pour la N64 et la PS2."))
 #else
-            WelcomeLine(icon: "sparkles", text: tr("Une image nette et agrandie, en fenêtre ou en plein écran."))
+            WelcomeLine(icon: "sparkles",
+                        text: tr("Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, DS) ou 2 fois (PS1), en fenêtre ou en plein écran."))
+            WelcomeLine(icon: "rectangle.ratio.16.to.9", text: tr("L'écran large 16:9 pour la N64."))
 #endif
             WelcomeLine(icon: "clock.arrow.circlepath",
                         text: tr("Une sauvegarde rapide à tout moment, et « Continuer » pour reprendre là où tu t'étais arrêté."))

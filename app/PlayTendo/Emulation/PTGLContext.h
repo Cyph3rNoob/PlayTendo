@@ -1,4 +1,5 @@
-// PTGLContext : contexte OpenGL ES 3 dans lequel dessinent les moteurs 3D (N64, PSP).
+// PTGLContext : contexte OpenGL ES 3 (iPhone) ou OpenGL 4.1 « core » (Mac) dans lequel dessinent les moteurs 3D
+// (N64, PSP, DS en résolution augmentée).
 // Le moteur dessine dans un « framebuffer » dont l'image est stockée dans un CVPixelBuffer
 // partagé avec Metal : l'app l'affiche sans aucune copie. Trois images tournent pour que
 // l'affichage lise l'une pendant que le moteur dessine une autre. Si le partage est refusé

@@ -21,6 +21,8 @@ static NSString *loadFailure;
 
 @implementation PTDolphinEngine {
     PTDolphinFunctions _fn;
+    /// Facultative (moteurs compilés avant elle).
+    __typeof__(&PTDolphinShutdown) _shutdown;
 }
 
 + (PTDolphinEngine *)loadedEngine {
@@ -47,6 +49,7 @@ static NSString *loadFailure;
     if (!engine->_fn.name) return [self failAfterLoad:@"Moteur GameCube/Wii incomplet : " #name " manquant" error:error];
     PT_DOLPHIN_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
+    engine->_shutdown = (__typeof__(&PTDolphinShutdown))dlsym(handle, "PTDolphinShutdown");
 
     void *view = engine->_fn.PTDolphinSetup(userDirectory.fileSystemRepresentation,
                                             gameCubeSaveDirectory.fileSystemRepresentation,
@@ -77,6 +80,10 @@ static NSString *loadFailure;
 
 - (void)setPaused:(BOOL)paused {
     _fn.PTDolphinSetPaused(paused);
+}
+
+- (void)shutdown {
+    if (_shutdown) _shutdown();
 }
 
 - (void)stop {

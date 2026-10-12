@@ -35,6 +35,8 @@ void PTPS2Reset(void);
 /// réservées, dont celles que PPSSPP veut pour la PSP). À appeler avant de lancer une autre console.
 /// Bloquant, sans effet pendant une partie PS2. La console est recréée au prochain jeu PS2.
 void PTPS2ReleaseMemory(void);
+/// Fermeture de l'app (Mac) : arrêt de la partie et du thread de la console. Facultative : absente des moteurs iPhone.
+void PTPS2Shutdown(void);
 /// Avance rapide (vitesse « turbo » de PCSX2).
 void PTPS2SetTurbo(bool enabled);
 
