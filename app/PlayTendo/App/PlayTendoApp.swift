@@ -89,7 +89,11 @@ struct PlayTendoApp: App {
         .environmentObject(jit)
         .preferredColorScheme(theme.colorScheme)
         .tint(Neon.tint)
+#if os(iOS)
         .onOpenURL { url in library.importFiles([url]) }
+#else
+        .onOpenURL { url in FinderOpen.receive([url]) }
+#endif
         // En arrière-plan, iOS peut arrêter l'app sans prévenir : le journal est mis à jour sur le disque avant.
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { PTLogFlush() }
@@ -107,11 +111,40 @@ extension Notification.Name {
     static let playTendoShowSettings = Notification.Name("PlayTendoShowSettings")
 }
 
+/// Jeux ouverts depuis le Finder (double-clic, « Ouvrir avec », dépôt sur l'icône du Dock) : gardés ici jusqu'à ce que
+/// la bibliothèque les prenne (l'app peut avoir été lancée par cette ouverture), qui les ajoute puis lance le jeu.
+@MainActor
+enum FinderOpen {
+    static let notification = Notification.Name("PlayTendoOpenFiles")
+    private static var pending: [URL] = []
+    private static var recent: [(url: URL, time: Date)] = []
+
+    static func receive(_ urls: [URL]) {
+        let now = Date()
+        recent.removeAll { now.timeIntervalSince($0.time) > 2 }
+        // Le même fichier peut arriver deux fois (délégué de l'app et SwiftUI) : une seule fois suffit.
+        let new = urls.filter { url in !recent.contains { $0.url == url } }
+        guard !new.isEmpty else { return }
+        recent += new.map { (url: $0, time: now) }
+        pending += new
+        NotificationCenter.default.post(name: notification, object: nil)
+    }
+
+    static func take() -> [URL] {
+        defer { pending = [] }
+        return pending
+    }
+}
+
 /// Mac : l'app se ferme avec sa fenêtre, après avoir arrêté proprement la partie en cours (sauvegarde du jeu écrite).
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
     private var replied = false
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        FinderOpen.receive(urls)
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let session = EmulatorSession.active else { return .terminateNow }

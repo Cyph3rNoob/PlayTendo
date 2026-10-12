@@ -1,0 +1,35 @@
+PlayTendo pour Mac
+==================
+
+Il faut un Mac avec puce Apple (M1 ou plus récent) et macOS 14 ou plus récent.
+
+1. Glisse PlayTendo sur le dossier Applications, à côté.
+2. Ouvre PlayTendo depuis le dossier Applications.
+   Sur un autre Mac que celui qui a fabriqué l'app, macOS la bloque la première fois : elle n'est pas vérifiée
+   par Apple. Ouvre alors Réglages Système › Confidentialité et sécurité, puis clique sur « Ouvrir quand même »
+   en bas de la page.
+3. Ajoute tes jeux : glisse-les dans la fenêtre, utilise le bouton +, ou double-clique sur un jeu dans le Finder.
+   Les archives .zip, .7z et .rar se décompressent toutes seules.
+4. Au clavier, Échap met le jeu en pause. Les touches se changent dans les Réglages (⌘,).
+   Une manette Bluetooth ou USB marche aussi.
+
+Aucun jeu ni BIOS n'est fourni : utilise les tiens.
+App personnelle, non affiliée à Nintendo ni à Sony.
+
+
+PlayTendo for Mac
+=================
+
+Requires a Mac with Apple silicon (M1 or later) and macOS 14 or later.
+
+1. Drag PlayTendo onto the Applications folder next to it.
+2. Open PlayTendo from the Applications folder.
+   On a Mac other than the one that built the app, macOS blocks it the first time because Apple hasn't checked it.
+   Open System Settings › Privacy & Security, then click "Open Anyway" at the bottom of the page.
+3. Add your games: drag them into the window, use the + button, or double-click a game in the Finder.
+   .zip, .7z and .rar archives are unpacked automatically.
+4. On the keyboard, Esc pauses the game. Keys can be changed in Settings (⌘,).
+   A Bluetooth or USB controller works too.
+
+No games or BIOS files are included: use your own.
+Personal app, not affiliated with Nintendo or Sony.

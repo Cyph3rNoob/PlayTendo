@@ -19,6 +19,10 @@ struct LibraryView: View {
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
     /// Thème changé dans les Réglages : même chose.
     @AppStorage(AppTheme.key) private var theme = AppTheme.neon
+#if os(macOS)
+    /// Présentation pas encore vue : un jeu ouvert depuis le Finder est seulement ajouté (elle le cacherait).
+    @AppStorage(WelcomeView.seenKey) private var welcomeSeen = 0
+#endif
 
     var body: some View {
         ZStack {
@@ -80,6 +84,17 @@ struct LibraryView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .playTendoShowSettings)) { _ in
             if playing == nil { showingSettings = true }
+        }
+        // Jeux ouverts depuis le Finder : ajoutés, puis lancés (un seul jeu, et aucune partie en cours).
+        .onReceive(NotificationCenter.default.publisher(for: FinderOpen.notification)) { _ in openFromFinder() }
+        .onAppear(perform: openFromFinder)
+        .onChange(of: library.gameToLaunch) { _, game in
+            guard let game else { return }
+            library.gameToLaunch = nil
+            guard playing == nil, waitingForJIT == nil, welcomeSeen >= WelcomeView.version else { return }
+            showingSettings = false
+            showingAbout = false
+            play(game)
         }
 #endif
         .sheet(isPresented: $showingAbout) {
@@ -202,6 +217,14 @@ struct LibraryView: View {
         metadata.markPlayed(game)
         playing = game
     }
+
+#if os(macOS)
+    private func openFromFinder() {
+        let urls = FinderOpen.take()
+        guard !urls.isEmpty else { return }
+        library.importFiles(urls, launch: true)
+    }
+#endif
 
     // MARK: Haut de page
 

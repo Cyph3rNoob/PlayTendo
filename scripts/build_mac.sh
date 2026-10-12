@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Compile l'app PlayTendo pour Mac (Apple Silicon, macOS 14 minimum) en version finale et la range dans
-# le dossier du projet : PlayTendo-Mac/PlayTendo.app (double-cliquer pour l'ouvrir). Signature locale (« ad hoc »),
+# le dossier du projet : PlayTendo-Mac/PlayTendo.app (double-cliquer pour l'ouvrir), et PlayTendo-Mac/PlayTendo.dmg
+# (image disque à donner : l'app, un raccourci vers Applications et un Lisez-moi). Signature locale (« ad hoc »),
 # sans « hardened runtime » : le mode turbo prépare lui-même sa mémoire. Compilée sur ce Mac, elle s'ouvre sans
 # avertissement ; envoyée à quelqu'un d'autre, macOS la bloquera au premier lancement (pas de notarisation, qui
 # demande un compte développeur payant).
@@ -10,7 +11,10 @@ set -e
 set -o pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD="$ROOT/build/xcode-mac"
+# « .noindex » : Spotlight ignore ce dossier, et le Mac n'y prend pas une copie de travail de l'app pour ouvrir les
+# jeux (double-clic dans le Finder).
+BUILD="$ROOT/build/xcode-mac.noindex"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 LOG="$ROOT/build/logs/app-mac-release.log"
 OUT="$ROOT/PlayTendo-Mac"
 mkdir -p "$ROOT/build/logs"
@@ -34,8 +38,30 @@ fi
 grep -E "warning:" "$LOG" | grep "/app/PlayTendo/" | sort -u | head -20 || true
 codesign --verify --deep --strict "$APP"
 
-rm -rf "${OUT:?}"
+# Seulement l'app : le dossier reste (le Finder, s'il l'affiche, y recrée son .DS_Store pendant qu'on le vide).
+rm -rf "${OUT:?}/PlayTendo.app"
 mkdir -p "$OUT"
 # ditto garde les liens des frameworks et la signature.
 ditto "$APP" "$OUT/PlayTendo.app"
+# Types de fichiers (jeux ouverts depuis le Finder) : pris en compte tout de suite, pour cette copie seulement.
+"$LSREGISTER" -u "$APP" > /dev/null 2>&1 || true
+"$LSREGISTER" -f "$OUT/PlayTendo.app" > /dev/null 2>&1 || true
 echo "=== OK : $OUT/PlayTendo.app ($(du -sh "$OUT/PlayTendo.app" | cut -f1 | tr -d ' ')) ==="
+
+# Image disque : l'app, un raccourci vers Applications (on y glisse l'app) et un Lisez-moi.
+STAGE="$ROOT/build/dmg.noindex/PlayTendo"
+rm -rf "${STAGE:?}"
+mkdir -p "$STAGE"
+ditto "$APP" "$STAGE/PlayTendo.app"
+ln -s /Applications "$STAGE/Applications"
+cp "$ROOT/scripts/mac/Lisez-moi.txt" "$STAGE/Lisez-moi.txt"
+"$LSREGISTER" -u "$STAGE/PlayTendo.app" > /dev/null 2>&1 || true
+rm -f "$OUT/PlayTendo.dmg"
+hdiutil create -quiet -volname PlayTendo -srcfolder "$STAGE" -fs APFS -format ULFO "$OUT/PlayTendo.dmg"
+rm -rf "${STAGE:?}"
+hdiutil verify -quiet "$OUT/PlayTendo.dmg"
+echo "=== OK : $OUT/PlayTendo.dmg ($(du -sh "$OUT/PlayTendo.dmg" | cut -f1 | tr -d ' ')) ==="
+# Une app déjà ouverte garde l'ancienne version (moteurs listés à son lancement) jusqu'à ce qu'on la relance.
+if pgrep -f "$OUT/PlayTendo.app/Contents/MacOS/PlayTendo" > /dev/null; then
+  echo "!!! PlayTendo est encore ouverte avec l'ancienne version : quitte-la (⌘Q) puis rouvre-la."
+fi

@@ -195,19 +195,10 @@ struct SettingsView: View {
     }
 
 #if os(macOS)
-    /// Mac : les touches du clavier, les dossiers de PlayTendo et le mode turbo (toujours actif, rien à installer).
+    /// Mac : les touches du clavier (changeables), les dossiers de PlayTendo et le mode turbo (toujours actif, rien à
+    /// installer).
     @ViewBuilder private var macSections: some View {
-        Section {
-            ForEach(KeyboardMap.legend, id: \.0) { action, keys in
-                LabeledContent(action) {
-                    Text(keys).font(Neon.mono(13, weight: .semibold)).foregroundStyle(Neon.cyan)
-                }
-            }
-        } header: {
-            Text(tr("Clavier"))
-        } footer: {
-            Text(tr("Touches à la même place sur un clavier AZERTY ou QWERTY ; leur nom suit ton clavier. Une manette Bluetooth ou USB (Xbox, PlayStation, Switch…) marche aussi, et prend la main dès qu'on s'en sert."))
-        }
+        KeyboardSettingsSections()
 
         Section {
             Button {

@@ -84,6 +84,28 @@ else
   echo "OK  MoltenVK deja present"
 fi
 
+# MoltenVK pour Mac (même version) : l'image de la 3DS dans l'app Mac. Vérifié par l'empreinte SHA-256 que GitHub
+# publie pour ce fichier de la version.
+MOLTENVK_MACOS_SHA256=f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e
+if [ ! -d MoltenVK-macos ]; then
+  echo ""
+  echo ">>> MoltenVK pour Mac (version $MOLTENVK_TAG, 60 Mo)"
+  curl -fL --progress-bar "https://github.com/KhronosGroup/MoltenVK/releases/download/$MOLTENVK_TAG/MoltenVK-macos.tar" \
+    -o MoltenVK-macos.tar
+  actual=$(shasum -a 256 MoltenVK-macos.tar | awk '{print $1}')
+  if [ "$actual" != "$MOLTENVK_MACOS_SHA256" ]; then
+    echo "!!! MoltenVK pour Mac : empreinte SHA-256 différente de celle publiée ($actual)"
+    rm -f MoltenVK-macos.tar
+    exit 1
+  fi
+  echo "OK  empreinte SHA-256 vérifiée"
+  rm -rf MoltenVK-macos.tmp && mkdir MoltenVK-macos.tmp && tar -xf MoltenVK-macos.tar -C MoltenVK-macos.tmp
+  rm MoltenVK-macos.tar
+  mv MoltenVK-macos.tmp MoltenVK-macos
+else
+  echo "OK  MoltenVK pour Mac deja present"
+fi
+
 # Archives importées (.zip, .7z, .rar) : libarchive (BSD-2-Clause) et le décompresseur LZMA des .7z, liblzma
 # (xz, 0BSD). Compilées par scripts/build_libarchive.sh.
 clone libarchive   https://github.com/libarchive/libarchive.git v3.8.9

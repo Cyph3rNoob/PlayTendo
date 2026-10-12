@@ -19,7 +19,16 @@ final class GameLibrary: ObservableObject {
     func refresh() {
         Task.detached(priority: .userInitiated) {
             let found = Self.scan(Paths.games)
-            await MainActor.run { self.games = found }
+            await MainActor.run {
+                self.games = found
+                if let pending = self.pendingLaunch {
+                    let path = pending.resolvingSymlinksInPath().path
+                    if let game = found.first(where: { $0.url.resolvingSymlinksInPath().path == path }) {
+                        self.pendingLaunch = nil
+                        self.gameToLaunch = game
+                    }
+                }
+            }
         }
     }
 
@@ -108,6 +117,14 @@ final class GameLibrary: ObservableObject {
     private var importAdded = 0
     private var importPresent = 0
     private var importFailuresPending: [String] = []
+    /// Fichiers de jeu ajoutés (ou déjà là) par l'import en cours, et lancement demandé à la fin (jeu ouvert depuis le
+    /// Finder).
+    private var importGameFiles: [URL] = []
+    private var launchAfterImport = false
+    /// Fichier du jeu à lancer dès que la bibliothèque relue le contient (ses sauvegardes viennent de cette lecture).
+    private var pendingLaunch: URL?
+    /// Jeu à lancer : celui ouvert depuis le Finder, une fois ajouté (la bibliothèque le démarre puis remet nil).
+    @Published var gameToLaunch: Game?
 #if os(iOS)
     private var importBackgroundTask = UIBackgroundTaskIdentifier.invalid
 #endif
@@ -128,8 +145,10 @@ final class GameLibrary: ObservableObject {
         let count: Int
     }
 
-    func importFiles(_ urls: [URL]) {
+    /// `launch` : jeu ouvert depuis le Finder ; s'il n'y a qu'un jeu dans ce qui est ajouté, il est lancé ensuite.
+    func importFiles(_ urls: [URL], launch: Bool = false) {
         guard !urls.isEmpty else { return }
+        if launch { launchAfterImport = true }
         importQueue += urls
         importCount += urls.count
         guard !importRunning else { return }
@@ -217,8 +236,12 @@ final class GameLibrary: ObservableObject {
 
     private func recordImport(name: String, result: ImportResult?, failure: String?) {
         switch result {
-        case .added(let count): importAdded += count
-        case .alreadyThere: importPresent += 1
+        case .added(let count, let files):
+            importAdded += count
+            importGameFiles += files
+        case .alreadyThere(let files):
+            importPresent += 1
+            importGameFiles += files
         case .unsupported: importFailuresPending.append(tr("\(name) : format non reconnu"))
         case .noGame: importFailuresPending.append(tr("\(name) : aucun jeu reconnu dans l'archive"))
         case .cia3DS:
@@ -240,6 +263,9 @@ final class GameLibrary: ObservableObject {
         }
         if !parts.isEmpty { message = parts.joined(separator: ", ") }
         importFailures = importFailuresPending
+        if launchAfterImport && !cancelled { pendingLaunch = Self.singleGame(in: importGameFiles) }
+        launchAfterImport = false
+        importGameFiles = []
 
         importRunning = false
         importProgress = nil
@@ -263,10 +289,27 @@ final class GameLibrary: ObservableObject {
 #endif
     }
 
+    /// Le fichier du jeu à lancer parmi ces fichiers, s'il n'y a qu'un jeu : une liste .m3u plutôt que ses disques, un
+    /// .cue plutôt que ses pistes (qui ne sont pas des jeux).
+    private static func singleGame(in files: [URL]) -> URL? {
+        var games = Set(files.map(\.standardizedFileURL)).filter { GameSystem.detect($0) != nil }
+        if games.count > 1 {
+            for preferred in ["m3u", "cue"] {
+                let kept = games.filter { $0.pathExtension.lowercased() == preferred }
+                if !kept.isEmpty {
+                    games = kept
+                    break
+                }
+            }
+        }
+        return games.count == 1 ? games.first : nil
+    }
+
     private enum ImportResult {
-        case added(Int)
+        /// Nombre de fichiers écrits ; ceux restés dans Jeux (un BIOS part dans BIOS).
+        case added(Int, [URL])
         /// Déjà dans Jeux (ou BIOS), sous-dossiers compris, ou même nom et même taille : rien n'est copié.
-        case alreadyThere
+        case alreadyThere([URL])
         case unsupported
         /// Archive lue, mais sans aucun fichier de jeu (ni BIOS) reconnu.
         case noGame
@@ -334,17 +377,16 @@ final class GameLibrary: ObservableObject {
         // Comparaison des chemins réels : l'app Fichiers peut donner « /private/var/… » pour « /var/… ».
         let folder = destination.deletingLastPathComponent().resolvingSymlinksInPath().path + "/"
         if url.resolvingSymlinksInPath().path.hasPrefix(folder) {
-            return .alreadyThere
+            return .alreadyThere([url])
         }
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? -1
-        if isSameFile(destination, size: size) { return .alreadyThere }
+        if isSameFile(destination, size: size) { return .alreadyThere([destination]) }
         let target = uniqueURL(destination)
         let name = target.lastPathComponent
         try PTFileCopy.copyItem(at: url, to: target) { copied, total in update(.copying, name, copied, total) }
         stats.written = max(size, 0)
         stats.files = 1
-        moveIfPS2BIOS(target)
-        return .added(1)
+        return .added(1, moveIfPS2BIOS(target) ? [] : [target])
     }
 
     /// Décompresse dans Jeux (ou BIOS) chaque jeu, BIOS ou piste de l'archive ; le reste est sauté.
@@ -354,6 +396,7 @@ final class GameLibrary: ObservableObject {
         var added = 0
         var present = 0
         var hasCIA = false
+        var files: [URL] = []
         while try archive.nextEntry() {
             stats.format = archive.formatName
             let name = (archive.entryPath as NSString).lastPathComponent
@@ -362,6 +405,7 @@ final class GameLibrary: ObservableObject {
             guard let destination = destination(forFileNamed: name) else { continue }
             if isSameFile(destination, size: archive.entrySize) {
                 present += 1
+                files.append(destination)
                 continue
             }
             let size = max(archive.entrySize, 0)
@@ -376,11 +420,11 @@ final class GameLibrary: ObservableObject {
             }
             stats.written += written
             stats.files += 1
-            moveIfPS2BIOS(target)
+            if !moveIfPS2BIOS(target) { files.append(target) }
             added += 1
         }
-        if added > 0 { return .added(added) }
-        if present > 0 { return .alreadyThere }
+        if added > 0 { return .added(added, files) }
+        if present > 0 { return .alreadyThere(files) }
         return hasCIA ? .cia3DS : .noGame
     }
 

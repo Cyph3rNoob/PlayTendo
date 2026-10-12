@@ -4,9 +4,13 @@ import Foundation
 /// les applique dès la reprise).
 enum N3DSSettings {
     /// Définition de rendu, en multiple de l'écran du haut (400×240). Au-delà de x3, l'écran de l'iPhone
-    /// n'afficherait rien de plus. x1 par défaut.
+    /// n'afficherait rien de plus ; sur Mac (fenêtre en plein écran), x4. x1 par défaut.
     enum Resolution: Int, CaseIterable, Identifiable {
+#if os(macOS)
+        case x1 = 1, x2, x3, x4
+#else
         case x1 = 1, x2, x3
+#endif
 
         var id: Int { rawValue }
         var label: String { "x\(rawValue)" }

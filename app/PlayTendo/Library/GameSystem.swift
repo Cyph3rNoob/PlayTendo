@@ -307,10 +307,10 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "melonds_show_sensor_reading": "disabled",
             ].merging(DSSettings.coreOptions) { $1 }
         case .n3ds:
-            // Vulkan (MoltenVK) : le seul rendu matériel du moteur sur iPhone. Écrans toujours rendus empilés (le bas
-            // centré sous le haut) ; l'app découpe et place ensuite chacun d'eux. Stick droit = stick C seulement
-            // (pas de pointeur : on touche l'écran du bas). Recompilateur si la réserve JIT de l'app est prête
-            // (le moteur vérifie aussi GET_JIT_CAPABLE).
+            // Vulkan (MoltenVK) : le seul rendu matériel du moteur sur iPhone et sur Mac. Écrans toujours rendus
+            // empilés (le bas centré sous le haut) ; l'app découpe et place ensuite chacun d'eux. Stick droit = stick C
+            // seulement (pas de pointeur : on touche l'écran du bas). Recompilateur : sur iPhone si la réserve JIT de
+            // l'app est prête (le moteur vérifie aussi GET_JIT_CAPABLE), toujours sur Mac (MAP_JIT).
             [
                 "citra_graphics_api": "Vulkan",
                 "citra_layout_option": "default",

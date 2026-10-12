@@ -29,6 +29,7 @@
 #include <mach/mach.h>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "Common/FileUtil.h"
@@ -324,7 +325,9 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
 
 /// Fermeture de l'app : Dolphin arrêté en règle (manettes, réglages, journal). Sans cela, à la sortie du programme,
 /// ses fils encore actifs se heurtent à des objets déjà détruits (« recursive_mutex lock failed » : plantage en
-/// quittant l'app Mac).
+/// quittant l'app Mac). Comme DolphiniOS (applicationWillTerminate) : partie arrêtée et attendue, puis
+/// Core::Shutdown rejoint le fil d'émulation ; après une partie il reste « joignable » même fini, et le détruire
+/// à la sortie du programme sans l'avoir rejoint appelle std::terminate (plantage en quittant après une partie).
 PTDOLPHIN_EXPORT void PTDolphinShutdown(void)
 {
   if (!s_view)
@@ -333,6 +336,12 @@ PTDOLPHIN_EXPORT void PTDolphinShutdown(void)
     auto& system = Core::System::GetInstance();
     if (Core::IsRunningOrStarting(system))
       Core::Stop(system);
+    // Au plus 5 s : un fil d'émulation bloqué ne doit pas empêcher l'app de se fermer.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (Core::GetState(system) != Core::State::Uninitialized && std::chrono::steady_clock::now() < deadline)
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (Core::GetState(system) == Core::State::Uninitialized)
+      Core::Shutdown(system);
     Config::Save();
     UICommon::ShutdownControllers();
     UICommon::Shutdown();
