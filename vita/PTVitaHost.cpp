@@ -407,6 +407,8 @@ static void PTVitaRunSession(std::string title_id) {
         // Précision : relue par Vita3K à chaque lancement (begin_launch → set_current_config).
         emuenv.cfg.high_accuracy = s_highAccuracy.load();
         emuenv.cfg.disable_surface_sync = !s_highAccuracy.load();
+        // Mémoire mappée (retouche 15 de patch_vita3k.py) : sans elle, pas de synchro des surfaces.
+        emuenv.cfg.memory_mapping = "double-buffer";
         LOG_INFO("[PlayTendo] Précision du rendu : {}", s_highAccuracy.load() ? "haute" : "normale");
         LOG_INFO("[PlayTendo] Démarrage de {}", request.app_path);
 

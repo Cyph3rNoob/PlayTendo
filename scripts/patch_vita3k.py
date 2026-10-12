@@ -40,6 +40,16 @@ l'extérieur), que l'app charge comme les moteurs PS2 et GameCube/Wii (VitaCore.
      partagent ce programme de sommets ne dessinaient plus rien (menus invisibles même sans masque) ;
    - `use_mask_bit` entre dans la signature du cache des shaders (renderer.cpp) : les shaders déjà enregistrés,
      dont ceux cassés par le point précédent, sont effacés au premier lancement.
+15. Mémoire mappée gardée sur iPhone (essai, 2026-10-12) : Vita3K la coupe sur tous les appareils Apple (renderer.cpp,
+   « we need to make a copy of the vertex buffer for moltenvk »), seulement parce que Metal veut des flux de sommets
+   au pas multiple de 4. Or sans elle, pas de synchro des surfaces : textures de Gravity Rush qui clignotent selon
+   l'angle de la caméra (son correctif sur PC : précision haute + Surface Sync). MoltenVK a ce qu'il faut (adresses de
+   tampons, lecture de vec4 alignées sur 4 octets : essai sur le Mac M3, 2026-10-12). Méthode « double tampon ».
+   - les flux de sommets au pas ou au début non multiple de 4 sont copiés et réalignés à part, comme sans mémoire
+     mappée (scene.cpp) ; de même les indices dont le début n'est pas multiple de 4 (leur plus grand indice est
+     calculé ici : il fixe la taille des flux de sommets) ; tampons tournants créés aussi dans ce mode (creation.cpp) ;
+   - le pilote demande la méthode à chaque partie (PTVitaHost.cpp) ; le cache des shaders change de lui-même
+     (`use_memory_mapping` est dans sa signature).
 """
 import os
 import sys
@@ -710,4 +720,67 @@ patch("vita3k/renderer/src/vulkan/renderer.cpp", [
     ("    features_mask.use_scaled_attributes = pipeline_cache.support_scaled_vertex_attribute;\n",
      "    features_mask.use_scaled_attributes = pipeline_cache.support_scaled_vertex_attribute;\n"
      "    features_mask.use_mask_bit = features.use_mask_bit; // PlayTendo : shaders refaits quand le masque change\n"),
+])
+
+# 15. Mémoire mappée gardée sur iPhone ; sommets et indices mal alignés pour Metal copiés à part.
+patch("vita3k/renderer/src/vulkan/renderer.cpp", [
+    ("#ifdef __APPLE__\n        // we need to make a copy of the vertex buffer for moltenvk, so disable memory mapping\n"
+     "        support_memory_mapping = false;\n#endif\n",
+     "#if defined(__APPLE__) && !defined(PLAYTENDO_IOS)\n"
+     "        // we need to make a copy of the vertex buffer for moltenvk, so disable memory mapping\n"
+     "        support_memory_mapping = false;\n"
+     "#endif\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "        // PlayTendo : mémoire mappée gardée (sans elle, pas de synchro des surfaces) ; seuls les sommets et indices\n"
+     "        // mal alignés pour Metal sont copiés à part (scene.cpp).\n"
+     "        LOG_INFO(\"[PlayTendo] Mémoire mappée possible : {} (adresses de tampons {}, disposition standard {})\",\n"
+     "            support_memory_mapping, support_buffer_device_address, support_standard_layout);\n"
+     "#endif\n"),
+])
+patch("vita3k/renderer/src/vulkan/creation.cpp", [
+    ("        std::fill_n(vertex_stream_buffers, SCE_GXM_MAX_VERTEX_STREAMS, state.default_buffer.buffer);\n",
+     "        std::fill_n(vertex_stream_buffers, SCE_GXM_MAX_VERTEX_STREAMS, state.default_buffer.buffer);\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "        // PlayTendo : copies des sommets et indices mal alignés pour Metal (scene.cpp).\n"
+     "        vertex_stream_ring_buffer.create();\n"
+     "        index_stream_ring_buffer.create();\n"
+     "#endif\n"),
+])
+patch("vita3k/renderer/src/vulkan/scene.cpp", [
+    ("            if (context.state.features.enable_memory_mapping) {\n"
+     "                auto [buffer, offset] = context.state.get_matching_mapping(state.vertex_streams[i].data.cast<void>());\n",
+     "#ifdef PLAYTENDO_IOS\n"
+     "            // PlayTendo : Metal veut un pas et un début de flux multiples de 4 ; sinon copie réalignée, comme sans\n"
+     "            // mémoire mappée.\n"
+     "            const bool playtendo_aligned = vertex_program.streams[i].stride % 4 == 0 && state.vertex_streams[i].data.address() % 4 == 0;\n"
+     "            if (context.state.features.enable_memory_mapping && !playtendo_aligned) {\n"
+     "                LOG_INFO_ONCE(\"[PlayTendo] Sommets mal alignés pour Metal copiés à part (pas {}, adresse {})\",\n"
+     "                    vertex_program.streams[i].stride, log_hex(state.vertex_streams[i].data.address()));\n"
+     "                context.vertex_stream_buffers[i] = context.vertex_stream_ring_buffer.handle();\n"
+     "            }\n"
+     "            if (context.state.features.enable_memory_mapping && playtendo_aligned) {\n"
+     "#else\n"
+     "            if (context.state.features.enable_memory_mapping) {\n"
+     "#endif\n"
+     "                auto [buffer, offset] = context.state.get_matching_mapping(state.vertex_streams[i].data.cast<void>());\n"),
+    ("    uint32_t max_index = 0;\n    if (use_memory_mapping) {\n",
+     "    uint32_t max_index = 0;\n"
+     "#ifdef PLAYTENDO_IOS\n"
+     "    // PlayTendo : indices au début non multiple de 4 copiés à part pour Metal ; leur plus grand indice (taille des\n"
+     "    // flux de sommets) est alors calculé ici.\n"
+     "    const bool playtendo_copy_indices = use_memory_mapping && (indices.address() % 4) != 0;\n"
+     "    if (playtendo_copy_indices && count > 0) {\n"
+     "        LOG_INFO_ONCE(\"[PlayTendo] Indices mal alignés pour Metal copiés à part (adresse {})\", log_hex(indices.address()));\n"
+     "        if (format == SCE_GXM_INDEX_FORMAT_U16) {\n"
+     "            const uint16_t *data = static_cast<const uint16_t *>(indices_ptr);\n"
+     "            max_index = *std::max_element(data, data + count);\n"
+     "        } else {\n"
+     "            const uint32_t *data = static_cast<const uint32_t *>(indices_ptr);\n"
+     "            max_index = *std::max_element(data, data + count);\n"
+     "        }\n"
+     "    }\n"
+     "    if (use_memory_mapping && !playtendo_copy_indices) {\n"
+     "#else\n"
+     "    if (use_memory_mapping) {\n"
+     "#endif\n"),
 ])
