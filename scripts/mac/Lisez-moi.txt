@@ -13,7 +13,8 @@ Il faut un Mac avec puce Apple (M1 ou plus récent) et macOS 14 ou plus récent.
    PS Vita : glisse le dossier du jeu extrait de ta console (« PCSA00011 »…) et le fichier PSVUPDAT.PUP
    (la mise à jour officielle de la console). Ses DLC et mises à jour (dossiers addcont et patch de ta
    console) s'installent au prochain lancement du jeu ; un mod rePatch se glisse avec son dossier rePatch.
-4. Au clavier, Échap met le jeu en pause. Les touches se changent dans les Réglages (⌘,).
+4. Au clavier, Échap met le jeu en pause. Chaque console a ses touches : elles se changent dans les
+   Réglages (⌘,) › Clavier, ou pendant une partie dans le menu pause › Touches clavier.
    Une manette Bluetooth ou USB marche aussi.
 
 Aucun jeu ni BIOS n'est fourni : utilise les tiens.
@@ -34,7 +35,8 @@ Requires a Mac with Apple silicon (M1 or later) and macOS 14 or later.
    PS Vita: drag the game folder extracted from your console (“PCSA00011”…) and the PSVUPDAT.PUP file
    (the console's official update). Its DLC and updates (addcont and patch folders from your console)
    are installed the next time the game is launched; a rePatch mod is dragged with its rePatch folder.
-4. On the keyboard, Esc pauses the game. Keys can be changed in Settings (⌘,).
+4. On the keyboard, Esc pauses the game. Each console has its own keys: change them in
+   Settings (⌘,) › Keyboard, or during a game in the pause menu › Keyboard keys.
    A Bluetooth or USB controller works too.
 
 No games or BIOS files are included: use your own.

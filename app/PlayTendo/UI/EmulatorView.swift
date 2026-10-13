@@ -75,6 +75,10 @@ struct EmulatorView: View {
             gamepad.stickMovesDPad = !controls.hasAnalogStick
             gamepad.nintendoLetters = controls.nintendoLetters
             ScreenAwake.hold(.playing)
+#if os(macOS)
+            // Réglages › Clavier s'ouvrira sur les touches de cette console.
+            UserDefaults.standard.set(controls.keyboardID, forKey: KeyCapture.consoleKey)
+#endif
             session.setWiimote(controls.isWiimote)
             session.start()
         }
@@ -183,6 +187,7 @@ struct EmulatorView: View {
     private func pauseMenu(landscape: Bool) -> some View {
         let swap: (() -> Void)? = controls.usesTouchScreen ? { swapScreens() } : nil
         return PauseMenu(session: session,
+                         scheme: controls,
                          compact: landscape,
                          onResume: { closeMenu() },
                          onReset: { confirmingReset = true },
@@ -279,6 +284,8 @@ struct EmulatorView: View {
 private struct PauseMenu: View {
     @ObservedObject var session: EmulatorSession
     @EnvironmentObject private var metadata: GameMetadata
+    /// Commandes de la partie (Wii : celles de la manette choisie).
+    let scheme: ControlScheme
     /// Paysage : boutons sur deux colonnes pour tenir dans la hauteur de l'écran.
     let compact: Bool
     let onResume: () -> Void
@@ -318,6 +325,10 @@ private struct PauseMenu: View {
     @AppStorage(N64Settings.formatKey) private var n64Format = N64Settings.Format.standard.rawValue
     @AppStorage(PS1Settings.resolutionKey) private var ps1Resolution = PS1Settings.Resolution.x1.rawValue
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
+#if os(macOS)
+    /// Mac : touches du clavier de la console en cours, à la place des boutons du menu.
+    @State private var showingKeys = false
+#endif
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
     private var hasImageSettings: Bool {
@@ -380,6 +391,7 @@ private struct PauseMenu: View {
             MacWindow.toggleFullScreen()
             onResume()
         })
+        items.append(Item(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true })
 #endif
         return items
     }
@@ -399,24 +411,15 @@ private struct PauseMenu: View {
             VStack(spacing: compact ? 8 : 10) {
                 header
                     .padding(.bottom, compact ? 2 : 6)
-                MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
-                if compact {
-                    grid(items)
-                    if hasImageSettings { imageSettings }
-                    grid(endItems)
+#if os(macOS)
+                if showingKeys {
+                    KeyboardPanel(scheme: scheme, onBack: { showingKeys = false })
                 } else {
-                    if hasEngineExtras {
-                        HStack(spacing: 10) {
-                            button(items[0])
-                            button(items[1])
-                        }
-                        ForEach(items.dropFirst(2)) { button($0) }
-                    } else {
-                        ForEach(items) { button($0) }
-                    }
-                    if hasImageSettings { imageSettings }
-                    ForEach(endItems) { button($0) }
+                    menuContent
                 }
+#else
+                menuContent
+#endif
             }
             .padding(compact ? 16 : 20)
             .frame(maxWidth: compact ? 540 : 340)
@@ -426,6 +429,28 @@ private struct PauseMenu: View {
                                             lineWidth: 1.2))
             .neonGlow(Neon.cyan, radius: 14)
             .padding(compact ? 12 : 24)
+        }
+    }
+
+    /// Boutons du menu, réglages d'image, recommencer et quitter.
+    @ViewBuilder private var menuContent: some View {
+        MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
+        if compact {
+            grid(items)
+            if hasImageSettings { imageSettings }
+            grid(endItems)
+        } else {
+            if hasEngineExtras {
+                HStack(spacing: 10) {
+                    button(items[0])
+                    button(items[1])
+                }
+                ForEach(items.dropFirst(2)) { button($0) }
+            } else {
+                ForEach(items) { button($0) }
+            }
+            if hasImageSettings { imageSettings }
+            ForEach(endItems) { button($0) }
         }
     }
 
@@ -695,3 +720,36 @@ private struct NeonSegments: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+#if os(macOS)
+/// Menu pause › Touches clavier (Mac) : les touches de la console en cours seulement, comme dans Réglages › Clavier
+/// (clic sur une touche puis la nouvelle, essai en direct, « Annuler »). Elles servent dès la reprise du jeu.
+private struct KeyboardPanel: View {
+    let scheme: ControlScheme
+    let onBack: () -> Void
+    @ObservedObject private var bindings = KeyBindings.shared
+    @StateObject private var capture = KeyCapture()
+
+    var body: some View {
+        VStack(spacing: 10) {
+            // Tout est visible si la fenêtre est assez haute, sinon la liste défile.
+            ViewThatFits(in: .vertical) {
+                mapping
+                ScrollView { mapping }
+            }
+            HStack(spacing: 8) {
+                MenuButton(title: tr("Touches d'origine"), icon: "arrow.uturn.backward") { capture.resetAll() }
+                    .disabled(!bindings.isCustomized(scheme))
+                    .opacity(bindings.isCustomized(scheme) ? 1 : 0.4)
+                MenuButton(title: tr("Retour"), icon: "chevron.left", action: onBack)
+            }
+        }
+        .onAppear { capture.attach(to: scheme) }
+        .onDisappear { capture.detach() }
+    }
+
+    private var mapping: some View {
+        KeyboardMapping(scheme: scheme, capture: capture, neon: true)
+    }
+}
+#endif

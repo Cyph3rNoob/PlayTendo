@@ -104,15 +104,14 @@ struct WelcomeView: View {
                     SystemBadge(system: system, size: 11)
                 }
             }
-#if os(iOS)
-            WelcomeLine(icon: "sparkles",
-                        text: tr("Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, PS2), 3 fois (GameCube, Wii, 3DS) ou 2 fois (PS1)."))
-            WelcomeLine(icon: "rectangle.ratio.16.to.9", text: tr("L'écran large 16:9 pour la N64 et la PS2."))
-#else
-            WelcomeLine(icon: "sparkles",
-                        text: tr("Une image plus fine qu'à l'origine : jusqu'à 4 fois la résolution (N64, PSP, DS) ou 2 fois (PS1), en fenêtre ou en plein écran."))
-            WelcomeLine(icon: "rectangle.ratio.16.to.9", text: tr("L'écran large 16:9 pour la N64."))
-#endif
+            if let resolutionText {
+                WelcomeLine(icon: "sparkles", text: resolutionText)
+            }
+            if EmulatorSession.engineInstalled(for: .n64) {
+                WelcomeLine(icon: "rectangle.ratio.16.to.9",
+                            text: EmulatorSession.engineInstalled(for: .ps2)
+                                ? tr("L'écran large 16:9 pour la N64 et la PS2.") : tr("L'écran large 16:9 pour la N64."))
+            }
             WelcomeLine(icon: "clock.arrow.circlepath",
                         text: tr("Une sauvegarde rapide à tout moment, et « Continuer » pour reprendre là où tu t'étais arrêté."))
 #if os(iOS)
@@ -120,6 +119,60 @@ struct WelcomeView: View {
 #else
             WelcomeLine(icon: "keyboard", text: tr("Au clavier ou à la manette (Switch, Xbox, PlayStation)."))
 #endif
+        }
+    }
+
+    /// « jusqu'à 4 fois la résolution (N64, DS…), 3 fois (GameCube, Wii) ou 2 fois (PS1) », d'après les consoles de
+    /// l'app et le plus haut choix de leur réglage RÉSOLUTION (sur Mac, la 3DS et la PS Vita vont plus haut que sur
+    /// iPhone). Nil si aucune console de l'app n'en a.
+    private var resolutionText: String? {
+        var groups: [(factor: Int, names: [String])] = []
+        for system in GameSystem.displayOrder where EmulatorSession.engineInstalled(for: system) {
+            guard let factor = Self.highestResolution(of: system) else { continue }
+            if let index = groups.firstIndex(where: { $0.factor == factor }) {
+                groups[index].names.append(Self.resolutionName(of: system))
+            } else {
+                groups.append((factor, [Self.resolutionName(of: system)]))
+            }
+        }
+        groups.sort { $0.factor > $1.factor }
+        let parts = groups.enumerated().map { index, group in
+            let names = group.names.joined(separator: ", ")
+            return index == 0 ? tr("\(group.factor) fois la résolution (\(names))") : tr("\(group.factor) fois (\(names))")
+        }
+        guard let last = parts.last else { return nil }
+        let list = parts.count > 1 ? parts.dropLast().joined(separator: ", ") + tr(" ou ") + last : last
+#if os(macOS)
+        return tr("Une image plus fine qu'à l'origine : jusqu'à \(list), en fenêtre ou en plein écran.")
+#else
+        return tr("Une image plus fine qu'à l'origine : jusqu'à \(list).")
+#endif
+    }
+
+    /// Plus haut choix du réglage RÉSOLUTION du menu pause (x4 → 4), ou nil pour une console sans ce réglage.
+    private static func highestResolution(of system: GameSystem) -> Int? {
+        switch system {
+        case .n64: N64Settings.Resolution.allCases.map(\.rawValue).max()
+        case .gameCube, .wii: DolphinSettings.Resolution.allCases.map(\.rawValue).max()
+        case .nds: DSSettings.Resolution.allCases.map(\.rawValue).max()
+        case .n3ds: N3DSSettings.Resolution.allCases.map(\.rawValue).max()
+        case .psx: PS1Settings.Resolution.allCases.map(\.rawValue).max()
+        case .ps2: PS2Settings.Resolution.allCases.map(\.rawValue).max()
+        case .psp: PSPSettings.Resolution.allCases.map(\.rawValue).max()
+#if PLAYTENDO_VITA
+        case .vita: VitaSettings.Resolution.allCases.map(\.rawValue).max()
+#endif
+        default: nil
+        }
+    }
+
+    private static func resolutionName(of system: GameSystem) -> String {
+        switch system {
+        case .gameCube: "GameCube"
+#if PLAYTENDO_VITA
+        case .vita: "PS Vita"
+#endif
+        default: system.shortName
         }
     }
 

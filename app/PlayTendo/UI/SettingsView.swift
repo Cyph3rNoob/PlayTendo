@@ -1,8 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS, le BIOS PS2
-/// et le son du démarrage.
+/// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS, le BIOS PS2,
+/// le firmware de la PS Vita et le son du démarrage. Sur Mac, en trois pages (Général, Clavier, Jeux et BIOS) avec les touches de chaque console.
 struct SettingsView: View {
     @EnvironmentObject private var jit: JITManager
     @AppStorage(BootSound.enabledKey) private var bootSound = true
@@ -15,158 +15,35 @@ struct SettingsView: View {
     @State private var biosList: [PS2BIOS.Info] = []
     @State private var biosInUse: PS2BIOS.Info?
     @State private var importingBIOS = false
+    /// Ce que le sélecteur de fichier importe (un seul sélecteur pour la vue).
+    @State private var importKind = ImportKind.ps2BIOS
     @State private var biosBusy = false
     @State private var biosAlert: (title: String, text: String)?
+#if PLAYTENDO_VITA
+    @State private var vitaFiles: [VitaFirmware.Info] = []
+    @State private var vitaHasFirmware = false
+    @State private var vitaHasFonts = false
+    @State private var vitaBusy = false
+#endif
+
+    private enum ImportKind { case ps2BIOS, vitaFirmware }
+#if os(macOS)
+    /// Mac : page affichée (Général, Clavier, Jeux et BIOS), retenue d'une ouverture à l'autre.
+    @AppStorage("pageReglagesMac") private var page = "general"
+#endif
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Picker(tr("Langue"), selection: $language) {
-                        ForEach(AppLanguage.allCases) { choice in
-                            Text(choice.label).tag(choice)
-                        }
-                    }
-                    Picker(tr("Thème"), selection: $theme) {
-                        ForEach(AppTheme.allCases) { choice in
-                            Text(choice.label).tag(choice)
-                        }
-                    }
-                } footer: {
-#if os(iOS)
-                    Text(tr("Automatique : la langue de l'iPhone (le français s'il passe avant l'anglais, sinon l'anglais)."))
-#else
-                    Text(tr("Automatique : la langue du Mac (le français s'il passe avant l'anglais, sinon l'anglais)."))
-#endif
-                }
-
-#if os(macOS)
-                macSections
-#else
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: statusIcon)
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(statusColor)
-                            .neonGlow(statusColor, radius: 6)
-                            .frame(width: 30)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(statusTitle).font(.headline)
-                            if let detail = statusDetail {
-                                Text(detail).font(.subheadline).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-
-                    Picker(tr("Activation"), selection: $jit.method) {
-                        ForEach(JITManager.Method.allCases) { method in
-                            Text(method.label).tag(method)
-                        }
-                    }
-
-                    if jit.method != .off && !jit.isActive {
-                        Button {
-                            Task { try? await jit.activate() }
-                        } label: {
-                            Label(tr("Activer maintenant"), systemImage: "bolt.fill")
-                        }
-                        .disabled(isActivating)
-                    }
-                } header: {
-                    Text(tr("Mode turbo (JIT)"))
-                } footer: {
-                    Text(tr("Accélère la PSP, la PS2, la GameCube, la Wii et la 3DS : leur code est traduit pour l'iPhone au lieu d'être interprété (sans lui, la PS2, la GameCube, la Wii et la 3DS sont injouables). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un de ces jeux, et reste actif jusqu'à la fermeture de l'app."))
-                }
-
-                if jit.method == .stikDebug {
-                    Section {
-                        Requirement(text: tr("StikDebug installé"), done: stikDebugInstalled)
-                        Requirement(text: tr("Ton fichier de jumelage importé dans StikDebug"), done: jit.hasWorked ? true : nil)
-                        // Le VPN ne sert qu'au moment de l'activation : turbo actif, son absence n'est pas une erreur.
-                        Requirement(text: tr("LocalDevVPN connecté (en Wi-Fi de préférence)"),
-                                    done: vpnConnected ? true : (jit.isActive ? nil : false))
-                        Requirement(text: tr("Mode développeur activé (Réglages › Confidentialité et sécurité)"), done: jit.hasWorked ? true : nil)
-                    } header: {
-                        Text(tr("Ce qu'il faut"))
-                    } footer: {
-                        Text(tr("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin."))
-                    }
-                }
-#endif
-
-                // BIOS PS2 : seulement si la PS2 est dans l'app (sur Mac, elle arrive plus tard).
-                if EmulatorSession.engineInstalled(for: .ps2) {
-                    Section {
-                        if biosList.isEmpty {
-                            Requirement(text: tr("Aucun BIOS PS2"), done: false)
-                        }
-                        ForEach(biosList) { bios in
-                            let used = bios.fileName == biosInUse?.fileName
-                            Label {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(bios.fileName)
-                                        .font(.subheadline)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                    Text([bios.summary ?? tr("Version inconnue"), used ? tr("utilisé par la PS2") : nil]
-                                            .compactMap { $0 }.joined(separator: " · "))
-                                        .font(.caption)
-                                        .foregroundStyle(used ? Neon.cyan : Neon.dim)
-                                }
-                            } icon: {
-                                Image(systemName: used ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(used ? Color.green : Neon.dim)
-                            }
-                        }
-                        Button {
-                            importingBIOS = true
-                        } label: {
-                            if biosBusy {
-                                Label(tr("Import…"), systemImage: "hourglass")
-                            } else {
-                                Label(tr("Importer un BIOS PS2…"), systemImage: "square.and.arrow.down")
-                            }
-                        }
-                        .disabled(biosBusy)
-                    } header: {
-                        Text(tr("BIOS PS2"))
-                    } footer: {
-                        Text(tr("Obligatoire pour la PS2. Choisis le BIOS de ta console (fichier de 4 Mo, souvent « SCPH-… », n'importe quel nom ; dans un .zip, .7z ou .rar aussi) : PlayTendo vérifie que c'en est bien un et le range dans le dossier BIOS. PlayTendo n'en fournit aucun."))
-                    }
-                }
-
-                Section {
-                    Toggle(tr("Son au démarrage"), isOn: $bootSound)
-                } header: {
-                    Text(tr("Démarrage"))
-                } footer: {
-#if os(iOS)
-                    Text(tr("Joué avec l'animation d'ouverture de PlayTendo. Muet en mode silencieux, comme le son des jeux."))
-#else
-                    Text(tr("Joué avec l'animation d'ouverture de PlayTendo."))
-#endif
-                }
-            }
-            // Thème changé : la liste est refaite avec ses nouvelles couleurs.
-            .id(theme)
-            .navigationTitle(tr("Réglages"))
-#if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-#endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("OK") { dismiss() }
-                }
-            }
-            .onAppear(perform: refreshChecks)
-            .onChange(of: language) { _, _ in
-                // Tout s'affiche aussitôt dans la nouvelle langue ; le Lisez-moi suit, et les BIOS sont relus.
-                Paths.writeReadme()
-                refreshBIOS()
-            }
+        layout
             .fileImporter(isPresented: $importingBIOS, allowedContentTypes: [.item]) { result in
-                if case .success(let url) = result { importBIOS(url) }
+                guard case .success(let url) = result else { return }
+                switch importKind {
+                case .ps2BIOS: importBIOS(url)
+#if PLAYTENDO_VITA
+                case .vitaFirmware: importVitaFirmware(url)
+#else
+                case .vitaFirmware: break
+#endif
+                }
             }
             .alert(biosAlert?.title ?? "", isPresented: Binding(get: { biosAlert != nil },
                                                                 set: { if !$0 { biosAlert = nil } })) {
@@ -174,10 +51,40 @@ struct SettingsView: View {
             } message: {
                 Text(biosAlert?.text ?? "")
             }
+            .onAppear(perform: refreshChecks)
+            .onChange(of: language) { _, _ in
+                // Tout s'affiche aussitôt dans la nouvelle langue ; le Lisez-moi suit, et les BIOS sont relus.
+                Paths.writeReadme()
+                refreshBIOS()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { refreshChecks() }
             }
+            .tint(Neon.tint)
+            .preferredColorScheme(theme.colorScheme)
+    }
+
 #if os(iOS)
+    private var layout: some View {
+        NavigationStack {
+            List {
+                languageSection
+                jitSections
+                biosSection
+#if PLAYTENDO_VITA
+                vitaSection
+#endif
+                bootSection
+            }
+            // Thème changé : la liste est refaite avec ses nouvelles couleurs.
+            .id(theme)
+            .navigationTitle(tr("Réglages"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("OK") { dismiss() }
+                }
+            }
             .task {
                 // LocalDevVPN peut se connecter pendant que les réglages sont ouverts.
                 while !Task.isCancelled {
@@ -185,50 +92,320 @@ struct SettingsView: View {
                     vpnConnected = JITManager.isLocalDevVPNConnected
                 }
             }
-#endif
         }
-        .tint(Neon.tint)
-        .preferredColorScheme(theme.colorScheme)
-#if os(macOS)
-        .frame(minWidth: 540, idealWidth: 600, minHeight: 560, idealHeight: 700)
-#endif
     }
 
-#if os(macOS)
-    /// Mac : les touches du clavier (changeables), les dossiers de PlayTendo et le mode turbo (toujours actif, rien à
-    /// installer).
-    @ViewBuilder private var macSections: some View {
-        KeyboardSettingsSections()
-
+    @ViewBuilder private var jitSections: some View {
         Section {
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([Paths.games])
-            } label: {
-                Label(tr("Afficher le dossier des jeux dans le Finder"), systemImage: "folder")
+            HStack(spacing: 12) {
+                Image(systemName: statusIcon)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(statusColor)
+                    .neonGlow(statusColor, radius: 6)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(statusTitle).font(.headline)
+                    if let detail = statusDetail {
+                        Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
             }
-            Button {
-                NSWorkspace.shared.open(Paths.documents)
-            } label: {
-                Label(tr("Ouvrir le dossier PlayTendo (jeux, BIOS, sauvegardes)"), systemImage: "folder.badge.gearshape")
+            .padding(.vertical, 4)
+
+            Picker(tr("Activation"), selection: $jit.method) {
+                ForEach(JITManager.Method.allCases) { method in
+                    Text(method.label).tag(method)
+                }
+            }
+
+            if jit.method != .off && !jit.isActive {
+                Button {
+                    Task { try? await jit.activate() }
+                } label: {
+                    Label(tr("Activer maintenant"), systemImage: "bolt.fill")
+                }
+                .disabled(isActivating)
             }
         } header: {
-            Text(tr("Dossiers"))
+            Text(tr("Mode turbo (JIT)"))
         } footer: {
-            Text(tr("Les jeux posés dans le dossier Jeux apparaissent dans la bibliothèque, comme ceux ajoutés avec le bouton +."))
+            Text(tr("Accélère la PSP, la PS2, la GameCube, la Wii et la 3DS : leur code est traduit pour l'iPhone au lieu d'être interprété (sans lui, la PS2, la GameCube, la Wii et la 3DS sont injouables). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un de ces jeux, et reste actif jusqu'à la fermeture de l'app."))
         }
 
-        if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
+        if jit.method == .stikDebug {
             Section {
-                Label(jit.isActive ? tr("Actif") : statusTitle, systemImage: jit.isActive ? "bolt.fill" : statusIcon)
-                    .foregroundStyle(statusColor)
+                Requirement(text: tr("StikDebug installé"), done: stikDebugInstalled)
+                Requirement(text: tr("Ton fichier de jumelage importé dans StikDebug"), done: jit.hasWorked ? true : nil)
+                // Le VPN ne sert qu'au moment de l'activation : turbo actif, son absence n'est pas une erreur.
+                Requirement(text: tr("LocalDevVPN connecté (en Wi-Fi de préférence)"),
+                            done: vpnConnected ? true : (jit.isActive ? nil : false))
+                Requirement(text: tr("Mode développeur activé (Réglages › Confidentialité et sécurité)"), done: jit.hasWorked ? true : nil)
             } header: {
-                Text(tr("Mode turbo (JIT)"))
+                Text(tr("Ce qu'il faut"))
             } footer: {
-                Text(tr("Sur Mac, le mode turbo s'active tout seul : rien à installer."))
+                Text(tr("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin."))
             }
         }
     }
+#else
+    /// Pages des Réglages sur Mac, dans la barre de gauche.
+    private enum MacPage: String, CaseIterable, Identifiable {
+        case general, keyboard, games
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .general: tr("Général")
+            case .keyboard: tr("Clavier")
+            // Le BIOS PS2 n'y est que si la PS2 est dans l'app.
+            case .games: hasSystemFiles ? tr("Jeux et BIOS") : tr("Jeux")
+            }
+        }
+
+        /// BIOS PS2 ou firmware de la PS Vita (seulement si leur console est dans l'app).
+        private var hasSystemFiles: Bool {
+#if PLAYTENDO_VITA
+            if EmulatorSession.engineInstalled(for: .vita) { return true }
 #endif
+            return EmulatorSession.engineInstalled(for: .ps2)
+        }
+
+        var icon: String {
+            switch self {
+            case .general: "gearshape"
+            case .keyboard: "keyboard"
+            case .games: "folder"
+            }
+        }
+    }
+
+    /// Mac : une barre de gauche (Général, Clavier, Jeux et BIOS) et la page choisie, au style des réglages de macOS.
+    private var layout: some View {
+        HStack(spacing: 0) {
+            List(selection: Binding(get: { MacPage(rawValue: page) }, set: { if let choice = $0 { page = choice.rawValue } })) {
+                ForEach(MacPage.allCases) { item in
+                    Label(item.title, systemImage: item.icon).tag(item)
+                }
+            }
+            .listStyle(.sidebar)
+            .frame(width: 190)
+
+            Divider()
+
+            VStack(spacing: 0) {
+                let current = MacPage(rawValue: page) ?? .general
+                Text(current.title)
+                    .font(.title2.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 2)
+                macPage(current)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Divider()
+                HStack {
+                    Spacer()
+                    Button("OK") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                        .controlSize(.large)
+                }
+                .padding(12)
+            }
+        }
+        // Thème changé : les pages sont refaites avec leurs nouvelles couleurs.
+        .id(theme)
+        .frame(minWidth: 760, idealWidth: 820, minHeight: 540, idealHeight: 640)
+    }
+
+    @ViewBuilder private func macPage(_ current: MacPage) -> some View {
+        switch current {
+        case .general:
+            Form {
+                languageSection
+                bootSection
+                if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
+                    Section {
+                        LabeledContent(tr("Mode turbo (JIT)")) {
+                            Label(jit.isActive ? tr("Actif") : statusTitle, systemImage: jit.isActive ? "bolt.fill" : statusIcon)
+                                .foregroundStyle(statusColor)
+                        }
+                    } footer: {
+                        Text(tr("Sur Mac, le mode turbo s'active tout seul : rien à installer."))
+                    }
+                }
+            }
+            .formStyle(.grouped)
+        case .keyboard:
+            KeyboardSettingsPage()
+        case .games:
+            Form {
+                Section {
+                    LabeledContent(tr("Dossier des jeux")) {
+                        Button(tr("Afficher dans le Finder")) {
+                            NSWorkspace.shared.activateFileViewerSelecting([Paths.games])
+                        }
+                    }
+                    LabeledContent {
+                        Button(tr("Ouvrir")) { NSWorkspace.shared.open(Paths.documents) }
+                    } label: {
+                        Text(tr("Dossier PlayTendo"))
+                        Text(tr("Jeux, BIOS, sauvegardes"))
+                    }
+                } header: {
+                    Text(tr("Dossiers"))
+                } footer: {
+                    Text(tr("Les jeux posés dans le dossier Jeux apparaissent dans la bibliothèque, comme ceux ajoutés avec le bouton +."))
+                }
+                biosSection
+#if PLAYTENDO_VITA
+                vitaSection
+#endif
+            }
+            .formStyle(.grouped)
+        }
+    }
+#endif
+
+    private var languageSection: some View {
+        Section {
+            Picker(tr("Langue"), selection: $language) {
+                ForEach(AppLanguage.allCases) { choice in
+                    Text(choice.label).tag(choice)
+                }
+            }
+            Picker(tr("Thème"), selection: $theme) {
+                ForEach(AppTheme.allCases) { choice in
+                    Text(choice.label).tag(choice)
+                }
+            }
+        } footer: {
+#if os(iOS)
+            Text(tr("Automatique : la langue de l'iPhone (le français s'il passe avant l'anglais, sinon l'anglais)."))
+#else
+            Text(tr("Automatique : la langue du Mac (le français s'il passe avant l'anglais, sinon l'anglais)."))
+#endif
+        }
+    }
+
+    /// BIOS PS2 : seulement si la PS2 est dans l'app.
+    @ViewBuilder private var biosSection: some View {
+        if EmulatorSession.engineInstalled(for: .ps2) {
+            Section {
+                if biosList.isEmpty {
+                    Requirement(text: tr("Aucun BIOS PS2"), done: false)
+                }
+                ForEach(biosList) { bios in
+                    let used = bios.fileName == biosInUse?.fileName
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(bios.fileName)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text([bios.summary ?? tr("Version inconnue"), used ? tr("utilisé par la PS2") : nil]
+                                    .compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(used ? Neon.cyan : Neon.dim)
+                        }
+                    } icon: {
+                        Image(systemName: used ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(used ? Color.green : Neon.dim)
+                    }
+                }
+                Button {
+                    importKind = .ps2BIOS
+                    importingBIOS = true
+                } label: {
+                    if biosBusy {
+                        Label(tr("Import…"), systemImage: "hourglass")
+                    } else {
+                        Label(tr("Importer un BIOS PS2…"), systemImage: "square.and.arrow.down")
+                    }
+                }
+                .disabled(biosBusy)
+            } header: {
+                Text(tr("BIOS PS2"))
+            } footer: {
+                Text(tr("Obligatoire pour la PS2. Choisis le BIOS de ta console (fichier de 4 Mo, souvent « SCPH-… », n'importe quel nom ; dans un .zip, .7z ou .rar aussi) : PlayTendo vérifie que c'en est bien un et le range dans le dossier BIOS. PlayTendo n'en fournit aucun."))
+            }
+        }
+    }
+
+#if PLAYTENDO_VITA
+    /// PS Vita : ce que la mémoire de la console contient, les fichiers .PUP du dossier BIOS et l'import d'un nouveau
+    /// (seulement si la PS Vita est dans l'app).
+    @ViewBuilder private var vitaSection: some View {
+        if EmulatorSession.engineInstalled(for: .vita) {
+            Section {
+                if vitaHasFirmware {
+                    Requirement(text: tr("Firmware installé dans la console"), done: true)
+                } else if vitaFiles.isEmpty {
+                    Requirement(text: tr("Firmware manquant : importe PSVUPDAT.PUP"), done: false)
+                } else {
+                    Requirement(text: tr("Firmware : installé au prochain jeu PS Vita"), done: nil)
+                }
+                if vitaHasFonts {
+                    Requirement(text: tr("Polices installées dans la console"), done: true)
+                } else {
+                    Requirement(text: tr("Polices absentes (facultatives : certains textes peuvent manquer)"), done: nil)
+                }
+                ForEach(vitaFiles) { file in
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(file.fileName)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text([file.version.map { tr("Version \($0)") } ?? tr("Version inconnue"), vitaStatus(of: file)]
+                                    .joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(file.installed ? Neon.cyan : Neon.dim)
+                        }
+                    } icon: {
+                        Image(systemName: file.installed ? "checkmark.circle.fill" : "doc")
+                            .foregroundStyle(file.installed ? Color.green : Neon.dim)
+                    }
+                }
+                Button {
+                    importKind = .vitaFirmware
+                    importingBIOS = true
+                } label: {
+                    if vitaBusy {
+                        Label(tr("Import…"), systemImage: "hourglass")
+                    } else {
+                        Label(tr("Importer un fichier .PUP…"), systemImage: "square.and.arrow.down")
+                    }
+                }
+                .disabled(vitaBusy)
+            } header: {
+                Text("PS Vita")
+            } footer: {
+                Text(tr("PSVUPDAT.PUP (le firmware, obligatoire) et PSP2UPDAT.PUP (les polices, conseillées) sont les mises à jour officielles de la console. PlayTendo vérifie le fichier, le range dans le dossier BIOS et l'installe au lancement d'un jeu PS Vita. PlayTendo n'en fournit aucun."))
+            }
+        }
+    }
+
+    /// « installé », « au prochain jeu PS Vita », ou « pas nécessaire » si la console a déjà firmware et polices.
+    private func vitaStatus(of file: VitaFirmware.Info) -> String {
+        if file.installed { return tr("installé") }
+        return vitaHasFirmware && vitaHasFonts ? tr("pas nécessaire") : tr("au prochain jeu PS Vita")
+    }
+#endif
+
+    private var bootSection: some View {
+        Section {
+            Toggle(tr("Son au démarrage"), isOn: $bootSound)
+        } header: {
+            Text(tr("Démarrage"))
+        } footer: {
+#if os(iOS)
+            Text(tr("Joué avec l'animation d'ouverture de PlayTendo. Muet en mode silencieux, comme le son des jeux."))
+#else
+            Text(tr("Joué avec l'animation d'ouverture de PlayTendo."))
+#endif
+        }
+    }
 
     private func refreshChecks() {
         stikDebugInstalled = jit.isStikDebugInstalled
@@ -239,6 +416,11 @@ struct SettingsView: View {
     private func refreshBIOS() {
         biosList = PS2BIOS.installed()
         biosInUse = PS2BIOS.inUse(among: biosList)
+#if PLAYTENDO_VITA
+        vitaFiles = VitaFirmware.files()
+        vitaHasFirmware = VitaFirmware.hasFirmware
+        vitaHasFonts = VitaFirmware.hasFonts
+#endif
     }
 
     /// Vérifie et range le fichier choisi (hors du fil principal : une archive peut prendre un moment), puis le dit.
@@ -265,6 +447,33 @@ struct SettingsView: View {
             }
         }
     }
+
+#if PLAYTENDO_VITA
+    /// Vérifie et range le .PUP choisi (hors du fil principal : plus de 100 Mo à copier), puis le dit.
+    private func importVitaFirmware(_ url: URL) {
+        vitaBusy = true
+        Task {
+            let result = await Task.detached(priority: .userInitiated) { VitaFirmware.importFile(url) }.value
+            vitaBusy = false
+            refreshBIOS()
+            switch result {
+            case .added(let info):
+                let version = info.version ?? tr("version inconnue")
+                biosAlert = (tr("Fichier .PUP ajouté"),
+                             vitaHasFirmware && vitaHasFonts
+                                ? tr("« \(info.fileName) » (\(version)) est rangé dans le dossier BIOS. La console a déjà son firmware et ses polices : il ne sera pas installé.")
+                                : tr("« \(info.fileName) » (\(version)) est rangé dans le dossier BIOS. Il s'installera au prochain lancement d'un jeu PS Vita."))
+            case .alreadyThere(let name):
+                biosAlert = (tr("Déjà là"), tr("Ce fichier est déjà dans le dossier BIOS (« \(name) »). Rien n'a été ajouté."))
+            case .notPUP:
+                biosAlert = (tr("Ce n'est pas un fichier .PUP"),
+                             tr("Un fichier .PUP est une mise à jour officielle de la PS Vita (PSVUPDAT.PUP, PSP2UPDAT.PUP). Rien n'a été ajouté."))
+            case .failed(let message):
+                biosAlert = (tr("Import impossible"), message)
+            }
+        }
+    }
+#endif
 
     private var isActivating: Bool {
         if case .activating = jit.status { true } else { false }

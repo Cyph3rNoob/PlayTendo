@@ -5,44 +5,18 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// Ce qu'une touche du clavier fait en jeu. Chaque commande a ses touches, changeables dans Réglages › Clavier.
+/// Ce qu'une touche du clavier fait en jeu. Chaque console a ses touches (Réglages › Clavier, ou menu pause › Touches
+/// clavier) ; seule la touche du menu pause est commune à toutes.
 enum KeyCommand: String, CaseIterable, Identifiable {
-    case a, b, x, y, l, r, l2, r2, start, select, home
-    /// Croix des consoles sans stick.
+    case a, b, x, y, l, r, l2, r2, l3, r3, start, select
+    /// Croix.
     case up, down, left, right
-    /// Consoles à stick : stick gauche, croix et stick droit (boutons C de la N64, C-Stick de la GameCube et de la 3DS).
+    /// Stick gauche, et stick droit (boutons C de la N64, C-Stick de la GameCube et de la 3DS).
     case stickUp, stickDown, stickLeft, stickRight
-    case padUp, padDown, padLeft, padRight
     case cUp, cDown, cLeft, cRight
     case menu
 
     var id: String { rawValue }
-
-    /// Consoles où la commande agit : la même touche peut servir à la croix des consoles sans stick et au stick des
-    /// autres (les flèches, au départ).
-    private enum Scope { case all, withoutStick, withStick }
-
-    private var scope: Scope {
-        switch self {
-        case .up, .down, .left, .right: .withoutStick
-        case .stickUp, .stickDown, .stickLeft, .stickRight, .padUp, .padDown, .padLeft, .padRight,
-             .cUp, .cDown, .cLeft, .cRight: .withStick
-        default: .all
-        }
-    }
-
-    /// Deux commandes qui peuvent agir dans la même partie ne partagent pas une touche.
-    func sharesConsoles(with other: KeyCommand) -> Bool {
-        scope == .all || other.scope == .all || scope == other.scope
-    }
-
-    func isActive(for scheme: ControlScheme) -> Bool {
-        switch scope {
-        case .all: true
-        case .withoutStick: !scheme.hasAnalogStick
-        case .withStick: scheme.hasAnalogStick
-        }
-    }
 
     var action: KeyboardMap.Action {
         switch self {
@@ -54,14 +28,15 @@ enum KeyCommand: String, CaseIterable, Identifiable {
         case .r: .button(.r)
         case .l2: .button(.l2)
         case .r2: .button(.r2)
+        case .l3: .button(.l3)
+        // R3 : aussi HOME de la Wiimote.
+        case .r3: .button(.r3)
         case .start: .button(.start)
         case .select: .button(.select)
-        // R3 : HOME de la Wiimote.
-        case .home: .button(.r3)
-        case .up, .padUp: .button(.up)
-        case .down, .padDown: .button(.down)
-        case .left, .padLeft: .button(.left)
-        case .right, .padRight: .button(.right)
+        case .up: .button(.up)
+        case .down: .button(.down)
+        case .left: .button(.left)
+        case .right: .button(.right)
         case .stickUp: .stick(0, .up)
         case .stickDown: .stick(0, .down)
         case .stickLeft: .stick(0, .left)
@@ -74,107 +49,290 @@ enum KeyCommand: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Touches d'origine, par position (même place sur un clavier AZERTY et QWERTY : la touche « A » d'un QWERTY est
-    /// le « Q » d'un AZERTY). Disposition classique des émulateurs (RetroArch).
-    var defaultKeys: [Int] {
+    /// Touches d'origine sur cette console, par position (même place sur un clavier AZERTY et QWERTY : la touche
+    /// « A » d'un QWERTY est le « Q » d'un AZERTY). Disposition classique des émulateurs (RetroArch).
+    func defaultKeys(for scheme: ControlScheme) -> [Int] {
+        // Consoles à stick : les flèches font le stick gauche, la croix passe sur T F G H.
+        let stick = scheme.hasAnalogStick
         switch self {
-        case .a: [kVK_ANSI_X]
-        case .b: [kVK_ANSI_Z]
-        case .x: [kVK_ANSI_S]
-        case .y: [kVK_ANSI_A]
-        case .l: [kVK_ANSI_Q]
-        case .r: [kVK_ANSI_W]
-        case .l2: [kVK_ANSI_E]
-        case .r2: [kVK_ANSI_R]
-        case .start: [kVK_Return, kVK_ANSI_KeypadEnter]
+        case .a: return [kVK_ANSI_X]
+        case .b: return [kVK_ANSI_Z]
+        case .x: return [kVK_ANSI_S]
+        case .y: return [kVK_ANSI_A]
+        case .l: return [kVK_ANSI_Q]
+        case .r: return [kVK_ANSI_W]
+        case .l2: return [kVK_ANSI_E]
+        case .r2: return [kVK_ANSI_R]
+        case .l3: return [kVK_Shift]
+        case .r3: return [kVK_Tab]
+        case .start: return [kVK_Return, kVK_ANSI_KeypadEnter]
         // Maj de droite aussi, comme dans RetroArch.
-        case .select: [kVK_Delete, kVK_RightShift]
-        case .home: [kVK_Tab]
-        // Flèches : la croix ; pour les consoles à stick, le stick gauche (la croix passe alors sur T F G H).
-        case .up, .stickUp: [kVK_UpArrow]
-        case .down, .stickDown: [kVK_DownArrow]
-        case .left, .stickLeft: [kVK_LeftArrow]
-        case .right, .stickRight: [kVK_RightArrow]
-        case .padUp: [kVK_ANSI_T]
-        case .padDown: [kVK_ANSI_G]
-        case .padLeft: [kVK_ANSI_F]
-        case .padRight: [kVK_ANSI_H]
-        case .cUp: [kVK_ANSI_I]
-        case .cDown: [kVK_ANSI_K]
-        case .cLeft: [kVK_ANSI_J]
-        case .cRight: [kVK_ANSI_L]
-        case .menu: [kVK_Escape]
+        case .select: return [kVK_Delete, kVK_RightShift]
+        case .up: return [stick ? kVK_ANSI_T : kVK_UpArrow]
+        case .down: return [stick ? kVK_ANSI_G : kVK_DownArrow]
+        case .left: return [stick ? kVK_ANSI_F : kVK_LeftArrow]
+        case .right: return [stick ? kVK_ANSI_H : kVK_RightArrow]
+        case .stickUp: return [kVK_UpArrow]
+        case .stickDown: return [kVK_DownArrow]
+        case .stickLeft: return [kVK_LeftArrow]
+        case .stickRight: return [kVK_RightArrow]
+        case .cUp: return [kVK_ANSI_I]
+        case .cDown: return [kVK_ANSI_K]
+        case .cLeft: return [kVK_ANSI_J]
+        case .cRight: return [kVK_ANSI_L]
+        case .menu: return [kVK_Escape]
         }
     }
 
-    /// Flèche d'une commande de direction (« ↑ »), pour les Réglages.
+    /// Flèche d'une commande de direction (« ↑ »), à côté de sa touche.
     var arrow: String? {
         switch self {
-        case .up, .stickUp, .padUp, .cUp: "↑"
-        case .down, .stickDown, .padDown, .cDown: "↓"
-        case .left, .stickLeft, .padLeft, .cLeft: "←"
-        case .right, .stickRight, .padRight, .cRight: "→"
+        case .up, .stickUp, .cUp: "↑"
+        case .down, .stickDown, .cDown: "↓"
+        case .left, .stickLeft, .cLeft: "←"
+        case .right, .stickRight, .cRight: "→"
         default: nil
         }
     }
 }
 
-/// Touches choisies pour chaque commande (Réglages › Clavier), gardées dans les réglages de l'app. Seules les
-/// commandes changées y sont écrites : les autres gardent leurs touches d'origine.
+/// Une ligne des réglages du clavier : un bouton de la console, ou les quatre directions d'une croix ou d'un stick.
+struct KeyboardRow: Identifiable {
+    let name: String
+    let commands: [KeyCommand]
+
+    var id: String { commands.map(\.rawValue).joined(separator: "-") }
+    var isDirections: Bool { commands.count > 1 }
+}
+
+/// Touches du clavier propres à chaque console. Le Game Boy et la Game Boy Color partagent les leurs (mêmes
+/// commandes) ; un jeu Wii joué avec la manette GameCube prend celles de la GameCube.
+extension ControlScheme {
+    /// Consoles présentes dans l'app, dans l'ordre de la bibliothèque (choix de la console dans Réglages › Clavier).
+    static var keyboardSchemes: [ControlScheme] {
+        var schemes: [ControlScheme] = []
+        for system in GameSystem.displayOrder where EmulatorSession.engineInstalled(for: system) {
+            if !schemes.contains(system.controls) { schemes.append(system.controls) }
+        }
+        return schemes
+    }
+
+    /// Nom des touches de cette console dans les réglages de l'app (ne pas changer : les touches choisies y sont
+    /// rangées).
+    var keyboardID: String {
+        switch self {
+        case .nes: "nes"
+        case .snes: "snes"
+        case .nintendo64: "n64"
+        case .gameBoy: "gb"
+        case .gameBoyAdvance: "gba"
+        case .nintendoDS: "nds"
+        case .nintendo3DS: "3ds"
+        case .playStation: "ps1"
+        case .psp: "psp"
+        case .playStation2: "ps2"
+        case .gameCube: "gamecube"
+        case .wiimote: "wii"
+#if PLAYTENDO_VITA
+        case .psVita: "vita"
+#endif
+        }
+    }
+
+    /// Nom court de la console (pastilles de Réglages › Clavier).
+    var keyboardName: String {
+        switch self {
+        case .nes: "NES"
+        case .snes: "SNES"
+        case .nintendo64: "N64"
+        case .gameBoy: "GB / GBC"
+        case .gameBoyAdvance: "GBA"
+        case .nintendoDS: "DS"
+        case .nintendo3DS: "3DS"
+        case .playStation: "PS1"
+        case .psp: "PSP"
+        case .playStation2: "PS2"
+        case .gameCube: "GameCube"
+        case .wiimote: "Wii"
+#if PLAYTENDO_VITA
+        case .psVita: "PS Vita"
+#endif
+        }
+    }
+
+    /// Nom du bouton que fait cette commande sur la console (« Stick droit → », « ✕ »), pour les messages.
+    func keyboardLabel(for command: KeyCommand) -> String {
+        if command == .menu { return tr("Menu pause") }
+        guard let row = keyboardRows.first(where: { $0.commands.contains(command) }) else { return command.rawValue }
+        guard row.isDirections, let arrow = command.arrow else { return row.name }
+        return "\(row.name) \(arrow)"
+    }
+
+    /// Les commandes de la console, avec le nom de ses boutons. Les numéros RetroPad sont ceux des boutons tactiles
+    /// (ControlLayout) : par position, comme une manette Xbox (N64, GameCube, Wii : A = bouton du bas).
+    var keyboardRows: [KeyboardRow] {
+        func button(_ name: String, _ command: KeyCommand) -> KeyboardRow { KeyboardRow(name: name, commands: [command]) }
+        let dpad = KeyboardRow(name: tr("Croix"), commands: [.up, .down, .left, .right])
+        let stickCommands: [KeyCommand] = [.stickUp, .stickDown, .stickLeft, .stickRight]
+        let rightCommands: [KeyCommand] = [.cUp, .cDown, .cLeft, .cRight]
+        let stick = KeyboardRow(name: tr("Stick"), commands: stickCommands)
+        let leftStick = KeyboardRow(name: tr("Stick gauche"), commands: stickCommands)
+        let rightStick = KeyboardRow(name: tr("Stick droit"), commands: rightCommands)
+        let abxy = [button("A", .a), button("B", .b), button("X", .x), button("Y", .y)]
+        let playStation = [button("✕", .b), button("○", .a), button("□", .y), button("△", .x)]
+        let start = button("Start", .start)
+        let select = button("Select", .select)
+        switch self {
+        case .nes, .gameBoy:
+            return [dpad, button("A", .a), button("B", .b), start, select]
+        case .snes, .nintendoDS:
+            return [dpad] + abxy + [button("L", .l), button("R", .r), start, select]
+        case .gameBoyAdvance:
+            return [dpad, button("A", .a), button("B", .b), button("L", .l), button("R", .r), start, select]
+        case .nintendo3DS:
+            return [stick, dpad] + abxy
+                + [button("L", .l), button("R", .r), button("ZL", .l2), button("ZR", .r2), start, select,
+                   KeyboardRow(name: "C-Stick", commands: rightCommands)]
+        case .nintendo64:
+            return [stick, dpad, button("A", .b), button("B", .y), button("Z", .l2), button("L", .l), button("R", .r),
+                    start, KeyboardRow(name: tr("Boutons C"), commands: rightCommands)]
+        case .playStation:
+            return [dpad] + playStation
+                + [button("L1", .l), button("R1", .r), button("L2", .l2), button("R2", .r2), start, select]
+        case .psp:
+            return [stick, dpad] + playStation + [button("L", .l), button("R", .r), start, select]
+        case .playStation2:
+            return [leftStick, dpad] + playStation
+                + [button("L1", .l), button("R1", .r), button("L2", .l2), button("R2", .r2), button("L3", .l3),
+                   button("R3", .r3), start, select, rightStick]
+        case .gameCube:
+            return [stick, dpad, button("A", .b), button("B", .y), button("X", .a), button("Y", .x), button("Z", .r),
+                    button("L", .l2), button("R", .r2), start, KeyboardRow(name: tr("Stick C"), commands: rightCommands)]
+        case .wiimote:
+            return [KeyboardRow(name: tr("Stick du Nunchuk"), commands: stickCommands), dpad,
+                    button("A", .b), button("B", .a), button("1", .y), button("2", .x), button("−", .select),
+                    button("+", .start), button("HOME", .r3), button(tr("C (Nunchuk)"), .l),
+                    button(tr("Z (Nunchuk)"), .l2), button(tr("Secouer"), .r)]
+#if PLAYTENDO_VITA
+        case .psVita:
+            return [leftStick, dpad] + playStation + [button("L", .l), button("R", .r), start, select, rightStick]
+#endif
+        }
+    }
+
+    /// Ce que fait la souris sur cette console, ou nil.
+    var mouseNote: (action: String, effect: String)? {
+        if isWiimote { return (tr("Viser, A, B"), tr("souris, clic, clic droit")) }
+        if usesTouchScreen || isPSVita { return (tr("Écran tactile"), tr("clic")) }
+        return nil
+    }
+}
+
+/// Touches choisies pour chaque console, gardées dans les réglages de l'app : seules celles changées y sont écrites,
+/// les autres restent celles d'origine. La touche du menu pause est commune à toutes les consoles et passe avant les
+/// leurs (une touche qui la devient ne fait plus rien d'autre).
 @MainActor
 final class KeyBindings: ObservableObject {
     static let shared = KeyBindings()
-    private static let storageKey = "touchesClavierMac"
+    private static let storageKey = "touchesClavierConsoles"
+    private static let menuStorageKey = "touchesClavierMenu"
 
-    @Published private(set) var keys: [KeyCommand: [Int]]
+    /// Touches changées : console (`ControlScheme.keyboardID`) → commande → touches.
+    @Published private var changed: [String: [String: [Int]]]
+    @Published private var menuKeys: [Int]
+
+    /// État des touches avant un changement (pour l'annuler).
+    struct Snapshot {
+        fileprivate let changed: [String: [String: [Int]]]
+        fileprivate let menuKeys: [Int]
+    }
 
     private init() {
-        var keys = Dictionary(uniqueKeysWithValues: KeyCommand.allCases.map { ($0, $0.defaultKeys) })
-        if let saved = UserDefaults.standard.dictionary(forKey: Self.storageKey) as? [String: [Int]] {
-            for (name, codes) in saved {
-                if let command = KeyCommand(rawValue: name) { keys[command] = codes }
+        let defaults = UserDefaults.standard
+        changed = defaults.dictionary(forKey: Self.storageKey) as? [String: [String: [Int]]] ?? [:]
+        menuKeys = defaults.array(forKey: Self.menuStorageKey) as? [Int] ?? KeyCommand.menu.defaultKeys(for: .nes)
+        // Touches communes à toutes les consoles (avant le 2026-10-13) : remplacées par celles de chaque console.
+        defaults.removeObject(forKey: "touchesClavierMac")
+    }
+
+    func keys(for command: KeyCommand, on scheme: ControlScheme) -> [Int] {
+        if command == .menu { return menuKeys }
+        let keys = changed[scheme.keyboardID]?[command.rawValue] ?? command.defaultKeys(for: scheme)
+        return keys.filter { !menuKeys.contains($0) }
+    }
+
+    /// Commande de cette touche sur cette console, ou nil.
+    func command(for keyCode: Int, on scheme: ControlScheme) -> KeyCommand? {
+        if menuKeys.contains(keyCode) { return .menu }
+        return scheme.keyboardRows.lazy.flatMap(\.commands).first { self.keys(for: $0, on: scheme).contains(keyCode) }
+    }
+
+    /// Touche du menu pause : elle ne peut être donnée à une autre commande (sans elle, on ne pourrait plus quitter
+    /// une partie au clavier).
+    func isMenuKey(_ keyCode: Int) -> Bool { menuKeys.contains(keyCode) }
+
+    /// Donne `keyCode` à `command` sur cette console (à la place de ses touches) et la retire à ses autres commandes.
+    /// Renvoie les commandes de la console qui l'avaient.
+    @discardableResult
+    func assign(_ keyCode: Int, to command: KeyCommand, on scheme: ControlScheme) -> [KeyCommand] {
+        let others = scheme.keyboardRows.flatMap(\.commands).filter { $0 != command }
+        let losers = others.filter { keys(for: $0, on: scheme).contains(keyCode) }
+        if command == .menu {
+            // Toutes les consoles : la touche du menu pause passe avant les leurs.
+            menuKeys = [keyCode]
+        } else {
+            var table = changed[scheme.keyboardID] ?? [:]
+            for other in losers {
+                table[other.rawValue] = keys(for: other, on: scheme).filter { $0 != keyCode }
+            }
+            table[command.rawValue] = [keyCode]
+            // Seules les touches différentes de celles d'origine sont gardées.
+            changed[scheme.keyboardID] = table.filter { name, keys in
+                KeyCommand(rawValue: name).map { keys != $0.defaultKeys(for: scheme) } ?? false
             }
         }
-        self.keys = keys
+        save()
+        return losers
     }
 
-    var isCustomized: Bool { KeyCommand.allCases.contains { keys[$0] != $0.defaultKeys } }
+    func snapshot() -> Snapshot { Snapshot(changed: changed, menuKeys: menuKeys) }
 
-    /// Commande de cette touche pour la console en cours, ou nil.
-    func command(for keyCode: Int, scheme: ControlScheme) -> KeyCommand? {
-        KeyCommand.allCases.first { $0.isActive(for: scheme) && keys[$0, default: []].contains(keyCode) }
-    }
-
-    /// Commande qui garde cette touche quelle que soit celle qu'on change : le menu pause (sans touche, on ne
-    /// pourrait plus quitter une partie au clavier).
-    func isMenuKey(_ keyCode: Int) -> Bool { keys[.menu, default: []].contains(keyCode) }
-
-    /// Donne `keyCode` à `command` (à la place de ses touches), et la retire aux commandes qui agissent dans les mêmes
-    /// parties.
-    func assign(_ keyCode: Int, to command: KeyCommand) {
-        for other in KeyCommand.allCases where other != command && other.sharesConsoles(with: command) {
-            keys[other]?.removeAll { $0 == keyCode }
-        }
-        keys[command] = [keyCode]
+    func restore(_ snapshot: Snapshot) {
+        changed = snapshot.changed
+        menuKeys = snapshot.menuKeys
         save()
     }
 
-    func resetAll() {
-        keys = Dictionary(uniqueKeysWithValues: KeyCommand.allCases.map { ($0, $0.defaultKeys) })
-        UserDefaults.standard.removeObject(forKey: Self.storageKey)
+    /// Touches de cette console ou du menu pause changées.
+    func isCustomized(_ scheme: ControlScheme) -> Bool {
+        !(changed[scheme.keyboardID]?.isEmpty ?? true) || menuKeys != KeyCommand.menu.defaultKeys(for: scheme)
     }
 
-    func label(for command: KeyCommand) -> String {
-        let codes = keys[command, default: []]
+    /// Touches d'origine pour cette console et le menu pause.
+    func reset(_ scheme: ControlScheme) {
+        changed[scheme.keyboardID] = nil
+        menuKeys = KeyCommand.menu.defaultKeys(for: scheme)
+        save()
+    }
+
+    func label(for command: KeyCommand, on scheme: ControlScheme) -> String {
+        let codes = keys(for: command, on: scheme)
         return codes.isEmpty ? "—" : codes.map(KeyboardMap.label).joined(separator: " ")
     }
 
     private func save() {
-        var changed: [String: [Int]] = [:]
-        for command in KeyCommand.allCases where keys[command] != command.defaultKeys {
-            changed[command.rawValue] = keys[command] ?? []
+        let defaults = UserDefaults.standard
+        let kept = changed.filter { !$0.value.isEmpty }
+        if kept.isEmpty {
+            defaults.removeObject(forKey: Self.storageKey)
+        } else {
+            defaults.set(kept, forKey: Self.storageKey)
         }
-        UserDefaults.standard.set(changed, forKey: Self.storageKey)
+        if menuKeys == KeyCommand.menu.defaultKeys(for: .nes) {
+            defaults.removeObject(forKey: Self.menuStorageKey)
+        } else {
+            defaults.set(menuKeys, forKey: Self.menuStorageKey)
+        }
     }
 }
 
@@ -195,7 +353,7 @@ enum KeyboardMap {
     ]
 
     @MainActor static func action(for keyCode: Int, scheme: ControlScheme) -> Action? {
-        KeyBindings.shared.command(for: keyCode, scheme: scheme)?.action
+        KeyBindings.shared.command(for: keyCode, on: scheme)?.action
     }
 
     /// Nom de la touche sur le clavier de l'utilisateur (« W » pour la touche Z d'un QWERTY sur un AZERTY).
@@ -254,27 +412,6 @@ enum KeyboardMap {
         }
         guard status == noErr, length > 0 else { return nil }
         return String(utf16CodeUnits: characters, count: length)
-    }
-
-    /// Ce que font les boutons sur les consoles où ils changent de nom (Réglages › Clavier), d'après les touches
-    /// choisies.
-    @MainActor static var consoleNotes: [(String, String)] {
-        let bindings = KeyBindings.shared
-        func keys(_ commands: KeyCommand...) -> String { commands.map(bindings.label).joined(separator: "  ") }
-#if PLAYTENDO_VITA
-        let touchScreens = tr("Écran tactile (DS, 3DS, PS Vita)")
-#else
-        let touchScreens = tr("Écran tactile (DS, 3DS)")
-#endif
-        return [
-            (tr("A, B, Z (N64)"), keys(.b, .y, .l2)),
-            (tr("A, B, X, Y (GameCube)"), keys(.b, .y, .a, .x)),
-            (tr("Z, L, R (GameCube)"), keys(.r, .l2, .r2)),
-            (tr("Viser, A, B (Wii)"), tr("souris, clic, clic droit")),
-            (tr("1, 2, secouer (Wii)"), keys(.y, .x, .r)),
-            (tr("C, Z du Nunchuk, HOME (Wii)"), keys(.l, .l2, .home)),
-            (touchScreens, tr("clic")),
-        ]
     }
 }
 

@@ -23,6 +23,12 @@ Mac (app PlayTendo pour Mac, build_dolphin.sh mac, avec -DPLAYTENDO_DOLPHIN_HOST
    remplit, manettes MFi) aussi sur Mac, à la place du module clavier/souris de Dolphin (Quartz) : PlayTendo lit
    lui-même le clavier et la souris, et donne les boutons comme sur iPhone.
    (FileUtil.cpp, retouche 2 : aussi sur Mac, dossier Sys dans DolphinCore.framework/Resources/Sys.)
+Les deux :
+9. HostQueue.mm : `DOLHostQueueRunSync` attendait la fin d'une commande avec un Common::Event posé sur la pile de
+   l'appelant ; le fil de la file pouvait encore y écrire (verrou, réveil) après le retour de l'appelant, donc dans
+   ce que l'appelant mettait ensuite à cet endroit. Plantage de l'app Mac au lancement d'un jeu Wii après un jeu
+   GameCube (2026-10-13 : un bit changé dans une valeur du fil de PlayTendo) ; essai à part : l'ancienne façon se
+   bloque en moins de 200 000 commandes, la nouvelle (sémaphore de libdispatch, gardé en vie par le bloc) jamais.
 """
 import os
 import sys
@@ -213,4 +219,38 @@ patch("Source/Core/InputCommon/ControllerInterface/ControllerInterface.h", [
      "// PlayTendo (Mac) : commandes de DolphiniOS (données par l'app) au lieu du clavier et de la souris de Dolphin.\n"
      "#if defined(__APPLE__) && !defined(IPHONEOS) && !defined(PLAYTENDO_MAC)\n#define CIFACE_USE_OSX\n#endif\n"
      "#if defined(IPHONEOS) || defined(PLAYTENDO_MAC)\n#define CIFACE_USE_IOS\n#endif\n"),
+])
+
+patch("Source/iOS/Library/HostQueue.mm", [
+    ("""  if (!Core::IsHostThread())
+  {
+    Common::Event sync_event;
+    Common::Event* sync_event_ptr = &sync_event;
+
+    dispatch_async(DOLHostQueueGetUnderlyingQueue(), ^{
+      DOLHostQueueExecuteBlock(block);
+
+      sync_event_ptr->Set();
+    });
+
+    sync_event.Wait();
+  }
+""", """  if (!Core::IsHostThread())
+  {
+    // PlayTendo : sémaphore gardé en vie par le bloc, au lieu d'un Common::Event sur la pile : le fil de la file
+    // y écrivait parfois encore après le retour de l'appelant (pile de l'appelant abîmée).
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+
+    dispatch_async(DOLHostQueueGetUnderlyingQueue(), ^{
+      DOLHostQueueExecuteBlock(block);
+
+      dispatch_semaphore_signal(done);
+    });
+
+    dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+#if !__has_feature(objc_arc)
+    dispatch_release(done);
+#endif
+  }
+"""),
 ])
