@@ -7,7 +7,7 @@
 #define PT_VITA_FUNCTIONS(X) \
     X(PTVitaSetup) X(PTVitaGetFirmware) X(PTVitaInstallFirmware) X(PTVitaInstallGame) X(PTVitaIsInstalled) \
     X(PTVitaBoot) X(PTVitaGetState) X(PTVitaSetPaused) X(PTVitaStop) X(PTVitaSetButton) X(PTVitaSetStick) \
-    X(PTVitaTouch) X(PTVitaCopyLastError) X(PTVitaShutdown)
+    X(PTVitaTouch) X(PTVitaCopyLastError) X(PTVitaShutdown) X(PTVitaSetRePatch) X(PTVitaSetResolution)
 
 typedef struct {
 #define PT_FIELD(name) __typeof__(&name) name;
@@ -102,8 +102,16 @@ static void PTVitaReportProgress(float progress, void *context) {
     return result;
 }
 
+- (void)setRePatchDirectory:(NSString *)path {
+    _fn.PTVitaSetRePatch(path.fileSystemRepresentation);
+}
+
 - (BOOL)isGameInstalled:(NSString *)titleID {
     return _fn.PTVitaIsInstalled(titleID.UTF8String);
+}
+
+- (void)setResolution:(float)multiplier {
+    _fn.PTVitaSetResolution(multiplier);
 }
 
 - (BOOL)bootTitle:(NSString *)titleID {

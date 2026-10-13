@@ -4,6 +4,7 @@
 
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <QuartzCore/CATransaction.h>
 #import <TargetConditionals.h>
 #if TARGET_OS_IPHONE
 #import <UIKit/UIKit.h>
@@ -21,36 +22,38 @@ static std::atomic<void *> s_layer{ nullptr };
 static std::atomic<int> s_width{ 0 };
 static std::atomic<int> s_height{ 0 };
 
-/// Vue où Vita3K dessine : sa couche est une CAMetalLayer, donnée au moteur pour la surface Vulkan (MoltenVK).
-/// Sa taille en pixels est lue par le moteur depuis son propre thread.
+/// Vue où Vita3K dessine (une seule pour toute la vie de l'app). Elle porte, pour chaque partie, une CAMetalLayer
+/// neuve donnée au moteur pour la surface Vulkan (MoltenVK) : une même couche réutilisée par la partie suivante
+/// n'affichait plus rien (on voyait la dernière image de la précédente, 2026-10-13). La couche est retirée à la fin
+/// de la partie : le fond noir se voit jusqu'à la première image de la suivante. Sa taille en pixels est lue par le
+/// moteur depuis son propre thread.
 #if TARGET_OS_IPHONE
 @interface PTVitaView : UIView
+#else
+@interface PTVitaView : NSView
+#endif
+@property (nonatomic, strong, nullable) CAMetalLayer *metalLayer;
 @end
 
 @implementation PTVitaView
 
-+ (Class)layerClass {
-    return CAMetalLayer.class;
-}
-
+#if TARGET_OS_IPHONE
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
         self.backgroundColor = UIColor.blackColor;
         self.opaque = YES;
         // Les touchers passent par PlayTendo (écran tactile avant : PTVitaTouch).
         self.userInteractionEnabled = NO;
-        self.layer.opaque = YES;
     }
     return self;
 }
 
+- (CGFloat)pixelScale {
+    return self.window ? self.window.screen.nativeScale : UIScreen.mainScreen.nativeScale;
+}
+
 - (void)didMoveToWindow {
     [super didMoveToWindow];
-    if (self.window) {
-        const CGFloat scale = self.window.screen.nativeScale;
-        self.contentScaleFactor = scale;
-        self.layer.contentsScale = scale;
-    }
     [self updateDrawableSize];
 }
 
@@ -58,37 +61,18 @@ static std::atomic<int> s_height{ 0 };
     [super layoutSubviews];
     [self updateDrawableSize];
 }
-
-- (void)updateDrawableSize {
-    const CGFloat scale = self.contentScaleFactor;
-    s_width.store((int)std::lround(self.bounds.size.width * scale));
-    s_height.store((int)std::lround(self.bounds.size.height * scale));
-}
-
-@end
 #else
-@interface PTVitaView : NSView
-@end
-
-@implementation PTVitaView
-
 - (instancetype)initWithFrame:(NSRect)frame {
     if ((self = [super initWithFrame:frame])) {
         self.wantsLayer = YES;
-        self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
+        self.layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+        self.layer.opaque = YES;
     }
     return self;
 }
 
-- (CALayer *)makeBackingLayer {
-    CAMetalLayer *layer = [CAMetalLayer layer];
-    layer.opaque = YES;
-    layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
-    return layer;
-}
-
-- (BOOL)wantsUpdateLayer {
-    return YES;
+- (CGFloat)pixelScale {
+    return self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
 }
 
 /// Les clics passent par PlayTendo (écran tactile avant : PTVitaTouch), comme sur iPhone.
@@ -110,30 +94,87 @@ static std::atomic<int> s_height{ 0 };
     [super setFrameSize:size];
     [self updateDrawableSize];
 }
+#endif
+
+/// Couche Metal neuve pour une nouvelle partie (sur le fil principal).
+- (void)installMetalLayer {
+    [self removeMetalLayer];
+    CAMetalLayer *layer = [CAMetalLayer layer];
+    layer.opaque = YES;
+    layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [self.layer addSublayer:layer];
+    [CATransaction commit];
+    self.metalLayer = layer;
+    s_layer.store((__bridge void *)layer);
+    [self updateDrawableSize];
+}
+
+/// Fin de la partie : la couche part avec sa dernière image (sur le fil principal).
+- (void)removeMetalLayer {
+    if (!self.metalLayer)
+        return;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [self.metalLayer removeFromSuperlayer];
+    [CATransaction commit];
+    self.metalLayer = nil;
+}
 
 - (void)updateDrawableSize {
-    const CGFloat scale = self.window ? self.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
-    self.layer.contentsScale = scale;
+    const CGFloat scale = [self pixelScale];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    self.metalLayer.frame = self.layer.bounds;
+    self.metalLayer.contentsScale = scale;
+    [CATransaction commit];
     s_width.store((int)std::lround(self.bounds.size.width * scale));
     s_height.store((int)std::lround(self.bounds.size.height * scale));
 }
 
 @end
-#endif
 
 static PTVitaView *s_view;
 
+/// Exécute `block` sur le fil principal et attend qu'il soit fini (appelé depuis le fil de la partie ou de l'app).
+static void PTVitaOnMain(void (^block)(void)) {
+    if (NSThread.isMainThread)
+        block();
+    else
+        dispatch_sync(dispatch_get_main_queue(), block);
+}
+
 /// Crée la vue (une seule pour toute la vie de l'app), sur le thread principal.
 extern "C" void *PTVitaCreateView(void) {
-    if (!s_view) {
+    if (!s_view)
         s_view = [[PTVitaView alloc] initWithFrame:CGRectMake(0, 0, 960, 544)];
-        s_layer.store((__bridge void *)s_view.layer);
-    }
     return (__bridge void *)s_view;
+}
+
+/// Nouvelle partie : couche Metal neuve, donnée au moteur par PTVitaViewLayer.
+extern "C" void PTVitaPrepareLayer(void) {
+    PTVitaOnMain(^{
+        [s_view installMetalLayer];
+    });
+}
+
+/// Fin de la partie : la couche et sa dernière image sont retirées.
+extern "C" void PTVitaReleaseLayer(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [s_view removeMetalLayer];
+        s_layer.store(nullptr);
+    });
 }
 
 extern "C" void *PTVitaViewLayer(void) {
     return s_layer.load();
+}
+
+/// Essai sans interface : la couche de la partie en cours montre-t-elle une image ?
+PTVITA_EXPORT bool PTVitaViewHasContents(void) {
+    CAMetalLayer *layer = (__bridge CAMetalLayer *)s_layer.load();
+    return layer && layer.contents != nil;
 }
 
 extern "C" int PTVitaViewPixelWidth(void) {

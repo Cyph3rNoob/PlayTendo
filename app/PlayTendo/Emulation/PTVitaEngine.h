@@ -30,7 +30,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// Installe un jeu (dossier extrait ou .vpk ; bloquant, hors du thread principal). Renvoie son identifiant, ou nil.
 - (nullable NSString *)installGameAtPath:(NSString *)path progress:(nullable void (^)(float progress))progress;
 - (BOOL)isGameInstalled:(NSString *)titleID;
+/// Dossier rePatch du prochain jeu installé (nil : aucun) : un fichier du jeu qu'il fournit peut manquer.
+- (void)setRePatchDirectory:(nullable NSString *)path;
 
+/// Résolution interne du prochain jeu lancé (multiple de 960×544).
+- (void)setResolution:(float)multiplier;
 /// Démarre un jeu installé, d'après son identifiant (« PCSA00011 »).
 - (BOOL)bootTitle:(NSString *)titleID;
 - (void)setPaused:(BOOL)paused;

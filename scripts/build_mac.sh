@@ -74,7 +74,7 @@ rm -f "$OUT/PlayTendo.dmg"
 hdiutil create -quiet -volname PlayTendo -srcfolder "$STAGE" -fs APFS -format ULFO "$OUT/PlayTendo.dmg"
 rm -rf "${STAGE:?}"
 hdiutil verify -quiet "$OUT/PlayTendo.dmg"
-echo "=== OK : $OUT/PlayTendo.dmg ($(du -sh "$OUT/PlayTendo.dmg" | cut -f1 | tr -d ' ')) ==="
+echo "=== OK : $OUT/PlayTendo.dmg ($(( $(stat -f %z "$OUT/PlayTendo.dmg") / 1000000 )) Mo) ==="
 # Une app déjà ouverte garde l'ancienne version (moteurs listés à son lancement) jusqu'à ce qu'on la relance.
 if pgrep -f "$OUT/PlayTendo.app/Contents/MacOS/PlayTendo" > /dev/null; then
   echo "!!! PlayTendo est encore ouverte avec l'ancienne version : quitte-la (⌘Q) puis rouvre-la."

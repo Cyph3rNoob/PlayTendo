@@ -192,6 +192,22 @@ struct LibraryView: View {
 #endif
     }
 
+#if PLAYTENDO_VITA
+    /// PS Vita, menu du jeu : version (celle de sa mise à jour si elle est installée), DLC installés, et DLC ou mise à
+    /// jour rangés dans Jeux qui seront installés au prochain lancement.
+    private func vitaContentSummary(for game: Game) -> String? {
+        guard let titleID = VitaGame.titleID(of: game.url) else { return nil }
+        let installed = VitaGame.installedContent(titleID: titleID)
+        let pending = VitaGame.pendingAddons(for: titleID).filter { !$0.isInstalled }.count
+        var parts: [String] = []
+        if let version = installed.version ?? VitaGame.version(of: game.url) { parts.append(tr("Version \(version)")) }
+        if installed.dlcCount > 0 { parts.append(tr("\(installed.dlcCount) DLC")) }
+        if pending > 0 { parts.append(tr("\(pending) à installer au prochain lancement")) }
+        if VitaGame.rePatchFolder(for: titleID) != nil { parts.append("rePatch") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+#endif
+
     /// Message de la confirmation de suppression (fichiers associés, sauvegardes).
     private func deleteMessage(for game: Game) -> String {
         let title = metadata.display(for: game).title
@@ -358,6 +374,11 @@ struct LibraryView: View {
                                 Button { play(game) } label: { GameCard(game: game) }
                                     .buttonStyle(CardPressStyle())
                                     .contextMenu {
+#if PLAYTENDO_VITA
+                                        if game.system == .vita, let summary = vitaContentSummary(for: game) {
+                                            Text(summary)
+                                        }
+#endif
                                         Button { metadata.retryCover(for: game) } label: {
                                             Label(tr("Actualiser la jaquette"), systemImage: "arrow.clockwise")
                                         }

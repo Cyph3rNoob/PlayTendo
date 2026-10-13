@@ -19,9 +19,11 @@
 #include <dlfcn.h>
 #include <exception>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <thread>
 
@@ -44,6 +46,7 @@
 #include <touch/functions.h>
 #include <util/fs.h>
 #include <util/log.h>
+#include <util/string_utils.h>
 #include <util/sysinfo.h>
 #include <util/system.h>
 
@@ -60,6 +63,8 @@ extern "C" void *PTVitaCreateView(void);
 extern "C" void *PTVitaViewLayer(void);
 extern "C" int PTVitaViewPixelWidth(void);
 extern "C" int PTVitaViewPixelHeight(void);
+extern "C" void PTVitaPrepareLayer(void);
+extern "C" void PTVitaReleaseLayer(void);
 extern "C" void *PTVitaVkGetInstanceProcAddr(void);
 
 // MARK: - État
@@ -69,6 +74,8 @@ static std::unique_ptr<app::AppSessionController> s_session;
 static std::atomic<int> s_state{ PTVitaStateStopped };
 static std::atomic<bool> s_stopRequested{ false };
 static std::atomic<bool> s_pauseRequested{ false };
+/// Résolution interne demandée (réglage RÉSOLUTION de PlayTendo), lue au lancement de chaque jeu.
+static std::atomic<float> s_resolution{ 1.0f };
 static std::thread s_thread;
 /// Les installations et les parties ne se chevauchent pas (même mémoire de console).
 static std::mutex s_busy;
@@ -86,6 +93,97 @@ static void PTVitaSetError(const std::string &message) {
     spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) { logger->flush(); });
     std::lock_guard<std::mutex> lock(s_errorMutex);
     s_lastError = message;
+}
+
+/// Pendant une installation, garde ce que les outils de Vita3K écrivent sur la sortie standard (psvpfsparser y donne
+/// la raison d'un déchiffrement refusé : licence, fichier manquant…), que l'app ne conserve pas ; recopié dans
+/// vita3k.log si l'installation échoue (ses 40 dernières lignes). Ajouté le 2026-10-13 (AKIBA'S TRIP refusé sans
+/// raison visible).
+class PTVitaOutputCapture {
+public:
+    PTVitaOutputCapture()
+        : out_(std::cout.rdbuf(buffer_.rdbuf()))
+        , err_(std::cerr.rdbuf(buffer_.rdbuf())) {}
+
+    ~PTVitaOutputCapture() {
+        std::cout.rdbuf(out_);
+        std::cerr.rdbuf(err_);
+        if (!failed_)
+            return;
+        std::deque<std::string> lines;
+        std::istringstream text(buffer_.str());
+        for (std::string line; std::getline(text, line);) {
+            if (line.empty())
+                continue;
+            lines.push_back(line);
+            if (lines.size() > 40)
+                lines.pop_front();
+        }
+        for (const auto &line : lines)
+            LOG_INFO("[PlayTendo] Déchiffrement : {}", line);
+    }
+
+    void failed() { failed_ = true; }
+
+private:
+    std::ostringstream buffer_;
+    std::streambuf *out_;
+    std::streambuf *err_;
+    bool failed_ = false;
+};
+
+// MARK: - rePatch
+
+/// Dossier rePatch du jeu en cours d'installation (vide sinon) : ses fichiers peuvent manquer dans le jeu (retouche 16
+/// de patch_vita3k.py, psvpfsparser). L'app les copie ensuite sur le jeu installé.
+static std::mutex s_repatchMutex;
+// Chemins de la bibliothèque standard ici (fs de Vita3K = Boost.Filesystem, aux codes d'erreur différents).
+static std::filesystem::path s_repatchDir;
+
+PTVITA_EXPORT void PTVitaSetRePatch(const char *dir) {
+    std::lock_guard<std::mutex> lock(s_repatchMutex);
+    s_repatchDir = (dir && *dir) ? std::filesystem::path(dir) : std::filesystem::path();
+}
+
+/// Chemin `relative` dans `root` sans tenir compte des majuscules (comme sur une Vita), ou vide.
+static std::filesystem::path PTVitaFindCaseInsensitive(const std::filesystem::path &root,
+    const std::filesystem::path &relative) {
+    std::filesystem::path current = root;
+    for (const auto &part : relative) {
+        const std::string wanted = string_utils::tolower(part.string());
+        std::filesystem::path found;
+        std::error_code error;
+        for (const auto &entry : std::filesystem::directory_iterator(current, error)) {
+            if (string_utils::tolower(entry.path().filename().string()) == wanted) {
+                found = entry.path();
+                break;
+            }
+        }
+        if (found.empty())
+            return {};
+        current = found;
+    }
+    return current;
+}
+
+/// psvpfsparser : `path` (fichier du jeu absent, dans ux0/app/<identifiant>/…) est-il fourni par rePatch ?
+extern "C" __attribute__((visibility("default"))) bool PTVitaRePatchProvides(const char *path) {
+    std::lock_guard<std::mutex> lock(s_repatchMutex);
+    if (s_repatchDir.empty() || !path)
+        return false;
+    const std::string full = path;
+    const auto app = full.find("/ux0/app/");
+    if (app == std::string::npos)
+        return false;
+    const auto title_end = full.find('/', app + 9);
+    if (title_end == std::string::npos)
+        return false;
+    const std::string relative = full.substr(title_end + 1);
+    const std::filesystem::path found = PTVitaFindCaseInsensitive(s_repatchDir, std::filesystem::path(relative));
+    std::error_code error;
+    const bool provided = !found.empty() && std::filesystem::is_regular_file(found, error);
+    LOG_INFO("[PlayTendo] rePatch : {} {}", relative, provided ? "fourni" : "absent");
+    return provided;
 }
 
 // MARK: - Son
@@ -349,7 +447,14 @@ PTVITA_EXPORT char *PTVitaInstallGame(const char *path, PTVitaProgress progress,
         LOG_INFO("[PlayTendo] Installation du jeu : {}", path);
         if (fs::is_directory(source)) {
             // Dossier extrait d'une Vita (app/PCSA00011 : copié dans ux0, puis déchiffré avec work.bin s'il le faut).
-            if (install_contents(*s_emuenv, source) == 0) {
+            uint32_t installed = 0;
+            {
+                PTVitaOutputCapture output;
+                installed = install_contents(*s_emuenv, source);
+                if (installed == 0)
+                    output.failed();
+            }
+            if (installed == 0) {
                 PTVitaSetError("Le jeu n'a pas pu être installé (dossier incomplet ou licence work.bin absente ?).");
                 return nullptr;
             }
@@ -408,6 +513,8 @@ static void PTVitaRunSession(std::string title_id) {
 
     do {
         relaunch = false;
+        // Couche Metal neuve à chaque lancement : réutilisée, elle n'affichait plus rien (2026-10-13).
+        PTVitaPrepareLayer();
         PTVitaFrameHost frame_host;
         refresh_controllers(emuenv.ctrl, emuenv);
         // Relus par Vita3K à chaque lancement (begin_launch → set_current_config). Mémoire mappée (retouche 15 de
@@ -416,6 +523,9 @@ static void PTVitaRunSession(std::string title_id) {
         emuenv.cfg.memory_mapping = "double-buffer";
         emuenv.cfg.high_accuracy = false;
         emuenv.cfg.disable_surface_sync = true;
+        emuenv.cfg.resolution_multiplier = s_resolution.load();
+        LOG_INFO("[PlayTendo] Résolution interne : x{} ({}×{})", emuenv.cfg.resolution_multiplier,
+            static_cast<int>(960 * emuenv.cfg.resolution_multiplier), static_cast<int>(544 * emuenv.cfg.resolution_multiplier));
         LOG_INFO("[PlayTendo] Démarrage de {}", request.app_path);
 
         if (!controller.begin_launch(request, request.reason != AppLaunchReason::LoadExec)) {
@@ -494,6 +604,8 @@ static void PTVitaRunSession(std::string title_id) {
         s_touches.clear();
     }
     PTVitaLogAudio("fin de la partie");
+    // Couche Metal de la partie retirée avec sa dernière image (une neuve servira à la suivante).
+    PTVitaReleaseLayer();
     LOG_INFO("[PlayTendo] Partie terminée");
     spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) { logger->flush(); });
     s_state.store(PTVitaStateStopped);
@@ -513,6 +625,10 @@ PTVITA_EXPORT bool PTVitaBoot(const char *titleID) {
     s_state.store(PTVitaStateStarting);
     s_thread = std::thread(PTVitaRunSession, std::string(titleID));
     return true;
+}
+
+PTVITA_EXPORT void PTVitaSetResolution(float multiplier) {
+    s_resolution.store(std::clamp(multiplier, 0.5f, 8.0f));
 }
 
 PTVITA_EXPORT PTVitaState PTVitaGetState(void) {

@@ -11,7 +11,8 @@ Il faut un Mac avec puce Apple (M1 ou plus récent) et macOS 14 ou plus récent.
 3. Ajoute tes jeux : glisse-les dans la fenêtre, utilise le bouton +, ou double-clique sur un jeu dans le Finder.
    Les archives .zip, .7z et .rar se décompressent toutes seules.
    PS Vita : glisse le dossier du jeu extrait de ta console (« PCSA00011 »…) et le fichier PSVUPDAT.PUP
-   (la mise à jour officielle de la console).
+   (la mise à jour officielle de la console). Ses DLC et mises à jour (dossiers addcont et patch de ta
+   console) s'installent au prochain lancement du jeu ; un mod rePatch se glisse avec son dossier rePatch.
 4. Au clavier, Échap met le jeu en pause. Les touches se changent dans les Réglages (⌘,).
    Une manette Bluetooth ou USB marche aussi.
 
@@ -31,7 +32,8 @@ Requires a Mac with Apple silicon (M1 or later) and macOS 14 or later.
 3. Add your games: drag them into the window, use the + button, or double-click a game in the Finder.
    .zip, .7z and .rar archives are unpacked automatically.
    PS Vita: drag the game folder extracted from your console (“PCSA00011”…) and the PSVUPDAT.PUP file
-   (the console's official update).
+   (the console's official update). Its DLC and updates (addcont and patch folders from your console)
+   are installed the next time the game is launched; a rePatch mod is dragged with its rePatch folder.
 4. On the keyboard, Esc pauses the game. Keys can be changed in Settings (⌘,).
    A Bluetooth or USB controller works too.
 

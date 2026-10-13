@@ -60,4 +60,5 @@ done
 codesign --force --sign - --timestamp=none --entitlements "$ROOT/app/PlayTendo.entitlements" "$PAYLOAD_APP" >> "$LOG" 2>&1
 rm -f "$ROOT/PlayTendo.ipa"
 (cd "$ROOT/build/ipa" && zip -qry "$ROOT/PlayTendo.ipa" Payload)
-echo "=== OK : $ROOT/PlayTendo.ipa ($(du -h "$ROOT/PlayTendo.ipa" | cut -f1 | tr -d ' ')) ==="
+# Taille du fichier (du compterait la place occupée sur le disque, souvent plus grande).
+echo "=== OK : $ROOT/PlayTendo.ipa ($(( $(stat -f %z "$ROOT/PlayTendo.ipa") / 1000000 )) Mo) ==="

@@ -21,7 +21,7 @@ struct KeyboardSettingsSections: View {
             }
             row(tr("Stick gauche (consoles à stick)"), [.stickUp, .stickDown, .stickLeft, .stickRight])
             row(tr("Croix (consoles à stick)"), [.padUp, .padDown, .padLeft, .padRight])
-            row(tr("Stick droit, boutons C (N64), C-Stick (GameCube, 3DS)"), [.cUp, .cDown, .cLeft, .cRight])
+            row(tr("Stick droit (PS2, PS Vita), boutons C (N64), C-Stick (GameCube, 3DS)"), [.cUp, .cDown, .cLeft, .cRight])
             row(tr("Menu pause"), [.menu])
             Button(tr("Rétablir les touches d'origine")) {
                 capture.stop()

@@ -52,8 +52,9 @@ final class GameLibrary: ObservableObject {
             }
 #if PLAYTENDO_VITA
             // Jeu PS Vita extrait de la console (« PCSA00011 », avec sce_sys/param.sfo) : le dossier entier est le jeu.
+            // Un DLC ou une mise à jour n'est pas un jeu : installé au prochain lancement du sien (EmulatorSession).
             if values?.isDirectory == true, VitaGame.isGameFolder(url) {
-                vitaFolders.append(url)
+                if VitaGame.kind(of: url) == .game { vitaFolders.append(url) }
                 enumerator.skipDescendants()
             }
 #endif
@@ -68,11 +69,14 @@ final class GameLibrary: ObservableObject {
         let found = files.compactMap { url -> Game? in
             guard let system = GameSystem.detect(url),
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
+#if PLAYTENDO_VITA
+            if system == .vita, VitaGame.kind(of: url) != .game { return nil }
+#endif
             return Game(url: url, system: system)
         }
 #if PLAYTENDO_VITA
         // PS Vita : les jeux installés dont l'original n'est plus dans Jeux (retiré après l'installation).
-        let vitaOriginals = vitaFolders + files.filter { $0.pathExtension.lowercased() == "vpk" }
+        let vitaOriginals = vitaFolders + found.filter { $0.system == .vita }.map(\.url)
         let originalIDs = Set(vitaOriginals.compactMap(VitaGame.titleID(of:)))
         let installed = VitaGame.installedGames().filter { url in
             VitaGame.titleID(of: url).map { !originalIDs.contains($0) } ?? false
@@ -396,15 +400,16 @@ final class GameLibrary: ObservableObject {
     }
 
 #if PLAYTENDO_VITA
-    /// Dossier glissé (sur Mac surtout, sans app Fichiers) : les jeux PS Vita extraits de la console (dossier avec
-    /// sce_sys/param.sfo), le dossier lui-même ou jusqu'à deux niveaux dessous (« VitaiOS/app/PCSA00011 »), et les .PUP
-    /// et .vpk qu'il contient. Copie du système : sur le même disque (APFS), un clone immédiat qui ne prend pas de place.
+    /// Dossier glissé (sur Mac surtout, sans app Fichiers) : les jeux, DLC et mises à jour PS Vita extraits de la console
+    /// (dossier avec sce_sys/param.sfo), le dossier lui-même ou jusqu'à trois niveaux dessous (« VitaiOS/app/PCSA00011 »,
+    /// « addcont/PCSA00011/<DLC> »), et les .PUP et .vpk qu'il contient. Copie du système : sur le même disque (APFS), un clone immédiat qui ne prend pas de place.
     nonisolated private static func importVitaFolder(_ url: URL, stats: inout ImportStats,
                                                      update: ImportUpdate) throws -> ImportResult {
         stats.format = "dossier"
         var folders: [URL] = []
         var files: [URL] = []
-        collectVitaContent(url, depth: 0, folders: &folders, files: &files)
+        var rePatches: [URL] = []
+        collectVitaContent(url, depth: 0, folders: &folders, files: &files, rePatches: &rePatches)
         let manager = FileManager.default
         let games = Paths.games.resolvingSymlinksInPath().path + "/"
         var added = 0
@@ -416,7 +421,7 @@ final class GameLibrary: ObservableObject {
                 continue
             }
             let target = Paths.games.appendingPathComponent(folder.lastPathComponent)
-            if manager.fileExists(atPath: target.path), VitaGame.titleID(of: target) == VitaGame.titleID(of: folder) {
+            if manager.fileExists(atPath: target.path), VitaGame.identity(of: target) == VitaGame.identity(of: folder) {
                 present.append(target)
                 continue
             }
@@ -426,6 +431,20 @@ final class GameLibrary: ObservableObject {
             stats.files += 1
             added += 1
             kept.append(destination)
+        }
+        // rePatch : remplace celui du même jeu déjà dans Jeux (le plus récent compte).
+        for rePatch in rePatches {
+            let target = Paths.games.appendingPathComponent("rePatch/\(rePatch.lastPathComponent)", isDirectory: true)
+            if rePatch.resolvingSymlinksInPath().path.hasPrefix(games) {
+                present.append(rePatch)
+                continue
+            }
+            guard update(.copying, "rePatch \(rePatch.lastPathComponent)", 0, 0) else { throw PTArchiveError(.cancelled) }
+            try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
+            try manager.copyItem(at: rePatch, to: target)
+            stats.files += 1
+            added += 1
         }
         for file in files {
             switch try importFile(file, stats: &stats, update: update) {
@@ -442,17 +461,25 @@ final class GameLibrary: ObservableObject {
         return present.isEmpty ? .unsupported : .alreadyThere(present)
     }
 
-    nonisolated private static func collectVitaContent(_ url: URL, depth: Int, folders: inout [URL], files: inout [URL]) {
+    nonisolated private static func collectVitaContent(_ url: URL, depth: Int, folders: inout [URL], files: inout [URL],
+                                                       rePatches: inout [URL]) {
         if VitaGame.isGameFolder(url) {
             folders.append(url)
             return
         }
-        guard depth < 2,
+        // Dossier rePatch : un sous-dossier par jeu (« rePatch/PCSE00428 »).
+        if url.lastPathComponent.lowercased() == "repatch" {
+            let entries = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey],
+                                                                         options: [.skipsHiddenFiles])) ?? []
+            rePatches += entries.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+            return
+        }
+        guard depth < 3,
               let entries = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey],
                                                                          options: [.skipsHiddenFiles]) else { return }
         for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             if (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-                collectVitaContent(entry, depth: depth + 1, folders: &folders, files: &files)
+                collectVitaContent(entry, depth: depth + 1, folders: &folders, files: &files, rePatches: &rePatches)
             } else if ["pup", "vpk"].contains(entry.pathExtension.lowercased()) {
                 files.append(entry)
             }
@@ -628,7 +655,9 @@ final class GameLibrary: ObservableObject {
         let base = url.deletingPathExtension().lastPathComponent
         var index = 2
         while true {
-            let candidate = url.deletingLastPathComponent().appendingPathComponent("\(base) \(index).\(url.pathExtension)")
+            // Sans extension (dossier d'un jeu PS Vita) : « PCSH00250 2 », sans point final.
+            let name = url.pathExtension.isEmpty ? "\(base) \(index)" : "\(base) \(index).\(url.pathExtension)"
+            let candidate = url.deletingLastPathComponent().appendingPathComponent(name)
             if !manager.fileExists(atPath: candidate.path) { return candidate }
             index += 1
         }
@@ -644,6 +673,15 @@ final class GameLibrary: ObservableObject {
         if game.system == .vita, let titleID = VitaGame.titleID(of: game.url) {
             VitaGame.uninstall(titleID: titleID,
                                removingSavesIn: removingSaves ? VitaGame.saveFolderName(of: game.url) : nil)
+            // Ses DLC et mises à jour pas encore installés (dans Jeux), et son rePatch, partent avec lui.
+            for addon in VitaGame.pendingAddons(for: titleID) {
+                try? FileManager.default.removeItem(at: addon.url)
+                VitaGame.removeEmptyFolders(containing: addon.url)
+            }
+            if let rePatch = VitaGame.rePatchFolder(for: titleID) {
+                try? FileManager.default.removeItem(at: rePatch)
+                VitaGame.removeEmptyFolders(containing: rePatch)
+            }
         }
 #endif
         for file in Self.files(of: game) {

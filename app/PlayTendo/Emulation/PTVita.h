@@ -41,10 +41,15 @@ char *PTVitaInstallFirmware(const char *pupPath, PTVitaProgress progress, void *
 char *PTVitaInstallGame(const char *path, PTVitaProgress progress, void *context);
 /// Jeu déjà installé dans la mémoire de la console.
 bool PTVitaIsInstalled(const char *titleID);
+/// Dossier rePatch (mod pour le plugin rePatch : fichiers déchiffrés qui remplacent ceux du jeu) du prochain jeu
+/// installé, ou NULL : un fichier qui manque dans le jeu est alors accepté s'il s'y trouve.
+void PTVitaSetRePatch(const char *dir);
 
 /// Démarre un jeu installé (identifiant). Faux si le démarrage n'a pas pu être lancé. Le turbo (réserve JIT de
 /// l'app) est obligatoire : Vita3K n'a pas d'interpréteur.
 bool PTVitaBoot(const char *titleID);
+/// Résolution interne (multiple de 960×544) du prochain jeu lancé : Vita3K ne la lit qu'au démarrage.
+void PTVitaSetResolution(float multiplier);
 PTVitaState PTVitaGetState(void);
 void PTVitaSetPaused(bool paused);
 /// Demande l'arrêt du jeu ; l'état repasse à « arrêté » quand c'est fait.

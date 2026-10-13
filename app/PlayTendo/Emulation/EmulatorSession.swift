@@ -34,6 +34,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published var toast: String?
     /// Étape longue en cours pendant le chargement (installation du firmware ou d'un jeu PS Vita), montrée sous la roue.
     @Published private(set) var loadingDetail: String?
+#if PLAYTENDO_VITA
+    /// PS Vita : résolution de la partie en cours (un autre choix ne vaut qu'au prochain lancement).
+    @Published private(set) var vitaResolution: VitaSettings.Resolution?
+#endif
     /// PS2, GameCube/Wii : vue Metal où le moteur dessine, placée par l'écran de jeu.
     @Published private(set) var engineView: PlatformView?
 
@@ -736,26 +740,88 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             fail(tr("Ce jeu PS Vita est illisible : son fichier sce_sys/param.sfo est introuvable."))
             return nil
         }
+        // rePatch (mod) : ses fichiers peuvent manquer au jeu à l'installation, puis remplacent ceux du jeu installé.
+        let rePatch = VitaGame.rePatchFolder(for: titleID)
         if vita.isGameInstalled(titleID) {
-            setLoadingDetail(nil)
             // Original remis (ou gardé d'avant) alors que le jeu est installé : doublon retiré de Jeux.
             VitaGame.removeOriginal(game.url, titleID: titleID)
+            installVitaAddons(vita, titleID: titleID)
+            applyVitaRePatch(rePatch, titleID: titleID)
+            setLoadingDetail(nil)
             return titleID
         }
         setLoadingDetail(tr("Installation du jeu (une seule fois)…"))
         let start = clock.now
-        guard let installed = vita.installGame(atPath: game.url.path, progress: { [weak self] progress in
+        if let rePatch { PTLogLine("Vita : rePatch trouvé pour \(titleID) (\(rePatch.path))") }
+        vita.setRePatchDirectory(rePatch?.path)
+        let installed = vita.installGame(atPath: game.url.path, progress: { [weak self] progress in
             self?.setLoadingDetail(tr("Installation du jeu (une seule fois)… \(Int(progress * 100)) %"))
-        }) else {
+        })
+        vita.setRePatchDirectory(nil)
+        guard let installed else {
             setLoadingDetail(nil)
             fail(vita.lastError().map(trMessage) ?? tr("Le jeu n'a pas pu être installé."))
             return nil
         }
         PTLogLine(String(format: "Vita : jeu %@ installé en %.0f s (%@)", installed, clock.now - start, game.url.lastPathComponent))
-        setLoadingDetail(nil)
         // Le jeu tourne depuis sa copie installée : l'original quitte Jeux (sinon il prendrait deux fois sa place).
         VitaGame.removeOriginal(game.url, titleID: installed)
+        installVitaAddons(vita, titleID: installed)
+        applyVitaRePatch(rePatch, titleID: installed)
+        setLoadingDetail(nil)
         return installed
+    }
+
+    /// rePatch après le jeu et ses mises à jour (il remplace aussi leurs fichiers, comme le plugin sur une Vita).
+    private func applyVitaRePatch(_ folder: URL?, titleID: String) {
+        guard let folder else { return }
+        setLoadingDetail(tr("Application du rePatch…"))
+        if VitaGame.applyRePatch(folder, titleID: titleID) == nil {
+            showToast(tr("Le rePatch n'a pas pu être appliqué (voir le Journal)"))
+        }
+    }
+
+    /// DLC et mise à jour du jeu rangés dans Jeux : installés dans la mémoire de la console (la mise à jour d'abord),
+    /// puis leur original quitte Jeux, comme pour un jeu. Un échec (licence work.bin absente…) n'empêche pas de jouer :
+    /// il est noté au Journal et l'original reste dans Jeux.
+    private func installVitaAddons(_ vita: PTVitaEngine, titleID: String) {
+        var failed = 0
+        for addon in VitaGame.pendingAddons(for: titleID) {
+            // Mise à jour déjà dans le jeu installé (même version ou plus récente) : rien à réinstaller.
+            if addon.isInstalled {
+                VitaGame.removeInstalledUpdate(addon)
+                continue
+            }
+            let label = addon.kind == .update ? tr("Installation de la mise à jour \(addon.label)…")
+                : tr("Installation du DLC « \(addon.label) »…")
+            let what = addon.kind == .update ? "mise à jour \(addon.label)" : "DLC « \(addon.label) »"
+            setLoadingDetail(label)
+            let clock = MachClock()
+            let start = clock.now
+            guard vita.installGame(atPath: addon.url.path, progress: { [weak self] progress in
+                self?.setLoadingDetail("\(label) \(Int(progress * 100)) %")
+            }) != nil else {
+                failed += 1
+                PTLogLine("Vita : \(what) de \(titleID) non installé(e) (\(vita.lastError() ?? "raison inconnue")) ; original gardé dans Jeux")
+                continue
+            }
+            PTLogLine(String(format: "Vita : %@ de %@ installé(e) en %.0f s (%@)", what, titleID, clock.now - start,
+                             addon.url.lastPathComponent))
+            if addon.kind == .update {
+                // Vita3K l'a fusionnée dans le jeu installé : vérifié par la version, puis l'original quitte Jeux.
+                if addon.isInstalled {
+                    VitaGame.removeInstalledUpdate(addon)
+                } else {
+                    PTLogLine("Vita : mise à jour \(addon.label) absente du jeu installé après l'installation ; original gardé dans Jeux")
+                }
+            } else if let installedURL = addon.installedURL {
+                VitaGame.removeOriginal(addon.url, installedAt: installedURL, kept: "le DLC reste installé")
+            }
+        }
+        if failed > 0 {
+            showToast(failed == 1 ? tr("Un DLC ou une mise à jour n'a pas pu être installé (voir le Journal)")
+                                  : tr("\(failed) DLC ou mises à jour n'ont pas pu être installés (voir le Journal)"))
+        }
     }
 #endif
 
@@ -781,10 +847,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
 #if PLAYTENDO_VITA
-    /// PS Vita : installe ce qu'il faut. Renvoie l'identifiant du jeu à démarrer, ou nil.
+    /// PS Vita : installe ce qu'il faut puis règle la résolution. Renvoie l'identifiant du jeu à démarrer, ou nil.
     private func vitaBootTitle(_ vita: PTVitaEngine) -> String? {
         PTLogLine("Vita : lancement de \(game.url.lastPathComponent)")
-        return prepareVita(vita)
+        guard let titleID = prepareVita(vita) else { return nil }
+        let resolution = VitaSettings.resolution
+        vita.setResolution(Float(resolution.rawValue))
+        PTLogLine("Vita : résolution \(resolution.label) (\(resolution.size))")
+        DispatchQueue.main.async { self.vitaResolution = resolution }
+        return titleID
     }
 #endif
 

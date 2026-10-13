@@ -310,6 +310,9 @@ private struct PauseMenu: View {
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
     /// DS : résolution (gardée pour tous ses jeux).
     @AppStorage(DSSettings.resolutionKey) private var dsResolution = DSSettings.Resolution.x2.rawValue
+#if PLAYTENDO_VITA
+    @AppStorage(VitaSettings.resolutionKey) private var vitaResolution = VitaSettings.Resolution.standard.rawValue
+#endif
     /// N64 et PS1 : résolution et lissage (gardés pour tous leurs jeux).
     @AppStorage(N64Settings.resolutionKey) private var n64Resolution = N64Settings.Resolution.x2.rawValue
     @AppStorage(N64Settings.formatKey) private var n64Format = N64Settings.Format.standard.rawValue
@@ -318,7 +321,7 @@ private struct PauseMenu: View {
 
     private var isDolphin: Bool { session.game.system == .gameCube || session.game.system == .wii }
     private var hasImageSettings: Bool {
-        [.psp, .ps2, .gameCube, .wii, .n3ds, .nds, .n64, .psx].contains(session.game.system)
+        [.psp, .ps2, .gameCube, .wii, .n3ds, .nds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
     }
     /// Vita3K n'a ni sauvegarde rapide, ni avance rapide, ni « recommencer » : seules les sauvegardes des jeux existent.
     private var hasEngineExtras: Bool { !session.game.system.isVita }
@@ -453,8 +456,29 @@ private struct PauseMenu: View {
         }
     }
 
-    /// Résolution et lissage : tous les choix visibles, un toucher suffit. Appliqués à la reprise du jeu.
+    /// Résolution et lissage : tous les choix visibles, un toucher suffit. Appliqués à la reprise du jeu (PS Vita : au
+    /// prochain lancement, Vita3K ne lit sa résolution qu'au démarrage).
     @ViewBuilder private var imageSettings: some View {
+#if PLAYTENDO_VITA
+        if session.game.system.isVita {
+            let chosen = VitaSettings.Resolution(rawValue: vitaResolution) ?? .standard
+            imageSettings(
+                resolution: NeonSegments(title: tr("RÉSOLUTION"),
+                                         detail: session.vitaResolution.map { $0 != chosen } == true
+                                            ? tr("au prochain lancement") : chosen.size,
+                                         options: VitaSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
+                                         selection: vitaResolution) { value in
+                    choose { vitaResolution = value }
+                })
+        } else {
+            consoleImageSettings
+        }
+#else
+        consoleImageSettings
+#endif
+    }
+
+    @ViewBuilder private var consoleImageSettings: some View {
         if isDolphin {
             imageSettings(
                 resolution: NeonSegments(title: tr("RÉSOLUTION"),
@@ -579,6 +603,8 @@ private struct PauseMenu: View {
 #if os(iOS)
         UISelectionFeedbackGenerator().selectionChanged()
 #endif
+        // PS Vita : retenue pour le prochain lancement (EmulatorSession la donne au moteur avant chaque démarrage).
+        if session.game.system.isVita { return }
         if isDolphin {
             session.applyDolphinImage()
         } else if session.game.system == .n3ds {

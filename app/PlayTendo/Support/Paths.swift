@@ -382,10 +382,14 @@ enum Paths {
         games.append(([.vita],
             "PlayStation Vita : le dossier du jeu extrait de ta Vita (« PCSA00011 »…, avec sa licence\n"
             + "    sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk ; installé dans PlayTendo\n"
-            + "    au premier lancement, puis retiré de ce dossier",
+            + "    au premier lancement, puis retiré de ce dossier ; DLC et mises à jour (dossiers\n"
+            + "    ux0:addcont/…, ux0:patch/… de ta Vita) installés au prochain lancement du jeu ;\n"
+            + "    mods rePatch : leur dossier rePatch/<identifiant du jeu>",
             "PlayStation Vita: the game folder extracted from your Vita (“PCSA00011”…, with its license\n"
             + "    sce_sys/package/work.bin for a retail game) or a .vpk; installed into PlayTendo\n"
-            + "    on first launch, then removed from this folder"))
+            + "    on first launch, then removed from this folder; DLC and updates (ux0:addcont/…,\n"
+            + "    ux0:patch/… folders from your Vita) installed the next time the game is launched;\n"
+            + "    rePatch mods: their rePatch/<game ID> folder"))
         bios.append(([.vita],
             "PlayStation Vita (obligatoire) : PSVUPDAT.PUP, la mise à jour officielle de la console,\n"
             + "    et si possible ses polices PSP2UPDAT.PUP",
@@ -441,6 +445,9 @@ enum Paths {
         license sce_sys/package/work.bin for a retail game) or a .vpk.
         Installed into PlayTendo on first launch, then removed from this folder: keep your
         original elsewhere (leave room for a copy during installation).
+        DLC and updates: their folders extracted from your Vita (ux0:addcont/…, ux0:patch/…),
+        installed the next time the game is launched. Mods for the rePatch plugin: their
+        rePatch/<game ID> folder, anywhere in this folder.
 
     """
     private static let readmeVitaBIOSEnglish = """
@@ -453,6 +460,9 @@ enum Paths {
         licence sce_sys/package/work.bin pour un jeu du commerce) ou un .vpk.
         Installé dans PlayTendo au premier lancement, puis retiré de ce dossier : garde ton
         original ailleurs (prévois la place d'une copie le temps de l'installation).
+        DLC et mises à jour : leurs dossiers extraits de ta Vita (ux0:addcont/…, ux0:patch/…),
+        installés au prochain lancement du jeu. Mods pour le plugin rePatch : leur dossier
+        rePatch/<identifiant du jeu>, n'importe où dans ce dossier.
 
     """
     private static let readmeVitaBIOS = """

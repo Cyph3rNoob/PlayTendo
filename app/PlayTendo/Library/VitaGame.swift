@@ -119,11 +119,32 @@ enum VitaGame {
     /// la taille de l'original : une installation interrompue garde son original). Les dossiers qui le contenaient
     /// sont retirés aussi s'ils ne contiennent plus rien.
     static func removeOriginal(_ original: URL, titleID: String) {
+        removeOriginal(original, installedAt: installedAppsFolder.appendingPathComponent(titleID), kept: "le jeu reste installé")
+    }
+
+    /// Même chose pour un DLC ou une mise à jour (`installed` : sa copie dans la mémoire de la console).
+    /// Mise à jour déjà fusionnée dans le jeu installé (Addon.isInstalled) : son original quitte Jeux.
+    static func removeInstalledUpdate(_ addon: Addon) {
+        let games = Paths.games.resolvingSymlinksInPath().path + "/"
+        guard addon.kind == .update, addon.isInstalled, addon.url.resolvingSymlinksInPath().path.hasPrefix(games) else { return }
+        let bytes = size(of: addon.url)
+        do {
+            try FileManager.default.removeItem(at: addon.url)
+        } catch {
+            PTLogLine("Vita : original impossible à retirer de Jeux (\(error.localizedDescription))")
+            return
+        }
+        PTLogLine(String(format: "Vita : original retiré du dossier Jeux (%@, %.2f Go libérés), la mise à jour %@ est dans le jeu installé",
+                         addon.url.lastPathComponent, Double(bytes) / 1e9, addon.label))
+        removeEmptyFolders(containing: addon.url)
+    }
+
+    static func removeOriginal(_ original: URL, installedAt installed: URL, kept: String) {
         let manager = FileManager.default
         let games = Paths.games.resolvingSymlinksInPath().path + "/"
         guard original.resolvingSymlinksInPath().path.hasPrefix(games), manager.fileExists(atPath: original.path) else { return }
         let originalSize = size(of: original)
-        let installedSize = size(of: installedAppsFolder.appendingPathComponent(titleID))
+        let installedSize = size(of: installed)
         guard installedSize > 0, Double(installedSize) >= Double(originalSize) * 0.9 else {
             PTLogLine(String(format: "Vita : original gardé dans Jeux, copie installée incomplète (%.2f Go sur %.2f Go)",
                              Double(installedSize) / 1e9, Double(originalSize) / 1e9))
@@ -135,8 +156,8 @@ enum VitaGame {
             PTLogLine("Vita : original impossible à retirer de Jeux (\(error.localizedDescription))")
             return
         }
-        PTLogLine(String(format: "Vita : original retiré du dossier Jeux (%@, %.2f Go libérés), le jeu reste installé",
-                         original.lastPathComponent, Double(originalSize) / 1e9))
+        PTLogLine(String(format: "Vita : original retiré du dossier Jeux (%@, %.2f Go libérés), %@",
+                         original.lastPathComponent, Double(originalSize) / 1e9, kept))
         removeEmptyFolders(containing: original)
     }
 
@@ -207,6 +228,196 @@ enum VitaGame {
             }
         }
         return result
+    }
+
+    // MARK: DLC et mises à jour
+
+    /// Contenu d'un dossier ou d'un .vpk PS Vita, d'après la catégorie de sa fiche (CATEGORY de param.sfo) : jeu (gd,
+    /// gc…), mise à jour (gp) ou DLC (ac). Vita3K installe les deux derniers dans ux0/patch et ux0/addcont.
+    enum Kind { case game, update, dlc }
+
+    static func kind(of url: URL) -> Kind { kind(parameters(of: url)) }
+
+    private static func kind(_ parameters: [String: String]) -> Kind {
+        let category = parameters["CATEGORY"] ?? ""
+        if category.hasPrefix("gp") { return .update }
+        if category == "ac" { return .dlc }
+        return .game
+    }
+
+    /// DLC ou mise à jour rangé dans Jeux, installé au prochain lancement de son jeu.
+    struct Addon {
+        let url: URL
+        let kind: Kind
+        let titleID: String
+        /// DLC : son nom ; mise à jour : sa version (« 1.01 »).
+        let label: String
+        /// DLC : sa copie dans la mémoire de la console, une fois installé (vérifie que l'installation est complète).
+        /// Mise à jour : nil, Vita3K la fusionne dans le jeu installé (voir isInstalled).
+        let installedURL: URL?
+        /// Mise à jour : sa version telle qu'écrite dans sa fiche (« 01.15 »).
+        let version: String?
+
+        /// Mise à jour déjà dans le jeu installé : Vita3K copie ses fichiers dans ux0/app/<identifiant> puis efface
+        /// ux0/patch (io.cpp, copy_path) ; la version du jeu installé est alors au moins la sienne.
+        var isInstalled: Bool {
+            guard kind == .update, let version,
+                  let installed = VitaGame.parameters(of: VitaGame.installedAppsFolder.appendingPathComponent(titleID))["APP_VER"]
+            else { return false }
+            return VitaGame.compareVersions(installed, version) >= 0
+        }
+    }
+
+    static func addon(at url: URL) -> Addon? {
+        let parameters = parameters(of: url)
+        let kind = kind(parameters)
+        guard kind != .game, let titleID = parameters["TITLE_ID"], !titleID.isEmpty, !titleID.contains("/"),
+              !titleID.hasPrefix(".") else { return nil }
+        let ux0 = Paths.vitaEngine.appendingPathComponent("vita/ux0", isDirectory: true)
+        if kind == .update {
+            return Addon(url: url, kind: kind, titleID: titleID, label: displayVersion(parameters["APP_VER"]) ?? "?",
+                         installedURL: nil, version: parameters["APP_VER"])
+        }
+        // Comme Vita3K (interface.cpp) : ux0/addcont/<identifiant>/<CONTENT_ID sans ses 20 premiers caractères>.
+        let content = parameters["CONTENT_ID"] ?? ""
+        let folder = content.count > 20 ? String(content.dropFirst(20)) : nil
+        let safeFolder = folder.flatMap { $0.contains("/") || $0.hasPrefix(".") ? nil : $0 }
+        let name = parameters["TITLE"].map { $0.replacingOccurrences(of: "™", with: " ").replacingOccurrences(of: "®", with: " ")
+            .replacingOccurrences(of: "\n", with: " ").split(separator: " ").joined(separator: " ") }
+        return Addon(url: url, kind: kind, titleID: titleID, label: name.flatMap { $0.isEmpty ? nil : $0 } ?? folder ?? titleID,
+                     installedURL: safeFolder.map { ux0.appendingPathComponent("addcont/\(titleID)/\($0)", isDirectory: true) },
+                     version: nil)
+    }
+
+    /// DLC et mises à jour rangés dans Jeux (dossiers extraits de la Vita, .vpk), d'un jeu ou de tous. La mise à jour
+    /// d'abord : le moteur ne l'installe que si le jeu l'est.
+    static func pendingAddons(for titleID: String? = nil) -> [Addon] {
+        guard let enumerator = FileManager.default.enumerator(at: Paths.games, includingPropertiesForKeys: [.isDirectoryKey],
+                                                              options: [.skipsHiddenFiles]) else { return [] }
+        var result: [Addon] = []
+        for case let url as URL in enumerator {
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            if isDirectory, isGameFolder(url) {
+                enumerator.skipDescendants()
+            } else if isDirectory || url.pathExtension.lowercased() != "vpk" {
+                continue
+            }
+            if let addon = addon(at: url), titleID == nil || addon.titleID == titleID { result.append(addon) }
+        }
+        return result.sorted { ($0.kind == .update ? 0 : 1) < ($1.kind == .update ? 0 : 1) }
+    }
+
+    /// Version installée d'un jeu (celle de sa mise à jour s'il en a une) et nombre de ses DLC installés.
+    static func installedContent(titleID: String) -> (version: String?, dlcCount: Int) {
+        let ux0 = Paths.vitaEngine.appendingPathComponent("vita/ux0", isDirectory: true)
+        let version = displayVersion(parameters(of: ux0.appendingPathComponent("patch/\(titleID)"))["APP_VER"])
+            ?? displayVersion(parameters(of: installedAppsFolder.appendingPathComponent(titleID))["APP_VER"])
+        let dlc = (try? FileManager.default.contentsOfDirectory(atPath: ux0.appendingPathComponent("addcont/\(titleID)").path))?
+            .filter { !$0.hasPrefix(".") }.count ?? 0
+        return (version, dlc)
+    }
+
+    /// Ce qui identifie un contenu (même jeu, même DLC, même version de mise à jour) : sert à ne pas importer deux fois
+    /// la même chose.
+    static func identity(of url: URL) -> String {
+        let parameters = parameters(of: url)
+        return ["TITLE_ID", "CATEGORY", "CONTENT_ID", "APP_VER"].map { parameters[$0] ?? "" }.joined(separator: "|")
+    }
+
+    // MARK: rePatch
+
+    /// Mod pour le plugin rePatch d'une Vita modifiée : dossier `rePatch/<identifiant>` (n'importe où dans Jeux) dont
+    /// les fichiers, déjà déchiffrés, remplacent ceux du jeu (AKIBA'S TRIP « Uncensored », 2026-10-13). Vita3K ne le
+    /// gère pas : le moteur accepte qu'un fichier qu'il fournit manque au jeu (PTVitaSetRePatch), puis ses fichiers sont
+    /// copiés sur le jeu installé (applyRePatch), à chaque lancement s'ils ont changé. Gardé dans Jeux (copie par
+    /// clone : pas de place en plus sur le même disque).
+    static func rePatchFolder(for titleID: String) -> URL? {
+        guard let enumerator = FileManager.default.enumerator(at: Paths.games, includingPropertiesForKeys: [.isDirectoryKey],
+                                                              options: [.skipsHiddenFiles]) else { return nil }
+        let wanted = titleID.lowercased()
+        for case let url as URL in enumerator {
+            guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            if isGameFolder(url) {
+                enumerator.skipDescendants()
+                continue
+            }
+            if url.lastPathComponent.lowercased() == wanted,
+               url.deletingLastPathComponent().lastPathComponent.lowercased() == "repatch" {
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// Copie les fichiers de rePatch sur le jeu installé (ceux qui ont changé : taille ou date). Renvoie le nombre de
+    /// fichiers copiés, ou nil en cas d'échec (noté au Journal).
+    @discardableResult
+    static func applyRePatch(_ folder: URL, titleID: String) -> Int? {
+        let manager = FileManager.default
+        let app = installedAppsFolder.appendingPathComponent(titleID, isDirectory: true)
+        guard manager.fileExists(atPath: app.path),
+              let enumerator = manager.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey,
+                                                                                          .contentModificationDateKey],
+                                                  options: [.skipsHiddenFiles]) else { return nil }
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let base = folder.resolvingSymlinksInPath().path + "/"
+        var copied = 0
+        for case let file as URL in enumerator {
+            guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true else { continue }
+            let relative = String(file.resolvingSymlinksInPath().path.dropFirst(base.count))
+            let target = existingPath(relative, in: app) ?? app.appendingPathComponent(relative)
+            if let current = try? target.resourceValues(forKeys: keys), current.fileSize == values.fileSize,
+               current.contentModificationDate == values.contentModificationDate {
+                continue
+            }
+            do {
+                try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
+                try manager.copyItem(at: file, to: target)
+                copied += 1
+            } catch {
+                PTLogLine("Vita : rePatch de \(titleID), \(relative) non copié (\(error.localizedDescription))")
+                return nil
+            }
+        }
+        PTLogLine(copied > 0 ? "Vita : rePatch de \(titleID) appliqué (\(copied) fichier(s) copié(s) sur le jeu installé)"
+                             : "Vita : rePatch de \(titleID) déjà appliqué")
+        return copied
+    }
+
+    /// Fichier du jeu installé qui porte ce chemin sans tenir compte des majuscules (comme sur une Vita), ou nil.
+    private static func existingPath(_ relative: String, in root: URL) -> URL? {
+        var current = root
+        for part in relative.split(separator: "/") {
+            let wanted = part.lowercased()
+            guard let match = (try? FileManager.default.contentsOfDirectory(atPath: current.path))?
+                .first(where: { $0.lowercased() == wanted }) else { return nil }
+            current = current.appendingPathComponent(match)
+        }
+        return current
+    }
+
+    /// Version d'un jeu, d'un DLC ou d'une mise à jour d'après sa fiche (« 1.00 »).
+    static func version(of url: URL) -> String? { displayVersion(parameters(of: url)["APP_VER"]) }
+
+    /// Compare deux versions « 01.15 » / « 1.2 » nombre par nombre : négatif, 0 ou positif.
+    static func compareVersions(_ a: String, _ b: String) -> Int {
+        let left = a.split(separator: ".").map { Int($0) ?? 0 }
+        let right = b.split(separator: ".").map { Int($0) ?? 0 }
+        for index in 0..<max(left.count, right.count) {
+            let l = index < left.count ? left[index] : 0
+            let r = index < right.count ? right[index] : 0
+            if l != r { return l < r ? -1 : 1 }
+        }
+        return 0
+    }
+
+    /// « 01.01 » → « 1.01 ».
+    private static func displayVersion(_ version: String?) -> String? {
+        guard let version, !version.isEmpty else { return nil }
+        let parts = version.split(separator: ".", maxSplits: 1)
+        guard let major = parts.first.flatMap({ Int($0) }) else { return version }
+        return parts.count > 1 ? "\(major).\(parts[1])" : "\(major)"
     }
 
     // MARK: Firmware

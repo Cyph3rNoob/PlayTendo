@@ -801,3 +801,95 @@ patch("vita3k/renderer/src/vulkan/scene.cpp", [
      "    if (use_memory_mapping) {\n"
      "#endif\n"),
 ])
+
+# 16. rePatch (mods pour le plugin rePatch d'une Vita modifiée, 2026-10-13) : un fichier du jeu peut manquer dans
+# app/<identifiant> s'il est fourni par rePatch/<identifiant> (AKIBA'S TRIP « Uncensored » : volume.dat retiré de app/,
+# remplacé par sa version modifiée, déjà déchiffrée). psvpfsparser exige chaque fichier de la table (files.db) à trois
+# étapes : liaison des fichiers, correspondance table de contrôle ↔ fichier, déchiffrement. Le pilote répond à
+# PTVitaRePatchProvides (vita/PTVitaHost.cpp) ; le fichier manquant est sauté aux trois étapes (autant de tables
+# sans correspondance que de fichiers sautés) et compté au contrôle final du nombre de fichiers, puis l'app copie les
+# fichiers de rePatch sur le jeu installé.
+patch("external/psvpfstools/psvpfsparser/FilesDbParser.cpp", [
+    ("bool is_valid_file_type(sce_ng_pfs_file_types type)\n",
+     "// PlayTendo : fichier fourni par le dossier rePatch du jeu (réponse du pilote ; absent hors de PlayTendo).\n"
+     "extern \"C\" bool PTVitaRePatchProvides(const char *path) __attribute__((weak));\n"
+     "// PlayTendo : nombre de fichiers sautés par la dernière liaison (lu par PfsPageMapper et PfsFilesystem).\n"
+     "int g_playtendoRePatchSkipped = 0;\n"
+     "\n"
+     "bool is_valid_file_type(sce_ng_pfs_file_types type)\n"),
+    ("   m_output << \"Linking file paths...\" << std::endl;\n",
+     "   m_output << \"Linking file paths...\" << std::endl;\n"
+     "   g_playtendoRePatchSkipped = 0;\n"),
+    ("      auto it = real_files_map.find(path);\n"
+     "      if(it == real_files_map.end())\n"
+     "      {\n"
+     "         m_output << \"File \" << file.path() << \" does not exist\" << std::endl;\n"
+     "         return false;\n"
+     "      }\n",
+     "      auto it = real_files_map.find(path);\n"
+     "      if(it == real_files_map.end())\n"
+     "      {\n"
+     "         // PlayTendo : remplacé par rePatch, sauté.\n"
+     "         if(PTVitaRePatchProvides && PTVitaRePatchProvides(file.path().get_value().string().c_str()))\n"
+     "         {\n"
+     "            m_output << \"File \" << file.path() << \" is provided by rePatch (skipped)\" << std::endl;\n"
+     "            g_playtendoRePatchSkipped++;\n"
+     "            continue;\n"
+     "         }\n"
+     "         m_output << \"File \" << file.path() << \" does not exist\" << std::endl;\n"
+     "         return false;\n"
+     "      }\n"),
+    # Compte final : les fichiers sautés manquent forcément parmi les fichiers présents.
+    ("   size_t expectedSize = files.size() + directories.size() - numExtra; // allow extra files to exist\n",
+     "   size_t expectedSize = files.size() + directories.size() - numExtra; // allow extra files to exist\n"
+     "   expectedSize += g_playtendoRePatchSkipped; // PlayTendo : fichiers fournis par rePatch, absents\n"),
+])
+patch("external/psvpfstools/psvpfsparser/PfsPageMapper.cpp", [
+    ("#include \"PfsPageMapper.h\"\n",
+     "#include \"PfsPageMapper.h\"\n\n"
+     "// PlayTendo : fichiers sautés car fournis par rePatch (FilesDbParser.cpp).\n"
+     "extern int g_playtendoRePatchSkipped;\n"),
+    ("   std::vector<std::pair<std::shared_ptr<sce_iftbl_base_t>, std::shared_ptr<merkle_tree<icv> > > > merkleTrees;\n",
+     "   std::vector<std::pair<std::shared_ptr<sce_iftbl_base_t>, std::shared_ptr<merkle_tree<icv> > > > merkleTrees;\n"
+     "   int playtendoUnmatched = 0; // PlayTendo : tables des fichiers sautés (rePatch)\n"),
+    ("         else\n"
+     "         {\n"
+     "            m_output << \"Match not found: \" << std::hex << t->get_icv_salt() << std::endl;\n"
+     "            return -1;\n"
+     "         }\n",
+     "         else if(playtendoUnmatched < g_playtendoRePatchSkipped)\n"
+     "         {\n"
+     "            // PlayTendo : table d'un fichier fourni par rePatch, absent du jeu.\n"
+     "            playtendoUnmatched++;\n"
+     "            m_output << \"Match not found: \" << std::hex << t->get_icv_salt() << \" (file provided by rePatch)\" << std::endl;\n"
+     "         }\n"
+     "         else\n"
+     "         {\n"
+     "            m_output << \"Match not found: \" << std::hex << t->get_icv_salt() << std::endl;\n"
+     "            return -1;\n"
+     "         }\n"),
+])
+patch("external/psvpfstools/psvpfsparser/PfsFilesystem.cpp", [
+    ("static void to_uppercase(std::string &str) {\n",
+     "// PlayTendo : fichiers sautés car fournis par rePatch (FilesDbParser.cpp).\n"
+     "extern int g_playtendoRePatchSkipped;\n\n"
+     "static void to_uppercase(std::string &str) {\n"),
+    ("   std::uint64_t processed_bytes = 0;\n",
+     "   std::uint64_t processed_bytes = 0;\n"
+     "   int playtendoSkipped = 0; // PlayTendo : tables des fichiers fournis par rePatch\n"),
+    ("      if(map_entry == pageMap.end())\n"
+     "      {\n"
+     "         m_output << \"failed to find page \" << t->get_icv_salt() << \" in map\" << std::endl;\n"
+     "         return -1;\n"
+     "      }\n",
+     "      if(map_entry == pageMap.end())\n"
+     "      {\n"
+     "         if(playtendoSkipped < g_playtendoRePatchSkipped)\n"
+     "         {\n"
+     "            playtendoSkipped++; // PlayTendo : fichier fourni par rePatch, rien à déchiffrer\n"
+     "            continue;\n"
+     "         }\n"
+     "         m_output << \"failed to find page \" << t->get_icv_salt() << \" in map\" << std::endl;\n"
+     "         return -1;\n"
+     "      }\n"),
+])
