@@ -32,7 +32,11 @@ Les versions prêtes à installer sont dans **[Releases](../../releases)** :
 | PlayStation | PCSX-ReARMed | r26l |
 | PlayStation 2 | ARMSX2 iOS | 2.6.0 |
 | PlayStation Portable | PPSSPP | v1.20.4 |
-| PS Vita | Vita3K | build 4135 |
+| PS Vita (**expérimental**) | Vita3K | build 4135 |
+
+**PS Vita : expérimental.** Le moteur Vita3K n'a pas encore de version stable : certains jeux plantent, s'affichent
+mal ou ne démarrent pas. Il faut le firmware de ta console (`PSVUPDAT.PUP`, dans le dossier BIOS) et, sur iPhone,
+le mode turbo (StikDebug).
 
 La liste des formats acceptés et des BIOS est dans le fichier **Lisez-moi.txt** que l'app crée dans ses
 Documents.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PlayTendo</title>
-<meta name="description" content="PlayTendo : tes jeux Nintendo et Sony, sur ton iPhone et ton iPad. 13 consoles, 10 moteurs libres.">
+<meta name="description" content="PlayTendo : tes jeux Nintendo et Sony, sur ton iPhone, ton iPad et ton Mac. 14 consoles, 11 moteurs libres.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -326,6 +326,8 @@ section.band { padding-block: 64px; scroll-margin-top: calc(env(safe-area-inset-
 .console h4 { font: 700 18px/1.2 var(--body); margin: 6px 0 0; }
 .console .engine { font: 500 14px/1.3 var(--body); color: #b6c1dc; margin: 0; }
 .console .formats { font: 500 12px/1.5 var(--mono); color: var(--k); margin: 4px 0 0; overflow-wrap: anywhere; }
+.exp { justify-self: start; font: 600 10px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--magenta); border: 1px solid rgba(255, 43, 214, .6); padding: 4px 6px; }
+.console .warn { font: 500 13px/1.45 var(--body); color: #c3cde6; margin: 2px 0 0; }
 .turbo { position: absolute; top: 14px; right: 14px; font: 600 10px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--violet); border: 1px solid rgba(138, 77, 255, .6); padding: 4px 6px; }
 
 /* Fonctions */
@@ -423,17 +425,18 @@ footer .first { color: var(--text); font-weight: 600; }
         </div>
         <label class="switch-hint fr" for="l-en" lang="en"><b>EN</b> Read in English</label>
         <label class="switch-hint en" for="l-fr" lang="fr"><b>FR</b> Lire en français</label>
-        <p class="eyebrow"><span class="fr">Émulateur pour iPhone et iPad</span><span class="en">Emulator for iPhone and iPad</span></p>
+        <p class="eyebrow"><span class="fr">Émulateur pour iPhone, iPad et Mac</span><span class="en">Emulator for iPhone, iPad and Mac</span></p>
         <h1 class="wordmark">PLAYTENDO</h1>
-        <p class="tagline"><span class="fr">Tes jeux Nintendo et Sony, sur ton iPhone/iPad.</span><span class="en">Your Nintendo and Sony games, on your iPhone/iPad.</span></p>
+        <p class="tagline"><span class="fr">Tes jeux Nintendo et Sony, sur ton iPhone, ton iPad et ton Mac.</span><span class="en">Your Nintendo and Sony games, on your iPhone, iPad and Mac.</span></p>
         <p class="lede">
-          <span class="fr">Treize consoles, de la NES à la PlayStation 2, dans une seule app. Des moteurs d'émulation libres, une bibliothèque qui reconnaît tes jeux toute seule, et des boutons pensés pour chaque manette.</span>
-          <span class="en">Thirteen consoles, from the NES to the PlayStation 2, in a single app. Open-source emulation engines, a library that recognizes your games on its own, and on-screen controls designed for each console.</span>
+          <span class="fr">Quatorze consoles, de la NES à la PS Vita, dans une seule app. Des moteurs d'émulation libres, une bibliothèque qui reconnaît tes jeux toute seule, et des boutons pensés pour chaque manette.</span>
+          <span class="en">Fourteen consoles, from the NES to the PS Vita, in a single app. Open-source emulation engines, a library that recognizes your games on its own, and on-screen controls designed for each console.</span>
         </p>
         <ul class="specs">
-          <li><b>13</b> <span class="fr">consoles</span><span class="en">consoles</span></li>
-          <li><b>10</b> <span class="fr">moteurs libres</span><span class="en">open-source engines</span></li>
+          <li><b>14</b> <span class="fr">consoles</span><span class="en">consoles</span></li>
+          <li><b>11</b> <span class="fr">moteurs libres</span><span class="en">open-source engines</span></li>
           <li><b>iOS 18+</b> <span class="fr">iPhone · iPad</span><span class="en">iPhone · iPad</span></li>
+          <li><b>macOS 14+</b> <span class="fr">Mac à puce Apple</span><span class="en">Apple silicon Mac</span></li>
         </ul>
         <div class="jump">
           <a class="btn solid cut" target="_self" href="#consoles"><span class="fr">Voir les consoles</span><span class="en">See the consoles</span></a>
@@ -494,10 +497,10 @@ footer .first { color: var(--text); font-weight: 600; }
 
   <section class="band" id="consoles">
     <div class="wrap">
-      <h2 class="sec"><span>Consoles</span><i></i><b>13</b></h2>
+      <h2 class="sec"><span>Consoles</span><i></i><b>14</b></h2>
       <p class="intro">
-        <span class="fr">Chaque console tourne avec un moteur libre reconnu, choisi pour l'iPhone. Les formats indiqués sont ceux que PlayTendo range tout seul dans sa bibliothèque.</span>
-        <span class="en">Each console runs on a well-known open-source engine, chosen for the iPhone. The formats listed are the ones PlayTendo files into its library on its own.</span>
+        <span class="fr">Chaque console tourne avec un moteur libre reconnu, adapté à l'iPhone et au Mac. Les formats indiqués sont ceux que PlayTendo range tout seul dans sa bibliothèque.</span>
+        <span class="en">Each console runs on a well-known open-source engine, adapted for the iPhone and the Mac. The formats listed are the ones PlayTendo files into its library on its own.</span>
       </p>
 
       <div class="family">
@@ -528,6 +531,7 @@ footer .first { color: var(--text); font-weight: 600; }
           <article class="console cut" style="--k:#4299ff"><span class="badge cut">PS1</span><h4>PlayStation</h4><p class="engine">PCSX-ReARMed</p><p class="formats">.cue + .bin .chd .pbp .m3u</p></article>
           <article class="console cut" style="--k:#5c70ff"><span class="badge cut">PS2</span><span class="turbo">Turbo</span><h4>PlayStation 2</h4><p class="engine">ARMSX2 (PCSX2)</p><p class="formats">.iso .chd .cso</p></article>
           <article class="console cut" style="--k:#dbebff"><span class="badge cut">PSP</span><span class="turbo">Turbo</span><h4>PlayStation Portable</h4><p class="engine">PPSSPP</p><p class="formats">.iso .cso .pbp</p></article>
+          <article class="console cut" style="--k:#80b3ff"><span class="badge cut">VITA</span><span class="turbo">Turbo</span><span class="exp"><span class="fr">Expérimental</span><span class="en">Experimental</span></span><h4>PS Vita</h4><p class="engine">Vita3K</p><p class="formats"><span class="fr">dossier extrait de la console, .vpk</span><span class="en">folder dumped from the console, .vpk</span></p><p class="warn"><span class="fr">Encore peu stable : certains jeux plantent ou s'affichent mal.</span><span class="en">Not very stable yet: some games crash or display incorrectly.</span></p></article>
         </div>
       </div>
     </div>
@@ -564,7 +568,7 @@ footer .first { color: var(--text); font-weight: 600; }
           </div>
           <div class="feature" style="--k:#bdff42">
             <h3><span class="fr">Une bibliothèque qui se range seule</span><span class="en">A library that sorts itself</span></h3>
-            <p><span class="fr">Tes jeux sont reconnus (bases No-Intro et Redump), leurs jaquettes téléchargées et rangées par console. Les .zip sont acceptés.</span><span class="en">Your games are recognized (No-Intro and Redump databases), their cover art downloaded and sorted by console. .zip files welcome.</span></p>
+            <p><span class="fr">Tes jeux sont reconnus (bases No-Intro et Redump), leurs jaquettes téléchargées et rangées par console. Les .zip, .7z et .rar sont acceptés.</span><span class="en">Your games are recognized (No-Intro and Redump databases), their cover art downloaded and sorted by console. .zip, .7z and .rar files welcome.</span></p>
           </div>
         </div>
 
@@ -618,14 +622,14 @@ footer .first { color: var(--text); font-weight: 600; }
           <div>
             <h2><span class="fr">MODE TURBO</span><span class="en">TURBO MODE</span></h2>
             <p>
-              <span class="fr">Le code des consoles les plus récentes est traduit pour la puce de l'iPhone au lieu d'être interprété (JIT). L'app StikDebug l'active tout seul au lancement d'un jeu, une fois par ouverture de PlayTendo, puis te ramène dans le jeu.</span>
-              <span class="en">The code of the newest consoles is translated for the iPhone's chip instead of being interpreted (JIT). The StikDebug app switches it on by itself when you launch a game, once per PlayTendo session, then brings you back to your game.</span>
+              <span class="fr">Le code des consoles les plus récentes est traduit pour la puce de l'iPhone au lieu d'être interprété (JIT). L'app StikDebug l'active tout seul au lancement d'un jeu, une fois par ouverture de PlayTendo, puis te ramène dans le jeu. Sur Mac, le turbo marche tout seul.</span>
+              <span class="en">The code of the newest consoles is translated for the iPhone's chip instead of being interpreted (JIT). The StikDebug app switches it on by itself when you launch a game, once per PlayTendo session, then brings you back to your game. On the Mac, turbo works on its own.</span>
             </p>
           </div>
           <dl class="needs">
             <div>
               <dt><span class="fr">Indispensable</span><span class="en">Required</span></dt>
-              <dd><span class="badge cut" style="--k:#5c70ff">PS2</span><span class="badge cut" style="--k:#9e66ff">GC</span><span class="badge cut" style="--k:#ccdbeb">Wii</span><span class="badge cut" style="--k:#ff4d4d">3DS</span></dd>
+              <dd><span class="badge cut" style="--k:#5c70ff">PS2</span><span class="badge cut" style="--k:#9e66ff">GC</span><span class="badge cut" style="--k:#ccdbeb">Wii</span><span class="badge cut" style="--k:#ff4d4d">3DS</span><span class="badge cut" style="--k:#80b3ff">VITA</span></dd>
             </div>
             <div>
               <dt><span class="fr">Plus rapide</span><span class="en">Faster</span></dt>
@@ -652,17 +656,17 @@ footer .first { color: var(--text); font-weight: 600; }
         <li class="step cut">
           <span class="n">01</span>
           <h3><span class="fr">Installer l'app</span><span class="en">Install the app</span></h3>
-          <p><span class="fr">PlayTendo s'installe avec AltStore, sur iPhone ou iPad, sans passer par l'App Store.</span><span class="en">PlayTendo installs with AltStore, on iPhone or iPad, outside the App Store.</span></p>
+          <p><span class="fr">Sur iPhone ou iPad, PlayTendo s'installe avec AltStore, sans passer par l'App Store. Sur Mac, il suffit de la glisser dans Applications.</span><span class="en">On iPhone or iPad, PlayTendo installs with AltStore, outside the App Store. On the Mac, just drag it into Applications.</span></p>
         </li>
         <li class="step cut">
           <span class="n">02</span>
           <h3><span class="fr">Ajouter tes jeux</span><span class="en">Add your games</span></h3>
-          <p><span class="fr">Dépose-les dans <span class="path">Fichiers › Sur mon iPhone › PlayTendo › Jeux</span>, ou touche « + ». Pour la PS2, ajoute aussi le BIOS de ta console.</span><span class="en">Drop them into <span class="path">Files › On My iPhone › PlayTendo › Jeux</span>, or tap “+”. For the PS2, also add your own console's BIOS.</span></p>
+          <p><span class="fr">Dépose-les dans <span class="path">Fichiers › Sur mon iPhone › PlayTendo › Jeux</span>, ou touche « + ». Pour la PS2, ajoute aussi le BIOS de ta console ; pour la PS Vita, son firmware.</span><span class="en">Drop them into <span class="path">Files › On My iPhone › PlayTendo › Jeux</span>, or tap “+”. For the PS2, also add your own console's BIOS; for the PS Vita, its firmware.</span></p>
         </li>
         <li class="step cut">
           <span class="n">03</span>
           <h3><span class="fr">Jouer</span><span class="en">Play</span></h3>
-          <p><span class="fr">Touche un jeu. Pour le mode turbo, il faut en plus deux apps à part : StikDebug et LocalDevVPN.</span><span class="en">Tap a game. For turbo mode, you also need two separate apps: StikDebug and LocalDevVPN.</span></p>
+          <p><span class="fr">Touche un jeu. Sur iPhone et iPad, le mode turbo demande en plus deux apps à part : StikDebug et LocalDevVPN.</span><span class="en">Tap a game. On iPhone and iPad, turbo mode also needs two separate apps: StikDebug and LocalDevVPN.</span></p>
         </li>
       </ol>
       <p class="note"><span class="fr">PlayTendo est pour l'instant une app personnelle : elle n'est pas distribuée.</span><span class="en">PlayTendo is a personal project for now: it is not distributed.</span></p>
@@ -671,7 +675,7 @@ footer .first { color: var(--text); font-weight: 600; }
 
   <section class="band" id="credits">
     <div class="wrap">
-      <h2 class="sec" style="--k:var(--violet)"><span class="fr">Logiciels libres</span><span class="en">Open source</span><i></i><b>11</b></h2>
+      <h2 class="sec" style="--k:var(--violet)"><span class="fr">Logiciels libres</span><span class="en">Open source</span><i></i><b>12</b></h2>
       <p class="intro">
         <span class="fr">PlayTendo est construit uniquement avec des logiciels libres. Merci à leurs auteurs.</span>
         <span class="en">PlayTendo is built entirely with open-source software. Thanks to their authors.</span>
@@ -689,16 +693,17 @@ footer .first { color: var(--text); font-weight: 600; }
             <tr><td>mGBA</td><td class="v">0.10.5</td><td>Game Boy, Game Boy Color, Game Boy Advance</td><td class="l">MPL-2.0</td></tr>
             <tr><td>melonDS DS</td><td class="v">1.4.0</td><td>Nintendo DS</td><td class="l">GPL-3.0</td></tr>
             <tr><td>Azahar</td><td class="v">2126.1.2</td><td>Nintendo 3DS</td><td class="l">GPL-2.0+</td></tr>
-            <tr><td>MoltenVK</td><td class="v">1.4.2</td><td><span class="fr">Affichage de la 3DS (Vulkan vers Metal)</span><span class="en">3DS graphics (Vulkan to Metal)</span></td><td class="l">Apache-2.0</td></tr>
+            <tr><td>MoltenVK</td><td class="v">1.4.2</td><td><span class="fr">Affichage de la 3DS et de la PS Vita (Vulkan vers Metal)</span><span class="en">3DS and PS Vita graphics (Vulkan to Metal)</span></td><td class="l">Apache-2.0</td></tr>
             <tr><td>PCSX-ReARMed</td><td class="v">r26</td><td>PlayStation</td><td class="l">GPL-2.0</td></tr>
             <tr><td>PPSSPP</td><td class="v">1.20.4</td><td>PlayStation Portable</td><td class="l">GPL-2.0+</td></tr>
             <tr><td>ARMSX2 (PCSX2)</td><td class="v">iOS 2.6.0</td><td>PlayStation 2</td><td class="l">GPL-3.0</td></tr>
+            <tr><td>Vita3K</td><td class="v">build 4135</td><td>PS Vita</td><td class="l">GPL-2.0+</td></tr>
           </tbody>
         </table>
       </div>
       <p class="more">
-        <span class="fr">Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails. Police : Orbitron (OFL). Turbo : StikDebug (app à part).</span>
-        <span class="en">Game recognition: libretro-database (No-Intro, Redump). Cover art: libretro-thumbnails. Typeface: Orbitron (OFL). Turbo: StikDebug (separate app).</span>
+        <span class="fr">Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails, et SteamGridDB en secours. Archives : libarchive (BSD-2-Clause) et xz (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo sur iPhone : StikDebug (app à part).</span>
+        <span class="en">Game recognition: libretro-database (No-Intro, Redump). Cover art: libretro-thumbnails, with SteamGridDB as a fallback. Archives: libarchive (BSD-2-Clause) and xz (0BSD). Typefaces: Orbitron and Press Start 2P (OFL). Turbo on iPhone: StikDebug (separate app).</span>
       </p>
     </div>
   </section>
