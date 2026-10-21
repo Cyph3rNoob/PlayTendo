@@ -396,65 +396,208 @@ private struct PauseMenu: View {
         hasImageBlock || onSwapScreens != nil || session.diskInfo != nil || hasControlsBlock
     }
 
+    /// Onglets du menu en paysage et sur Mac. Une nouvelle option prend place dans l'onglet qui lui correspond.
+    private enum MenuTab: Hashable {
+        case game, image, screens, controls
+
+        var title: String {
+            switch self {
+            case .game: tr("Partie")
+            case .image: tr("Image")
+            case .screens: tr("Écrans")
+            case .controls: tr("Commandes")
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .game: "play.rectangle"
+            case .image: "sparkles.tv"
+            case .screens: "rectangle.split.2x1"
+            case .controls: "gamecontroller"
+            }
+        }
+    }
+
+    /// Onglets de cette console : Partie toujours, les autres seulement s'ils ont quelque chose à montrer.
+    private var tabs: [MenuTab] {
+        var tabs: [MenuTab] = [.game]
+        if hasImageBlock { tabs.append(.image) }
+        if onSwapScreens != nil { tabs.append(.screens) }
+        if hasControlsBlock { tabs.append(.controls) }
+        return tabs
+    }
+
+    @State private var tab: MenuTab = .game
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.55)
                 .ignoresSafeArea()
                 .onTapGesture(perform: onResume)
-
-            VStack(spacing: compact ? 8 : 10) {
-                header
-                    .padding(.bottom, compact ? 2 : 6)
-#if os(macOS)
-                if showingKeys {
-                    KeyboardPanel(scheme: scheme, onBack: { showingKeys = false })
-                } else {
-                    menuContent
-                }
-#else
-                menuContent
-#endif
+            if compact {
+                tabbedMenu
+            } else {
+                portraitMenu
             }
-            .padding(compact ? 16 : 20)
-            .frame(maxWidth: compact ? (hasBlocks ? 680 : 332) : 340)
-            .background(Chamfer(cut: 22).fill(Neon.panel.opacity(0.94)))
+        }
+    }
+
+    // MARK: Paysage et Mac : onglets
+
+    /// Panneau de taille fixe (la même pour toutes les consoles) : à gauche le jeu, Reprendre, les onglets et Quitter ;
+    /// à droite le contenu de l'onglet choisi, qui défile s'il est trop long.
+    private var tabbedMenu: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                sidebar
+                    .frame(width: 236)
+                    .background(Color.black.opacity(0.22))
+                Rectangle()
+                    .fill(Neon.cyan.opacity(0.2))
+                    .frame(width: 1)
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text(tab.title.uppercased())
+                            .font(.display(13, weight: 800))
+                            .tracking(2)
+                            .foregroundStyle(Neon.cyan)
+                        tabContent
+                    }
+                    .padding(22)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .clipShape(Chamfer(cut: 22))
+            .background(Chamfer(cut: 22).fill(Neon.panel.opacity(0.97)))
             .overlay(Chamfer(cut: 22).stroke(LinearGradient(colors: [Neon.cyan, Neon.magenta.opacity(0.6)],
                                                            startPoint: .topLeading, endPoint: .bottomTrailing),
                                             lineWidth: 1.2))
             .neonGlow(Neon.cyan, radius: 14)
-            .padding(compact ? 12 : 24)
+            .frame(width: min(geometry.size.width - 32, 720), height: min(geometry.size.height - 24, 440))
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
     }
 
-    /// Le cadre est le même pour toutes les consoles (Reprendre, sauvegarde, chargement et avance rapide en haut,
-    /// Recommencer et Quitter en bas) ; entre les deux, seulement les blocs de réglages dont la console se sert.
-    /// En paysage : cadre à gauche, blocs à droite.
-    @ViewBuilder private var menuContent: some View {
-        if compact {
-            HStack(alignment: .top, spacing: 18) {
-                // Hauteur naturelle : le panneau ne s'étire pas sur tout l'écran.
-                VStack(spacing: 8) {
-                    frameTop
-                    frameBottom
-                        .padding(.top, 6)
-                }
-                .frame(width: hasBlocks ? 300 : nil)
-                if hasBlocks {
-                    scrollingBlocks
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                SystemBadge(system: session.game.system)
+                Text(metadata.display(for: session.game).title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Neon.text)
+                    .lineLimit(2)
+            }
+            MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
+            VStack(spacing: 4) {
+                ForEach(tabs, id: \.self) { item in
+                    TabRow(title: item.title, icon: item.icon, selected: item == tab) {
+                        tab = item
+#if os(iOS)
+                        UISelectionFeedbackGenerator().selectionChanged()
+#endif
+                    }
                 }
             }
-        } else {
-            frameTop
-            if hasBlocks {
-                scrollingBlocks
-                    .padding(.vertical, 4)
-            }
-            frameBottom
+            .padding(.top, 4)
+            Spacer(minLength: 8)
+            MenuButton(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, small: true, action: onQuit)
+        }
+        .padding(16)
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch tab {
+        case .game:
+            quickActions
+            if let disk = session.diskInfo { discPicker(disk, showsTitle: true) }
+            MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset)
+                .disabled(!hasEngineExtras)
+                .opacity(hasEngineExtras ? 1 : 0.4)
+        case .image:
+            imageSection
+        case .screens:
+            screensSection
+        case .controls:
+            if let wiiController { wiiPicker(wiiController) }
+#if os(macOS)
+            MacKeysSection(scheme: scheme)
+#endif
         }
     }
 
-    @ViewBuilder private var frameTop: some View {
+    // MARK: Portrait
+
+    /// Une colonne : Reprendre, sauvegardes, les blocs de la console, puis Recommencer et Quitter.
+    private var portraitMenu: some View {
+        VStack(spacing: 10) {
+            header
+                .padding(.bottom, 6)
+#if os(macOS)
+            if showingKeys {
+                KeyboardPanel(scheme: scheme, onBack: { showingKeys = false })
+            } else {
+                portraitContent
+            }
+#else
+            portraitContent
+#endif
+        }
+        .padding(20)
+        .frame(maxWidth: 340)
+        .background(Chamfer(cut: 22).fill(Neon.panel.opacity(0.94)))
+        .overlay(Chamfer(cut: 22).stroke(LinearGradient(colors: [Neon.cyan, Neon.magenta.opacity(0.6)],
+                                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                                        lineWidth: 1.2))
+        .neonGlow(Neon.cyan, radius: 14)
+        .padding(24)
+    }
+
+    @ViewBuilder private var portraitContent: some View {
         MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
+        quickActions
+        if hasBlocks {
+            ViewThatFits(in: .vertical) {
+                blocks
+                ScrollView(showsIndicators: false) { blocks }
+            }
+            .padding(.vertical, 4)
+        }
+        HStack(spacing: 8) {
+            MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", small: true, action: onReset)
+                .disabled(!hasEngineExtras)
+                .opacity(hasEngineExtras ? 1 : 0.4)
+            MenuButton(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, small: true, action: onQuit)
+        }
+    }
+
+    private var blocks: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if hasImageBlock {
+                MenuBlock(title: tr("IMAGE")) { imageSection }
+            }
+            if onSwapScreens != nil {
+                MenuBlock(title: tr("ÉCRANS")) { screensSection }
+            }
+            if let disk = session.diskInfo {
+                MenuBlock(title: tr("DISQUE")) { discPicker(disk, showsTitle: false) }
+            }
+            if hasControlsBlock {
+                MenuBlock(title: tr("COMMANDES")) {
+                    if let wiiController { wiiPicker(wiiController) }
+#if os(macOS)
+                    MenuButton(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true }
+#endif
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Contenus (communs au portrait et aux onglets)
+
+    /// Sauvegarder, Charger, Avance rapide : à la même place pour toutes les consoles (éteints sur PS Vita).
+    @ViewBuilder private var quickActions: some View {
         HStack(spacing: 8) {
             QuickButton(title: tr("Sauvegarder"), icon: "square.and.arrow.down", enabled: hasEngineExtras) {
                 session.saveState()
@@ -479,114 +622,74 @@ private struct PauseMenu: View {
         }
     }
 
-    private var frameBottom: some View {
-        HStack(spacing: 8) {
-            MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", small: true, action: onReset)
-                .disabled(!hasEngineExtras)
-                .opacity(hasEngineExtras ? 1 : 0.4)
-            MenuButton(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, small: true, action: onQuit)
+    @ViewBuilder private var imageSection: some View {
+        if hasImageSettings { imageSettings }
+        if let fillScreen {
+            NeonSegments(title: tr("TAILLE"), detail: nil,
+                         options: [(0, tr("Réduite")), (1, tr("Plein écran"))],
+                         selection: fillScreen.wrappedValue ? 1 : 0) { value in
+                pick { fillScreen.wrappedValue = value == 1 }
+            }
         }
-    }
-
-    /// Les blocs, qui défilent seulement s'ils ne tiennent pas dans la hauteur de l'écran.
-    private var scrollingBlocks: some View {
-        ViewThatFits(in: .vertical) {
-            blocks
-            ScrollView(showsIndicators: false) { blocks }
+        if let filter {
+            NeonSegments(title: tr("FILTRE"), detail: nil,
+                         options: FilterSettings.Filter.allCases.map {
+                             ($0.rawValue, FilterSettings.label($0, system: session.game.system))
+                         },
+                         selection: filter.wrappedValue) { value in
+                pick { filter.wrappedValue = value }
+            }
         }
-    }
-
-    private var blocks: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if hasImageBlock {
-                MenuBlock(title: tr("IMAGE")) {
-                    if hasImageSettings { imageSettings }
-                    if let fillScreen {
-                        NeonSegments(title: tr("TAILLE"), detail: nil,
-                                     options: [(0, tr("Réduite")), (1, tr("Plein écran"))],
-                                     selection: fillScreen.wrappedValue ? 1 : 0) { value in
-                            pick { fillScreen.wrappedValue = value == 1 }
-                        }
-                    }
-                    if let filter {
-                        NeonSegments(title: tr("FILTRE"), detail: nil,
-                                     options: FilterSettings.Filter.allCases.map {
-                                         ($0.rawValue, FilterSettings.label($0, system: session.game.system))
-                                     },
-                                     selection: filter.wrappedValue) { value in
-                            pick { filter.wrappedValue = value }
-                        }
-                    }
 #if os(macOS)
-                    let fullScreen = MacWindow.isFullScreen
-                    MenuButton(title: fullScreen ? tr("Quitter le plein écran") : tr("Plein écran"),
-                               icon: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
-                        MacWindow.toggleFullScreen()
-                        onResume()
-                    }
-#endif
-                }
-            }
-            if let onSwapScreens {
-                MenuBlock(title: tr("ÉCRANS")) {
-                    MenuButton(title: tr("Inverser les écrans"), icon: "rectangle.2.swap", action: onSwapScreens)
-                    if let touchSize {
-                        NeonSegments(title: tr("ÉCRAN TACTILE"), detail: nil,
-                                     options: DSTouchSize.allCases.enumerated().map { ($0.offset, $0.element.label) },
-                                     selection: DSTouchSize.allCases.firstIndex(of: touchSize.wrappedValue) ?? 0) { value in
-                            pick { touchSize.wrappedValue = DSTouchSize.allCases[value] }
-                        }
-                    }
-                }
-            }
-            if let disk = session.diskInfo {
-                MenuBlock(title: tr("DISQUE")) {
-                    NeonSegments(title: tr("DISQUE"), showsTitle: false, detail: nil,
-                                 options: (0..<disk.count).map { ($0, "\($0 + 1)") },
-                                 selection: disk.current - 1) { value in
-                        guard value != disk.current - 1 else { return }
-                        session.selectDisk(value)
-                        onResume()
-                    }
-                }
-            }
-            if hasControlsBlock {
-                MenuBlock(title: tr("COMMANDES")) {
-                    if let wiiController {
-                        NeonSegments(title: tr("MANETTE"), detail: nil,
-                                     options: [(0, DolphinSettings.WiiController.wiimote.label),
-                                               (1, DolphinSettings.WiiController.gameCube.label)],
-                                     selection: wiiController.wrappedValue == .wiimote ? 0 : 1) { value in
-                            pick { wiiController.wrappedValue = value == 0 ? .wiimote : .gameCube }
-                        }
-                    }
-#if os(macOS)
-                    MenuButton(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true }
-#endif
-                }
-            }
+        let fullScreen = MacWindow.isFullScreen
+        MenuButton(title: fullScreen ? tr("Quitter le plein écran") : tr("Plein écran"),
+                   icon: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+            MacWindow.toggleFullScreen()
+            onResume()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+#endif
     }
 
-    @ViewBuilder private var header: some View {
-        if compact {
-            HStack(spacing: 8) {
-                SystemBadge(system: session.game.system)
-                Text(metadata.display(for: session.game).title)
-                    .font(.headline)
-                    .foregroundStyle(Neon.text)
-                    .lineLimit(1)
+    @ViewBuilder private var screensSection: some View {
+        if let onSwapScreens {
+            MenuButton(title: tr("Inverser les écrans"), icon: "rectangle.2.swap", action: onSwapScreens)
+        }
+        if let touchSize {
+            NeonSegments(title: tr("ÉCRAN TACTILE"), detail: nil,
+                         options: DSTouchSize.allCases.enumerated().map { ($0.offset, $0.element.label) },
+                         selection: DSTouchSize.allCases.firstIndex(of: touchSize.wrappedValue) ?? 0) { value in
+                pick { touchSize.wrappedValue = DSTouchSize.allCases[value] }
             }
-        } else {
-            VStack(spacing: 4) {
-                SystemBadge(system: session.game.system)
-                Text(metadata.display(for: session.game).title)
-                    .font(.headline)
-                    .foregroundStyle(Neon.text)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
+        }
+    }
+
+    private func discPicker(_ disk: EmulatorSession.DiskInfo, showsTitle: Bool) -> some View {
+        NeonSegments(title: tr("DISQUE"), showsTitle: showsTitle, detail: nil,
+                     options: (0..<disk.count).map { ($0, "\($0 + 1)") },
+                     selection: disk.current - 1) { value in
+            guard value != disk.current - 1 else { return }
+            session.selectDisk(value)
+            onResume()
+        }
+    }
+
+    private func wiiPicker(_ controller: Binding<DolphinSettings.WiiController>) -> some View {
+        NeonSegments(title: tr("MANETTE"), detail: nil,
+                     options: [(0, DolphinSettings.WiiController.wiimote.label),
+                               (1, DolphinSettings.WiiController.gameCube.label)],
+                     selection: controller.wrappedValue == .wiimote ? 0 : 1) { value in
+            pick { controller.wrappedValue = value == 0 ? .wiimote : .gameCube }
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 4) {
+            SystemBadge(system: session.game.system)
+            Text(metadata.display(for: session.game).title)
+                .font(.headline)
+                .foregroundStyle(Neon.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -777,6 +880,42 @@ private struct MenuBlock<Content: View>: View {
     }
 }
 
+/// Onglet du menu en paysage : icône et nom, allumé quand il est choisi.
+private struct TabRow: View {
+    let title: String
+    let icon: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 22)
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(selected ? Neon.cyan : Neon.text.opacity(0.8))
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .background(Chamfer(cut: 7).fill(selected ? Neon.cyan.opacity(0.12) : .clear))
+            .overlay(alignment: .leading) {
+                if selected {
+                    Rectangle()
+                        .fill(Neon.cyan)
+                        .frame(width: 3, height: 20)
+                        .themedShadow(Neon.cyan.opacity(0.8), radius: 6)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
 /// Sauvegarder, Charger, Avance rapide : trois petits boutons côte à côte, à la même place sur toutes les consoles
 /// (éteints quand le moteur ne les a pas).
 private struct QuickButton: View {
@@ -886,6 +1025,28 @@ private struct NeonSegments: View {
 }
 
 #if os(macOS)
+/// Onglet Commandes (Mac) : les touches du clavier de la console en cours, à changer sur place.
+private struct MacKeysSection: View {
+    let scheme: ControlScheme
+    @ObservedObject private var bindings = KeyBindings.shared
+    @StateObject private var capture = KeyCapture()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(tr("TOUCHES CLAVIER"))
+                .font(.display(10, weight: 800))
+                .tracking(1.5)
+                .foregroundStyle(Neon.dim)
+            KeyboardMapping(scheme: scheme, capture: capture, neon: true)
+            MenuButton(title: tr("Touches d'origine"), icon: "arrow.uturn.backward") { capture.resetAll() }
+                .disabled(!bindings.isCustomized(scheme))
+                .opacity(bindings.isCustomized(scheme) ? 1 : 0.4)
+        }
+        .onAppear { capture.attach(to: scheme) }
+        .onDisappear { capture.detach() }
+    }
+}
+
 /// Menu pause › Touches clavier (Mac) : les touches de la console en cours seulement, comme dans Réglages › Clavier
 /// (clic sur une touche puis la nouvelle, essai en direct, « Annuler »). Elles servent dès la reprise du jeu.
 private struct KeyboardPanel: View {
