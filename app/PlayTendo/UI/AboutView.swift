@@ -33,7 +33,7 @@ struct AboutView: View {
     ] + AboutView.vitaEngines).filter { EmulatorSession.engineInstalled(for: $0.system) }
 
 #if PLAYTENDO_VITA
-    private static let vitaEngines = [Engine(name: "Vita3K", version: "build 4135 (681f695)", consoles: "PlayStation Vita",
+    private static let vitaEngines = [Engine(name: "Vita3K", version: "build 4135 (681f695)", consoles: tr("PlayStation Vita (expérimental : encore peu stable)"),
                                              license: "GPL-2.0+", system: .vita)]
     private static var moltenVKConsoles: String { tr("Affichage de la 3DS et de la PS Vita (Vulkan vers Metal)") }
     private static var vitaFormats: [(systems: [GameSystem], console: String, files: String)] {

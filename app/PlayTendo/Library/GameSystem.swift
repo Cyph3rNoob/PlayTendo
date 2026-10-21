@@ -97,6 +97,9 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// Console encore peu stable, signalée « EXPÉRIMENTAL » (filtre de la bibliothèque, À propos, présentation).
+    var isExperimental: Bool { isVita }
+
     /// PS Vita (toujours faux dans une app compilée sans elle).
     var isVita: Bool {
 #if PLAYTENDO_VITA

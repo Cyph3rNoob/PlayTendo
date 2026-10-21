@@ -190,6 +190,12 @@ struct WelcomeView: View {
             if EmulatorSession.engineInstalled(for: .ps2) {
                 WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS PS2)."))
             }
+#if PLAYTENDO_VITA
+            if EmulatorSession.engineInstalled(for: .vita) {
+                WelcomeLine(icon: "exclamationmark.triangle",
+                            text: tr("PS Vita : expérimentale, encore peu stable (certains jeux plantent ou s'affichent mal). Il faut aussi le firmware de ta console dans le dossier BIOS."))
+            }
+#endif
         }
     }
 

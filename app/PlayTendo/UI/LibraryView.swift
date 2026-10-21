@@ -329,7 +329,8 @@ struct LibraryView: View {
             HStack(spacing: 8) {
                 FilterChip(label: tr("TOUT"), color: Neon.cyan, onColor: Neon.onAccent, selected: filter == nil) { filter = nil }
                 ForEach(presentSystems) { system in
-                    FilterChip(label: system.badgeName, color: system.neon, selected: filter == system) {
+                    FilterChip(label: system.badgeName, note: system.isExperimental ? tr("EXPÉRIMENTAL") : nil,
+                               color: system.neon, selected: filter == system) {
                         filter = filter == system ? nil : system
                     }
                 }
@@ -430,6 +431,8 @@ private extension GameDisplay {
 
 private struct FilterChip: View {
     let label: String
+    /// Petit mot après le nom (« EXPÉRIMENTAL » pour la PS Vita).
+    var note: String?
     let color: Color
     /// Couleur du texte une fois la pastille choisie (posé sur `color`).
     var onColor = Neon.onConsole
@@ -438,9 +441,17 @@ private struct FilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.display(12, weight: 800))
-                .tracking(1.5)
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.display(12, weight: 800))
+                    .tracking(1.5)
+                if let note {
+                    Text(note)
+                        .font(.display(8, weight: 700))
+                        .tracking(1)
+                        .opacity(0.8)
+                }
+            }
                 .foregroundStyle(selected ? onColor : color)
                 .padding(.horizontal, 14)
                 .frame(height: 32)
