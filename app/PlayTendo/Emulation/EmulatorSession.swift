@@ -704,10 +704,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             return nil
         }
         let clock = MachClock()
-        if !vita.hasFirmware || !vita.hasFonts {
+        // Installation coupée la dernière fois (app fermée en plein milieu) : la mémoire de la console est peut-être
+        // incomplète tout en se croyant à jour, firmware et polices sont réinstallés (VitaFirmware.installWasInterrupted).
+        let interrupted = VitaFirmware.installWasInterrupted
+        var needsFirmware = !vita.hasFirmware || interrupted
+        var needsFonts = !vita.hasFonts || interrupted
+        if needsFirmware || needsFonts {
+            if interrupted { PTLogLine("Vita : l'installation du firmware avait été interrompue : elle est refaite") }
+            VitaFirmware.setInstallInProgress(true)
             let files = VitaGame.firmwareFiles()
             var tried = Set<URL>()
-            let install = { (file: URL) in
+            let install = { (file: URL) -> Bool in
                 tried.insert(file)
                 let label = file.lastPathComponent.uppercased().contains("PSP2UPDAT")
                     ? tr("Installation des polices de la PS Vita") : tr("Installation du firmware de la PS Vita")
@@ -719,14 +726,28 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     VitaGame.markInstalled(file)
                     PTLogLine(String(format: "Vita : %@ installé (version %@) en %.0f s", file.lastPathComponent, version,
                                      clock.now - start))
-                } else {
-                    PTLogLine("Vita : \(file.lastPathComponent) non installé (\(vita.lastError() ?? "raison inconnue"))")
+                    return true
                 }
+                PTLogLine("Vita : \(file.lastPathComponent) non installé (\(vita.lastError() ?? "raison inconnue"))")
+                return false
             }
-            for file in files where !vita.hasFirmware { install(file) }
-            // Polices : seulement les .PUP jamais installés (PSVUPDAT.PUP ne les a pas, inutile de le refaire).
-            for file in files where !vita.hasFonts && !tried.contains(file) && !VitaGame.wasInstalled(file) { install(file) }
-            guard vita.hasFirmware else {
+            for file in files where needsFirmware && !stopRequestedNow {
+                if install(file), vita.hasFirmware { needsFirmware = false }
+            }
+            // Polices : seulement les .PUP jamais installés (PSVUPDAT.PUP ne les a pas, inutile de le refaire), tous
+            // après une installation coupée.
+            for file in files where needsFonts && !tried.contains(file) && (interrupted || !VitaGame.wasInstalled(file))
+                && !stopRequestedNow {
+                if install(file), vita.hasFonts { needsFonts = false }
+            }
+            // Firmware en place : chaque installation est allée au bout (l'arrêt n'est regardé qu'entre deux). Sinon
+            // (arrêt demandé avant, ou .PUP impossible à installer), elle reste à refaire au prochain lancement.
+            if !needsFirmware { VitaFirmware.setInstallInProgress(false) }
+            if stopRequestedNow {
+                finishBeforeStart()
+                return nil
+            }
+            guard !needsFirmware else {
                 setLoadingDetail(nil)
                 fail(tr("Firmware PS Vita introuvable. Copie le fichier PSVUPDAT.PUP (la mise à jour officielle de la console) dans le dossier BIOS de PlayTendo, avec l'app Fichiers."))
                 return nil
@@ -747,8 +768,16 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             VitaGame.removeOriginal(game.url, titleID: titleID)
             installVitaAddons(vita, titleID: titleID)
             applyVitaRePatch(rePatch, titleID: titleID)
+            if stopRequestedNow {
+                finishBeforeStart()
+                return nil
+            }
             setLoadingDetail(nil)
             return titleID
+        }
+        if stopRequestedNow {
+            finishBeforeStart()
+            return nil
         }
         setLoadingDetail(tr("Installation du jeu (une seule fois)…"))
         let start = clock.now
@@ -768,6 +797,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         VitaGame.removeOriginal(game.url, titleID: installed)
         installVitaAddons(vita, titleID: installed)
         applyVitaRePatch(rePatch, titleID: installed)
+        if stopRequestedNow {
+            finishBeforeStart()
+            return nil
+        }
         setLoadingDetail(nil)
         return installed
     }
@@ -786,7 +819,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     /// il est noté au Journal et l'original reste dans Jeux.
     private func installVitaAddons(_ vita: PTVitaEngine, titleID: String) {
         var failed = 0
-        for addon in VitaGame.pendingAddons(for: titleID) {
+        // Arrêt demandé (écran de chargement) : les suivants attendront le prochain lancement.
+        for addon in VitaGame.pendingAddons(for: titleID) where !stopRequestedNow {
             // Mise à jour déjà dans le jeu installé (même version ou plus récente) : rien à réinstaller.
             if addon.isInstalled {
                 VitaGame.removeInstalledUpdate(addon)
@@ -827,6 +861,24 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     private func setLoadingDetail(_ text: String?) {
         DispatchQueue.main.async { self.loadingDetail = text }
+    }
+
+    /// Arrêt demandé pendant le chargement (bouton « Quitter le jeu » de l'écran de chargement) : regardé entre deux
+    /// étapes d'un long démarrage (installation PS Vita), qu'on ne peut pas couper au milieu.
+    private var stopRequestedNow: Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        return stopRequested
+    }
+
+    /// Partie fermée avant d'avoir démarré : retour à la bibliothèque, sans message d'erreur.
+    private func finishBeforeStart() {
+        PTLogLine("\(game.system.shortName) : jeu fermé pendant le chargement")
+        setLoadingDetail(nil)
+        DispatchQueue.main.async {
+            self.state = .stopped
+            self.finishStop()
+        }
     }
 
     /// GameCube/Wii : vérifie la place du recompilateur et règle l'image avant le démarrage. Faux si le jeu ne peut pas
@@ -894,6 +946,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #endif
         }
 
+        // Fermé pendant la préparation (bouton « Quitter le jeu » de l'écran de chargement).
+        if stopRequestedNow {
+            finishBeforeStart()
+            return
+        }
         // La vue Metal doit être à l'écran, à sa taille, avant le démarrage : le moteur y crée son image.
         let clock = MachClock()
         let viewDeadline = clock.now + 3

@@ -16,10 +16,25 @@ final class GameLibrary: ObservableObject {
         games.filter { $0.system == system }
     }
 
+    /// Une lecture de Jeux à la fois : deux en même temps rangeaient le même BIOS PS2 et pouvaient l'effacer (audit du
+    /// 2026-10-20). Une demande pendant une lecture en relance une seule à la fin.
+    private var scanning = false
+    private var rescanRequested = false
+
     func refresh() {
+        guard !scanning else {
+            rescanRequested = true
+            return
+        }
+        scanning = true
         Task.detached(priority: .userInitiated) {
             let found = Self.scan(Paths.games)
             await MainActor.run {
+                self.scanning = false
+                if self.rescanRequested {
+                    self.rescanRequested = false
+                    self.refresh()
+                }
                 self.games = found
                 if let pending = self.pendingLaunch {
                     let path = pending.resolvingSymlinksInPath().path
@@ -181,6 +196,7 @@ final class GameLibrary: ObservableObject {
     }
 
     nonisolated private func runImports(cancel: ImportCancel) async {
+        Self.removeLeftoverStaging()
         while let item = await nextImport() {
             let name = item.url.lastPathComponent
             let isArchive = Self.archiveExtensions.contains(item.url.pathExtension.lowercased())
@@ -391,7 +407,7 @@ final class GameLibrary: ObservableObject {
         }
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? -1
         if isSameFile(destination, size: size) { return .alreadyThere([destination]) }
-        let target = uniqueURL(destination)
+        guard let target = uniqueURL(destination) else { throw ImportError.nameTaken(destination.lastPathComponent) }
         let name = target.lastPathComponent
         try PTFileCopy.copyItem(at: url, to: target) { copied, total in update(.copying, name, copied, total) }
         stats.written = max(size, 0)
@@ -425,7 +441,7 @@ final class GameLibrary: ObservableObject {
                 present.append(target)
                 continue
             }
-            let destination = uniqueURL(target)
+            let destination = uniqueFolderURL(named: folder.lastPathComponent)
             guard update(.copying, folder.lastPathComponent, 0, 0) else { throw PTArchiveError(.cancelled) }
             try manager.copyItem(at: folder, to: destination)
             stats.files += 1
@@ -487,28 +503,53 @@ final class GameLibrary: ObservableObject {
     }
 #endif
 
-    /// Décompresse dans Jeux (ou BIOS) chaque jeu, BIOS ou piste de l'archive ; le reste est sauté.
+    /// Décompresse chaque jeu, BIOS ou piste de l'archive ; le reste est sauté. Les BIOS vont dans BIOS. Les autres
+    /// fichiers passent par un dossier caché de Jeux, puis : un seul fichier va à la racine de Jeux ; plusieurs, ou des
+    /// pistes de CD (.bin…), restent ensemble dans un dossier au nom de l'archive, avec ses sous-dossiers (un .cue ou
+    /// un .m3u y retrouve ses fichiers). Avant, tout allait à la racine de Jeux et la piste « Track 01.bin » d'un autre
+    /// jeu était écrasée (audit du 2026-10-20). Une erreur ou une annulation ne laisse rien de cette archive dans Jeux.
     nonisolated private static func importArchive(_ url: URL, stats: inout ImportStats,
                                                   update: ImportUpdate) throws -> ImportResult {
         let archive = try PTArchiveReader(url: url)
+        let manager = FileManager.default
+        let staging = Paths.games.appendingPathComponent("\(stagingPrefix)\(UUID().uuidString)", isDirectory: true)
+        defer { try? manager.removeItem(at: staging) }
+        let folderName = folderName(forArchive: url)
         var added = 0
         var present = 0
         var hasCIA = false
         var files: [URL] = []
+        /// Fichiers décompressés dans `staging` (chemins dans l'archive), à mettre à leur place à la fin.
+        var staged: [String] = []
         while try archive.nextEntry() {
             stats.format = archive.formatName
             let name = (archive.entryPath as NSString).lastPathComponent
             if stats.entries.count < 8 { stats.entries.append(name) }
             if (name as NSString).pathExtension.lowercased() == "cia" { hasCIA = true }
-            guard let destination = destination(forFileNamed: name) else { continue }
-            if isSameFile(destination, size: archive.entrySize) {
+            // Fichiers cachés du Mac (« __MACOSX/…/._Jeu.bin ») : pas des jeux.
+            guard let relative = safeRelativePath(archive.entryPath),
+                  let destination = destination(forFileNamed: name) else { continue }
+            let toBIOS = destination.deletingLastPathComponent() == Paths.bios
+            // Déjà là (même nom, même taille) : à la racine de Jeux, ou rangé par un import précédent de cette archive.
+            let candidates = toBIOS ? [destination]
+                : [destination, Paths.games.appendingPathComponent(relative),
+                   Paths.games.appendingPathComponent(folderName).appendingPathComponent(relative)]
+            if let existing = candidates.first(where: { isSameFile($0, size: archive.entrySize) }) {
                 present += 1
-                files.append(destination)
+                files.append(existing)
                 continue
             }
             let size = max(archive.entrySize, 0)
             try checkFreeSpace(for: size)
-            let target = uniqueURL(destination)
+            let target: URL
+            if toBIOS {
+                // Un BIOS remplace celui du même nom (uniqueURL ne renvoie jamais nil dans BIOS).
+                guard let bios = uniqueURL(destination) else { continue }
+                target = bios
+            } else {
+                target = staging.appendingPathComponent(relative)
+                try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            }
             let fileName = target.lastPathComponent
             guard update(.extracting, fileName, 0, size) else { throw PTArchiveError(.cancelled) }
             var written: Int64 = 0
@@ -518,12 +559,79 @@ final class GameLibrary: ObservableObject {
             }
             stats.written += written
             stats.files += 1
-            if !moveIfPS2BIOS(target) { files.append(target) }
             added += 1
+            if !toBIOS && !moveIfPS2BIOS(target) { staged.append(relative) }
         }
+        if !staged.isEmpty { files += try placeStaged(staged, from: staging, folderName: folderName) }
         if added > 0 { return .added(added, files) }
         if present > 0 { return .alreadyThere(files) }
         return hasCIA ? .cia3DS : .noGame
+    }
+
+    /// Début du nom du dossier caché où une archive est décompressée (Jeux/.import-…).
+    nonisolated private static let stagingPrefix = ".import-"
+
+    /// Dossiers d'import laissés par une app arrêtée en pleine décompression : effacés au début de l'import suivant.
+    nonisolated private static func removeLeftoverStaging() {
+        let manager = FileManager.default
+        for name in (try? manager.contentsOfDirectory(atPath: Paths.games.path)) ?? [] where name.hasPrefix(stagingPrefix) {
+            try? manager.removeItem(at: Paths.games.appendingPathComponent(name))
+        }
+    }
+
+    /// Chemin d'un fichier dans l'archive, sans « .. » ni dossier caché (jamais hors du dossier où elle est
+    /// décompressée). Nil pour les fichiers cachés du Mac (« __MACOSX », « ._Jeu.bin »).
+    nonisolated private static func safeRelativePath(_ path: String) -> String? {
+        let parts = path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).map(String.init)
+            .filter { !$0.isEmpty && $0 != "." && $0 != ".." }
+        guard let last = parts.last, !last.hasPrefix("._"), !parts.contains("__MACOSX") else { return nil }
+        // Un dossier caché (« .quelquechose ») deviendrait invisible dans Jeux : son nom perd ses points de tête.
+        return parts.map { part in
+            let visible = part.drop(while: { $0 == "." })
+            return visible.isEmpty ? "_" : String(visible)
+        }.joined(separator: "/")
+    }
+
+    /// Nom du dossier d'un jeu tiré d'une archive : celui de l'archive, sans son extension ni points de tête.
+    nonisolated private static func folderName(forArchive url: URL) -> String {
+        let name = url.deletingPathExtension().lastPathComponent.drop(while: { $0 == "." })
+        return name.isEmpty ? "Jeu" : String(name)
+    }
+
+    /// Met à leur place dans Jeux les fichiers décompressés dans `staging` ; renvoie leurs adresses finales.
+    nonisolated private static func placeStaged(_ relatives: [String], from staging: URL,
+                                                folderName: String) throws -> [URL] {
+        let manager = FileManager.default
+        let together = relatives.count > 1
+            || relatives.contains { GameSystem.companionExtensions.contains(($0 as NSString).pathExtension.lowercased()) }
+        guard together else {
+            // Un seul fichier (cas le plus courant) : à la racine de Jeux, comme avant.
+            let source = staging.appendingPathComponent(relatives[0])
+            guard let target = uniqueURL(Paths.games.appendingPathComponent(source.lastPathComponent)) else {
+                throw ImportError.nameTaken(source.lastPathComponent)
+            }
+            try manager.moveItem(at: source, to: target)
+            return [target]
+        }
+        // Tout dans un seul dossier en tête de l'archive (« Jeu/… ») : c'est lui qui devient le dossier du jeu.
+        let tops = Set(relatives.map { $0.split(separator: "/").first.map(String.init) ?? $0 })
+        let single = tops.count == 1 && relatives.allSatisfy { $0.contains("/") } ? tops.first : nil
+        let source = single.map { staging.appendingPathComponent($0, isDirectory: true) } ?? staging
+        let target = uniqueFolderURL(named: single ?? folderName)
+        try manager.moveItem(at: source, to: target)
+        let prefix = single.map { $0.count + 1 } ?? 0
+        return relatives.map { target.appendingPathComponent(String($0.dropFirst(prefix))) }
+    }
+
+    /// Dossier « Nom » dans Jeux, ou « Nom 2 »… s'il existe déjà (jamais coupé à un point, rien n'est effacé).
+    nonisolated private static func uniqueFolderURL(named name: String) -> URL {
+        var candidate = Paths.games.appendingPathComponent(name, isDirectory: true)
+        var index = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = Paths.games.appendingPathComponent("\(name) \(index)", isDirectory: true)
+            index += 1
+        }
+        return candidate
     }
 
     /// Un fichier du même nom et de la même taille est déjà là : c'est le même jeu, il n'est pas ajouté une 2e fois.
@@ -535,12 +643,16 @@ final class GameLibrary: ObservableObject {
 
     private enum ImportError: LocalizedError {
         case notEnoughSpace(needed: Int64, free: Int64)
+        /// Une piste de CD (.bin…) du même nom, mais différente, est déjà dans Jeux (celle d'un autre jeu).
+        case nameTaken(String)
 
         var errorDescription: String? {
             switch self {
             case .notEnoughSpace(let needed, let free):
                 let format = { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
                 return "pas assez de place (il faut \(format(needed)), il reste \(format(free)))"
+            case .nameTaken(let name):
+                return "un autre fichier « \(name) » est déjà dans Jeux"
             }
         }
 
@@ -549,6 +661,8 @@ final class GameLibrary: ObservableObject {
             switch self {
             case .notEnoughSpace(let needed, let free):
                 tr("pas assez de place (il faut \(AppLanguage.bytes(needed)), il reste \(AppLanguage.bytes(free)))")
+            case .nameTaken(let name):
+                tr("un autre fichier « \(name) » est déjà dans Jeux (celui d'un autre jeu ?). Importe ce jeu dans une archive .zip : il aura son propre dossier.")
             }
         }
     }
@@ -566,16 +680,27 @@ final class GameLibrary: ObservableObject {
     @discardableResult
     nonisolated private static func moveIfPS2BIOS(_ url: URL) -> Bool {
         guard GameSystem.isPS2BIOS(url) else { return false }
-        let target = Paths.bios.appendingPathComponent(url.lastPathComponent)
-        let manager = FileManager.default
-        try? manager.removeItem(at: target)
         do {
-            try manager.moveItem(at: url, to: target)
+            try moveToBIOS(url)
             PTLogLine("BIOS PS2 rangé dans BIOS : \(url.lastPathComponent)")
             return true
         } catch {
             PTLogLine("BIOS PS2 \(url.lastPathComponent) : rangement impossible (\(error.localizedDescription))")
             return false
+        }
+    }
+
+    /// Range `url` dans BIOS sous son nom, à la place d'un fichier du même nom s'il y en a un. Rien n'est effacé avant
+    /// le déplacement : si le fichier vient d'être rangé ailleurs (import et lecture de Jeux en même temps), le
+    /// déplacement échoue simplement. Avant, le fichier de BIOS était effacé d'abord, et un BIOS rangé au même moment
+    /// par l'autre fil disparaissait (audit du 2026-10-20 : 8 pertes sur 1 200 essais).
+    nonisolated private static func moveToBIOS(_ url: URL) throws {
+        let target = Paths.bios.appendingPathComponent(url.lastPathComponent)
+        let manager = FileManager.default
+        if manager.fileExists(atPath: target.path) {
+            _ = try manager.replaceItemAt(target, withItemAt: url)
+        } else {
+            try manager.moveItem(at: url, to: target)
         }
     }
 
@@ -612,11 +737,8 @@ final class GameLibrary: ObservableObject {
     @discardableResult
     nonisolated private static func moveIfVitaFirmware(_ url: URL) -> Bool {
         guard url.pathExtension.lowercased() == "pup", VitaGame.isFirmware(url) else { return false }
-        let target = Paths.bios.appendingPathComponent(url.lastPathComponent)
-        let manager = FileManager.default
-        try? manager.removeItem(at: target)
         do {
-            try manager.moveItem(at: url, to: target)
+            try moveToBIOS(url)
             PTLogLine("Firmware PS Vita rangé dans BIOS : \(url.lastPathComponent)")
             return true
         } catch {
@@ -642,16 +764,18 @@ final class GameLibrary: ObservableObject {
         return Paths.games.appendingPathComponent(name)
     }
 
-    /// Évite d'écraser un fichier existant : « Jeu.gba » → « Jeu 2.gba ».
-    nonisolated private static func uniqueURL(_ url: URL) -> URL {
+    /// Évite d'écraser un fichier existant : « Jeu.gba » → « Jeu 2.gba ». Un BIOS remplace celui du même nom. Une piste
+    /// de CD (.bin…) garde son nom exact (son .cue la cite) : si une autre du même nom est déjà dans Jeux, nil (avant,
+    /// elle était effacée, alors qu'elle pouvait être celle d'un autre jeu : audit du 2026-10-20).
+    nonisolated private static func uniqueURL(_ url: URL) -> URL? {
         let manager = FileManager.default
         guard manager.fileExists(atPath: url.path) else { return url }
-        // Les BIOS et pistes de CD gardent leur nom exact (ils sont référencés par leur nom).
         let ext = url.pathExtension.lowercased()
-        if url.deletingLastPathComponent() == Paths.bios || GameSystem.companionExtensions.contains(ext) {
+        if url.deletingLastPathComponent() == Paths.bios {
             try? manager.removeItem(at: url)
             return url
         }
+        if GameSystem.companionExtensions.contains(ext) { return nil }
         let base = url.deletingPathExtension().lastPathComponent
         var index = 2
         while true {
@@ -687,12 +811,23 @@ final class GameLibrary: ObservableObject {
         for file in Self.files(of: game) {
             try? FileManager.default.removeItem(at: file)
         }
-#if PLAYTENDO_VITA
-        if game.system == .vita {
-            VitaGame.removeEmptyFolders(containing: game.url)
-        }
-#endif
+        // Dossier du jeu devenu vide (jeu tiré d'une archive, jeu PS Vita extrait d'une console…).
+        Self.removeEmptyFolders(containing: game.url)
         games.removeAll { $0.id == game.id }
+    }
+
+    /// Dossiers de Jeux devenus vides après le départ d'un jeu (« app » extrait d'une Vita, dossier d'une archive…) :
+    /// retirés en remontant, jamais le dossier Jeux lui-même.
+    nonisolated static func removeEmptyFolders(containing file: URL) {
+        let games = Paths.games.resolvingSymlinksInPath().path + "/"
+        var folder = file.deletingLastPathComponent()
+        while folder.resolvingSymlinksInPath().path.hasPrefix(games),
+              let rest = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+              rest.allSatisfy({ $0.hasPrefix(".") }),
+              (try? FileManager.default.removeItem(at: folder)) != nil {
+            PTLogLine("Dossier vide retiré de Jeux : \(folder.lastPathComponent)")
+            folder = folder.deletingLastPathComponent()
+        }
     }
 
     /// Le fichier du jeu suivi des fichiers qu'il référence, à condition qu'ils soient dans Jeux et

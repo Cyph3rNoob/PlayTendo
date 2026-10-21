@@ -133,7 +133,7 @@ struct AboutView: View {
 #else
                 Section(tr("Mode turbo")) {
 #if PLAYTENDO_VITA
-                    Label(tr("Obligatoire pour la PS Vita ; indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP."),
+                    Label(tr("Indispensable pour la PS2, la PS Vita, la GameCube, la Wii et la 3DS ; accélère la PSP."),
                           systemImage: "bolt.fill")
 #else
                     Label(tr("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP."), systemImage: "bolt.fill")
@@ -204,7 +204,7 @@ struct AboutView: View {
                 }
 
                 Section {
-                    Text(tr("App personnelle, construite uniquement avec des logiciels libres. Aucun jeu ni BIOS n'est fourni : utilise les tiens."))
+                    Text(tr("Application construite uniquement avec des logiciels libres. Aucun jeu ni BIOS n'est fourni."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

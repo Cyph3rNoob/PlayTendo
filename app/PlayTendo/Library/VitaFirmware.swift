@@ -39,10 +39,28 @@ enum VitaFirmware {
         return String(format: "%X.%02X", major, minor)
     }
 
-    /// Firmware déjà dans la mémoire de la console (dossier vs0 non vide, comme Vita3K : app.cpp get_firmware_state).
-    static var hasFirmware: Bool { hasContent("vs0") }
+    /// Firmware déjà dans la mémoire de la console (dossier vs0 non vide, comme Vita3K : app.cpp get_firmware_state), et
+    /// installation pas coupée en route.
+    static var hasFirmware: Bool { hasContent("vs0") && !installWasInterrupted }
     /// Polices déjà dans la mémoire de la console (dossier sa0 non vide).
-    static var hasFonts: Bool { hasContent("sa0") }
+    static var hasFonts: Bool { hasContent("sa0") && !installWasInterrupted }
+
+    /// Vita3K installe un .PUP directement dans la mémoire de la console (vs0 en dernier) : coupée en route (app
+    /// fermée), la console se croirait à jour avec un firmware incomplet. Ce fichier est posé avant l'installation et
+    /// retiré une fois le firmware en place ; tant qu'il est là, firmware et polices sont réinstallés au prochain jeu
+    /// (EmulatorSession.prepareVita, audit du 2026-10-20).
+    private static var installMarker: URL { Paths.vitaEngine.appendingPathComponent("installation-firmware-en-cours") }
+
+    static var installWasInterrupted: Bool { FileManager.default.fileExists(atPath: installMarker.path) }
+
+    static func setInstallInProgress(_ inProgress: Bool) {
+        if inProgress {
+            try? FileManager.default.createDirectory(at: Paths.vitaEngine, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: installMarker.path, contents: nil)
+        } else {
+            try? FileManager.default.removeItem(at: installMarker)
+        }
+    }
 
     private static func hasContent(_ name: String) -> Bool {
         let folder = Paths.vitaEngine.appendingPathComponent("vita/\(name)", isDirectory: true)

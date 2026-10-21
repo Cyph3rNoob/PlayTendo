@@ -26,10 +26,10 @@ if [ "${PLAYTENDO_VITA:-1}" = "1" ]; then
     echo "!!! Moteur PS Vita absent : lance d'abord zsh scripts/build_vita3k.sh mac (ou PLAYTENDO_VITA=0 pour s'en passer)"
     exit 1
   fi
-  VITA_SETTINGS=('SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) PLAYTENDO_VITA'
-                 'GCC_PREPROCESSOR_DEFINITIONS=$(inherited) PLAYTENDO_VITA=1')
   echo ">>> Avec la PS Vita"
 else
+  # Réglages du projet (PLAYTENDO_VITA par défaut) vidés.
+  VITA_SETTINGS=('PLAYTENDO_VITA_CONDITION=' 'PLAYTENDO_VITA_DEFINE=PLAYTENDO_VITA=0')
   echo ">>> Sans la PS Vita"
 fi
 

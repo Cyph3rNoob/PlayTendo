@@ -68,6 +68,12 @@
 // MemoryUtil_iOS_LuckTXM.cpp (retouché par scripts/patch_dolphin.py).
 extern "C" void DolphinPlayTendoSetCodeProvider(void* (*alloc)(size_t, void**), void (*release)(void*));
 
+// State.cpp (retouche 10 de scripts/patch_dolphin.py) : le dernier LoadAs a-t-il vraiment chargé l'état ?
+namespace State
+{
+extern bool g_playtendo_state_loaded;
+}
+
 using ciface::iOS::ButtonType;
 using ciface::iOS::StateManager;
 
@@ -668,12 +674,21 @@ PTDOLPHIN_EXPORT bool PTDolphinLoadState(const char* path)
     return false;
   const std::string file = path;
   __block bool loaded = false;
+  // Une alerte de Dolphin pendant le chargement (« State header corrupted »…) devient la raison de l'échec.
+  PTDolphinClearError();
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
     if (!Core::IsRunning(system))
       return;
     State::LoadAs(system, file);
-    loaded = true;
+    // Refusée (autre jeu, autre version de Dolphin, fichier abîmé) : Dolphin a gardé la partie en cours.
+    loaded = State::g_playtendo_state_loaded;
   });
+  if (!loaded)
+  {
+    std::lock_guard<std::mutex> lock(s_errorMutex);
+    if (s_lastError.empty())
+      s_lastError = "sauvegarde rapide refusée par le moteur (autre jeu ou fichier abîmé ?)";
+  }
   return loaded;
 }

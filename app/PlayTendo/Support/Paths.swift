@@ -40,27 +40,41 @@ enum Paths {
 
 #if !PLAYTENDO_VITA
     /// App compilée sans la PS Vita (PLAYTENDO_VITA=0 zsh scripts/build_app.sh) : ce qu'une version précédente
-    /// de l'app avait installé (jeux, sauvegardes, firmware, réglages et journal du moteur, icônes) est effacé, à sa
-    /// demande. Ne trouve plus rien une fois fait.
+    /// de l'app avait installé (jeux, firmware, réglages et journal du moteur, icônes) est effacé, à sa demande.
+    /// Les sauvegardes des jeux (mémoire de la console : vita/ux0/user, et Sauvegardes/Vita) restent toujours, prêtes
+    /// pour une version avec la PS Vita : rien ne doit effacer une partie sans qu'on le demande (audit du 2026-10-20).
+    /// Ne trouve plus rien une fois fait.
     private static func removeVitaLeftovers() {
         let manager = FileManager.default
-        let folders = [support.appendingPathComponent("Systeme/Vita"), support.appendingPathComponent("Jaquettes/Vita"),
-                       thumbnails.appendingPathComponent("Vita"), states.appendingPathComponent("Vita"),
-                       saves.appendingPathComponent("Vita")]
+        let console = support.appendingPathComponent("Systeme/Vita")
+        var items = [support.appendingPathComponent("Jaquettes/Vita"), thumbnails.appendingPathComponent("Vita"),
+                     states.appendingPathComponent("Vita")]
+        // Mémoire de la console : tout, sauf le chemin qui mène aux sauvegardes (vita, puis ux0, puis user).
+        for (parent, kept) in [("", "vita"), ("vita", "ux0"), ("vita/ux0", "user")] {
+            let folder = parent.isEmpty ? console : console.appendingPathComponent(parent)
+            for name in (try? manager.contentsOfDirectory(atPath: folder.path)) ?? [] where name != kept {
+                items.append(folder.appendingPathComponent(name))
+            }
+        }
         var freed: Int64 = 0
-        for folder in folders where manager.fileExists(atPath: folder.path) {
-            let files = manager.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey])
-            while let file = files?.nextObject() as? URL {
-                freed += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        for item in items where manager.fileExists(atPath: item.path) {
+            if let size = try? item.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+               size.isRegularFile == true {
+                freed += Int64(size.fileSize ?? 0)
+            } else {
+                let files = manager.enumerator(at: item, includingPropertiesForKeys: [.fileSizeKey])
+                while let file = files?.nextObject() as? URL {
+                    freed += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                }
             }
             do {
-                try manager.removeItem(at: folder)
+                try manager.removeItem(at: item)
             } catch {
-                PTLogLine("PS Vita : \(folder.lastPathComponent) impossible à effacer (\(error.localizedDescription))")
+                PTLogLine("PS Vita : \(item.lastPathComponent) impossible à effacer (\(error.localizedDescription))")
             }
         }
         if freed > 0 {
-            PTLogLine(String(format: "PS Vita retirée de l'app : jeux installés et sauvegardes effacés (%.2f Go libérés)",
+            PTLogLine(String(format: "PS Vita retirée de l'app : jeux installés effacés, sauvegardes des jeux gardées (%.2f Go libérés)",
                              Double(freed) / 1e9))
         }
     }

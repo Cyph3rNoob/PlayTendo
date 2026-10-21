@@ -313,13 +313,17 @@ struct CSOReader: SectorReader {
     private let align: Int
     private let index: [UInt32]
 
+    /// Un fichier abîmé (en-tête ou table des blocs incohérents) est refusé, jamais lu hors de ses limites : la
+    /// bibliothèque relit les .cso à chaque ouverture, une erreur ici faisait planter l'app à chaque fois (audit du
+    /// 2026-10-20).
     init?(url: URL) {
         guard let header = GameIdentifier.read(url, offset: 0, count: 24), header.prefix(4) == Data("CISO".utf8) else { return nil }
         self.url = url
         let total = Int(GameIdentifier.le32(header, 8)) | Int(GameIdentifier.le32(header, 12)) << 32
         blockSize = Int(GameIdentifier.le32(header, 16))
         align = Int(header[21])
-        guard blockSize > 0, blockSize <= 1 << 20 else { return nil }
+        // Décalage des positions au plus 30 : une position (31 bits) décalée tient alors dans un Int.
+        guard blockSize > 0, blockSize <= 1 << 20, align <= 30, total > 0, total < 1 << 40 else { return nil }
         let blocks = (total + blockSize - 1) / blockSize
         guard blocks > 0, blocks < 1 << 24, let table = GameIdentifier.read(url, offset: 24, count: (blocks + 1) * 4) else { return nil }
         index = (0...blocks).map { GameIdentifier.le32(table, $0 * 4) }
@@ -334,7 +338,9 @@ struct CSOReader: SectorReader {
             guard block + 1 < index.count, let data = self.block(block) else { return nil }
             let start = position - block * blockSize
             let take = min(end - position, blockSize - start)
-            out.append(data.subdata(in: start..<(start + take)))
+            // Bloc plus court que prévu (fichier abîmé) : rien à lire.
+            guard start + take <= data.count else { return nil }
+            out.append(data.subdata(in: (data.startIndex + start)..<(data.startIndex + start + take)))
             position += take
         }
         return out
@@ -343,7 +349,10 @@ struct CSOReader: SectorReader {
     private func block(_ number: Int) -> Data? {
         let raw = index[number], next = index[number + 1]
         let start = UInt64(raw & 0x7FFF_FFFF) << align, stop = UInt64(next & 0x7FFF_FFFF) << align
-        guard stop > start, let compressed = GameIdentifier.read(url, offset: start, count: Int(stop - start)) else { return nil }
+        // Un bloc compressé n'est jamais beaucoup plus long que décompressé (plus l'alignement) : au-delà, la table
+        // est fausse.
+        guard stop > start, stop - start <= UInt64(blockSize) * 2 + (UInt64(1) << min(align, 20)),
+              let compressed = GameIdentifier.read(url, offset: start, count: Int(stop - start)) else { return nil }
         if raw & 0x8000_0000 != 0 { return compressed.prefix(blockSize) }   // bloc non compressé
         var output = Data(count: blockSize)
         let written = output.withUnsafeMutableBytes { out in

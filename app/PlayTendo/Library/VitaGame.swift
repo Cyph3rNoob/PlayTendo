@@ -164,15 +164,7 @@ enum VitaGame {
     /// Dossiers de Jeux devenus vides après le départ d'un jeu (« app » extrait d'une Vita, « app ( Gravity Rush ) »…) :
     /// retirés en remontant, jamais le dossier Jeux lui-même. Avant le 2026-10-12, seul un dossier nommé « app » l'était.
     static func removeEmptyFolders(containing game: URL) {
-        let games = Paths.games.resolvingSymlinksInPath().path + "/"
-        var folder = game.deletingLastPathComponent()
-        while folder.resolvingSymlinksInPath().path.hasPrefix(games),
-              let rest = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
-              rest.allSatisfy({ $0.hasPrefix(".") }),
-              (try? FileManager.default.removeItem(at: folder)) != nil {
-            PTLogLine("Dossier vide retiré de Jeux : \(folder.lastPathComponent)")
-            folder = folder.deletingLastPathComponent()
-        }
+        GameLibrary.removeEmptyFolders(containing: game)
     }
 
     /// Taille d'un fichier ou d'un dossier (somme de ses fichiers), en octets.

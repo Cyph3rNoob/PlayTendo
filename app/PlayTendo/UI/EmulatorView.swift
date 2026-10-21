@@ -11,6 +11,8 @@ struct EmulatorView: View {
     @State private var showingMenu = false
     @State private var confirmingReset = false
     @State private var quitting = false
+    /// Chargement de plus de 3 s : le bouton « Quitter le jeu » apparaît sous la roue.
+    @State private var loadingIsSlow = false
     @State private var screensSwapped: Bool
     @State private var touchSize: DSTouchSize
     @State private var fillScreen: Bool
@@ -133,6 +135,26 @@ struct EmulatorView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
                     }
+                    // Chargement qui dure (installation PS Vita, moteur bloqué au démarrage) : on peut toujours revenir
+                    // à la bibliothèque. Une installation en cours va d'abord au bout de son étape.
+                    if loadingIsSlow {
+                        Button { quit() } label: {
+                            Text((quitting ? tr("Fermeture…") : tr("Quitter le jeu")).uppercased())
+                                .font(.display(12, weight: 800))
+                                .tracking(1.5)
+                                .foregroundStyle(Neon.magenta)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .overlay(Chamfer(cut: 8).stroke(Neon.magenta.opacity(0.7), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(quitting)
+                        .transition(.opacity)
+                    }
+                }
+                .task {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    withAnimation(.easeOut(duration: 0.3)) { loadingIsSlow = true }
                 }
             }
             if showingMenu {

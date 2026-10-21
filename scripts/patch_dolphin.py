@@ -29,6 +29,9 @@ Les deux :
    ce que l'appelant mettait ensuite à cet endroit. Plantage de l'app Mac au lancement d'un jeu Wii après un jeu
    GameCube (2026-10-13 : un bit changé dans une valeur du fil de PlayTendo) ; essai à part : l'ancienne façon se
    bloque en moins de 200 000 commandes, la nouvelle (sémaphore de libdispatch, gardé en vie par le bloc) jamais.
+10. State.cpp : `State::g_playtendo_state_loaded` dit si le dernier `LoadAs` a vraiment chargé la sauvegarde rapide
+   (Dolphin ne le dit que par un message à l'écran, coupé dans PlayTendo) : PTDolphinLoadState répondait « chargée »
+   même pour une sauvegarde refusée (autre jeu, fichier abîmé). Audit du 2026-10-20.
 """
 import os
 import sys
@@ -252,5 +255,29 @@ patch("Source/iOS/Library/HostQueue.mm", [
     dispatch_release(done);
 #endif
   }
+"""),
+])
+
+patch("Source/Core/Core/State.cpp", [
+    ("""void LoadAs(Core::System& system, const std::string& filename)
+{
+  if (!Core::IsRunningOrStarting(system))
+    return;
+""", """// PlayTendo : le dernier LoadAs a-t-il vraiment chargé l'état ? (lu par PTDolphinLoadState, dolphin/PTDolphinHost.mm)
+bool g_playtendo_state_loaded = false;
+
+void LoadAs(Core::System& system, const std::string& filename)
+{
+  g_playtendo_state_loaded = false;
+  if (!Core::IsRunningOrStarting(system))
+    return;
+"""),
+    ("""        if (s_on_after_load_callback)
+          s_on_after_load_callback();
+""", """        // PlayTendo : chargé et lu jusqu'au bout (sinon Dolphin a déjà remis la partie d'avant).
+        g_playtendo_state_loaded = loaded && loadedSuccessfully;
+
+        if (s_on_after_load_callback)
+          s_on_after_load_callback();
 """),
 ])

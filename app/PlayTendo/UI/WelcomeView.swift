@@ -214,11 +214,15 @@ struct WelcomeView: View {
         WelcomeCard {
             WelcomeTitle(icon: "bolt.fill", title: tr("MODE TURBO"), color: Neon.violet)
 #if os(macOS)
+#if PLAYTENDO_VITA
+            WelcomeLine(icon: "bolt", text: tr("Il accélère la PSP, la PS Vita, la PS2, la GameCube, la Wii et la 3DS."))
+#else
             WelcomeLine(icon: "bolt", text: tr("Il accélère la PSP, la PS2, la GameCube, la Wii et la 3DS."))
+#endif
             WelcomeLine(icon: "checkmark.circle", text: tr("Sur Mac, il s'active tout seul : rien à installer."))
 #else
 #if PLAYTENDO_VITA
-            WelcomeLine(icon: "bolt", text: tr("Obligatoire pour la PS Vita, indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
+            WelcomeLine(icon: "bolt", text: tr("Indispensable pour la PS Vita, la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
 #else
             WelcomeLine(icon: "bolt", text: tr("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
 #endif

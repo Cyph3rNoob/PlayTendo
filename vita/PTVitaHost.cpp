@@ -657,8 +657,17 @@ PTVITA_EXPORT void PTVitaShutdown(void) {
         PTVitaStop();
     for (int i = 0; i < 500 && s_state.load() != PTVitaStateStopped; i++)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    if (s_thread.joinable())
-        s_thread.join();
+    if (s_thread.joinable()) {
+        // Partie arrêtée : son thread est rejoint. Toujours pas arrêtée au bout de 5 s (jeu bloqué) : il est laissé
+        // à la fin du programme au lieu d'être attendu sans limite, ce qui empêchait l'app de se fermer (audit du
+        // 2026-10-20 ; même limite que la GameCube/Wii et la PS2).
+        if (s_state.load() == PTVitaStateStopped) {
+            s_thread.join();
+        } else {
+            LOG_WARN("[PlayTendo] La partie ne s'est pas arrêtée en 5 s : l'app se ferme quand même");
+            s_thread.detach();
+        }
+    }
     LOG_INFO("[PlayTendo] Moteur arrêté (fermeture de l'app)");
     spdlog::apply_all([](const std::shared_ptr<spdlog::logger> &logger) { logger->flush(); });
 }

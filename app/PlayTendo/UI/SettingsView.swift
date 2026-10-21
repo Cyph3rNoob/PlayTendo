@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la GameCube/Wii et de la 3DS, le BIOS PS2,
+/// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la PS Vita, de la GameCube/Wii et de la 3DS, le BIOS PS2,
 /// le firmware de la PS Vita et le son du démarrage. Sur Mac, en trois pages (Général, Clavier, Jeux et BIOS) avec les touches de chaque console.
 struct SettingsView: View {
     @EnvironmentObject private var jit: JITManager
@@ -129,7 +129,7 @@ struct SettingsView: View {
         } header: {
             Text(tr("Mode turbo (JIT)"))
         } footer: {
-            Text(tr("Accélère la PSP, la PS2, la GameCube, la Wii et la 3DS : leur code est traduit pour l'iPhone au lieu d'être interprété (sans lui, la PS2, la GameCube, la Wii et la 3DS sont injouables). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un de ces jeux, et reste actif jusqu'à la fermeture de l'app."))
+            Text(tr("Accélère la PSP, la PS2, la GameCube, la Wii et la 3DS (sans lui, la PS2, la GameCube, la Wii et la 3DS sont injouables). Il s'active une fois par ouverture de PlayTendo, tout seul au lancement d'un de ces jeux, et reste actif jusqu'à la fermeture de l'app."))
         }
 
         if jit.method == .stikDebug {
@@ -143,7 +143,7 @@ struct SettingsView: View {
             } header: {
                 Text(tr("Ce qu'il faut"))
             } footer: {
-                Text(tr("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi. Avec un compte Apple gratuit (3 apps), StikDebug doit être activé dans AltStore : désactive une autre app le temps de jouer si besoin."))
+                Text(tr("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi."))
             }
         }
     }
@@ -489,11 +489,11 @@ struct SettingsView: View {
     }
 
     private var statusDetail: String? {
-        if jit.isActive { return tr("Les jeux PSP, PS2, GameCube, Wii et 3DS lancés maintenant en profitent.") }
+        if jit.isActive { return tr("Les jeux PSP, PS Vita, PS2, GameCube, Wii et 3DS lancés maintenant en profitent.") }
         switch jit.status {
         case .activating(let step): return step
         case .failed(let message): return message
-        default: return jit.method == .off ? tr("Les jeux PSP, PS2, GameCube, Wii et 3DS utilisent l'interpréteur.") : tr("S'activera au prochain de ces jeux.")
+        default: return jit.method == .off ? tr("Les jeux PSP, PS Vita, PS2, GameCube, Wii et 3DS utilisent l'interpréteur.") : tr("S'activera au prochain de ces jeux.")
         }
     }
 
