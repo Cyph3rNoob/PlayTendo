@@ -416,7 +416,7 @@ private struct PauseMenu: View {
 #endif
             }
             .padding(compact ? 16 : 20)
-            .frame(maxWidth: compact ? (hasBlocks ? 640 : 300) : 340)
+            .frame(maxWidth: compact ? (hasBlocks ? 680 : 332) : 340)
             .background(Chamfer(cut: 22).fill(Neon.panel.opacity(0.94)))
             .overlay(Chamfer(cut: 22).stroke(LinearGradient(colors: [Neon.cyan, Neon.magenta.opacity(0.6)],
                                                            startPoint: .topLeading, endPoint: .bottomTrailing),
@@ -432,12 +432,13 @@ private struct PauseMenu: View {
     @ViewBuilder private var menuContent: some View {
         if compact {
             HStack(alignment: .top, spacing: 18) {
+                // Hauteur naturelle : le panneau ne s'étire pas sur tout l'écran.
                 VStack(spacing: 8) {
                     frameTop
-                    Spacer(minLength: 0)
                     frameBottom
+                        .padding(.top, 6)
                 }
-                .frame(width: hasBlocks ? 256 : nil)
+                .frame(width: hasBlocks ? 300 : nil)
                 if hasBlocks {
                     scrollingBlocks
                 }
@@ -480,10 +481,10 @@ private struct PauseMenu: View {
 
     private var frameBottom: some View {
         HStack(spacing: 8) {
-            MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset)
+            MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", small: true, action: onReset)
                 .disabled(!hasEngineExtras)
                 .opacity(hasEngineExtras ? 1 : 0.4)
-            MenuButton(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, action: onQuit)
+            MenuButton(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, small: true, action: onQuit)
         }
     }
 
@@ -812,13 +813,15 @@ private struct MenuButton: View {
     let icon: String
     var prominent = false
     var destructive = false
+    /// Demi-largeur (Recommencer, Quitter le jeu) : texte plus petit pour tenir sans être coupé.
+    var small = false
     let action: () -> Void
 
     var body: some View {
         let color = prominent ? Neon.cyan : (destructive ? Neon.magenta : Neon.text)
         Button(action: action) {
             Label(title, systemImage: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: small ? 14 : 16, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity)
