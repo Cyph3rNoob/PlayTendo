@@ -121,7 +121,7 @@ a { color: var(--cyan); }
 /* ---------- Héros ---------- */
 .hero { position: relative; overflow: hidden; padding-block: 56px 72px; }
 .hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; }
-.hero-text { min-width: 0; }
+.hero-text { min-width: 0; container-type: inline-size; }
 .boot { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
 .boot img {
   width: 76px;
@@ -152,7 +152,10 @@ a { color: var(--cyan); }
 .wordmark {
   font-family: var(--display);
   font-weight: 900;
+  /* Le dégradé n'est peint que dans la boîte du titre : il doit tenir dans sa colonne (≈ 7,7 fois sa taille de
+     police de large), sinon la fin du O disparaît. */
   font-size: min(80px, 8.6vw);
+  font-size: min(80px, 12.5cqi);
   line-height: 1;
   letter-spacing: .05em;
   margin: 0;
