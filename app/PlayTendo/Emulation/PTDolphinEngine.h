@@ -24,6 +24,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// `jit` : la réserve JIT de l'app est prête (recompilateur), sinon interpréteur.
 - (BOOL)bootGameAtPath:(NSString *)path jit:(BOOL)jit;
+/// Jeu en plusieurs disques : démarre le premier ; Dolphin passe au suivant quand le jeu le demande. Moteur sans
+/// cette fonction : le premier disque seulement.
+- (BOOL)bootGameAtPaths:(NSArray<NSString *> *)paths jit:(BOOL)jit;
+/// Disque en cours (à partir de 0) d'un jeu démarré avec plusieurs disques, sinon -1.
+@property (nonatomic, readonly) NSInteger discIndex;
+/// Met le disque `index` (à partir de 0) du jeu en cours. NO si impossible.
+- (BOOL)changeDiscAt:(NSInteger)index;
 - (void)setPaused:(BOOL)paused;
 - (void)stop;
 /// Arrêt en règle de Dolphin avant la fermeture de l'app (Mac).

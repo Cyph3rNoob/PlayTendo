@@ -29,6 +29,19 @@ protocol ExternalEngine: AnyObject {
     func prepareSnapshot()
     /// Format de l'image du jeu (largeur / hauteur) s'il est connu ; nil : 4:3.
     var imageAspectRatio: CGFloat? { get }
+    /// Démarre un jeu en plusieurs disques (le premier, les autres prêts à être changés).
+    func boot(discs: [String], jit: Bool) -> Bool
+    /// Disque en cours (à partir de 0) d'un jeu démarré avec plusieurs disques, sinon nil.
+    var currentDisc: Int? { get }
+    /// Met le disque `index` du jeu démarré par `boot(discs:jit:)`. Faux si le moteur ne sait pas.
+    func changeDisc(to index: Int) -> Bool
+}
+
+/// Moteurs sans changement de disque : le premier disque seulement.
+extension ExternalEngine {
+    func boot(discs: [String], jit: Bool) -> Bool { boot(path: discs[0], jit: jit) }
+    var currentDisc: Int? { nil }
+    func changeDisc(to index: Int) -> Bool { false }
 }
 
 extension PTPS2Engine: ExternalEngine {
@@ -70,6 +83,20 @@ extension PTDolphinEngine: ExternalEngine {
         try? FileManager.default.removeItem(at: Self.captureURL)
         return bootGame(atPath: path, jit: jit)
     }
+
+    /// GameCube en plusieurs disques : Dolphin passe tout seul au suivant quand le jeu le demande. Moteur d'avant
+    /// (sans cette fonction) : le premier disque seulement.
+    func boot(discs: [String], jit: Bool) -> Bool {
+        try? FileManager.default.removeItem(at: Self.captureURL)
+        return bootGame(atPaths: discs, jit: jit)
+    }
+
+    var currentDisc: Int? {
+        let index = discIndex
+        return index >= 0 ? index : nil
+    }
+
+    func changeDisc(to index: Int) -> Bool { changeDisc(at: index) }
 
     func prepareSnapshot() {
         _ = captureScreen(toPath: Self.captureURL.path)

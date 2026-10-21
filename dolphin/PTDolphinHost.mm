@@ -45,6 +45,7 @@
 #include "Core/Config/UISettings.h"
 #include "Core/Core.h"
 #include "Core/DolphinAnalytics.h"
+#include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/GCPad.h"
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/HW/Wiimote.h"
@@ -358,12 +359,17 @@ PTDOLPHIN_EXPORT void PTDolphinShutdown(void)
 
 // MARK: - Partie
 
-PTDOLPHIN_EXPORT bool PTDolphinBoot(const char* path, bool jit)
+// Disques du jeu en cours s'il en a plusieurs (PTDolphinBootDiscs), sinon vide.
+static std::vector<std::string> s_discs;
+
+// Démarre le jeu : un fichier, ou les disques d'un jeu qui en a plusieurs (Dolphin met le premier, puis passe tout
+// seul au suivant quand le jeu ouvre le couvercle : « changement de disque automatique »).
+static bool PTDolphinBootFiles(std::vector<std::string> files, bool jit)
 {
-  if (!s_view || !path)
+  if (!s_view || files.empty())
     return false;
   PTDolphinClearError();
-  const std::string file = path;
+  s_discs = files.size() > 1 ? files : std::vector<std::string>{};
   CAMetalLayer* layer = (CAMetalLayer*)s_view.layer;
 #if !TARGET_OS_IOS
   // Mac : l'écran de la fenêtre (Retina ou non) ; la vue est déjà dans la fenêtre à ce moment-là.
@@ -381,6 +387,7 @@ PTDOLPHIN_EXPORT bool PTDolphinBoot(const char* path, bool jit)
     Config::SetBase(Config::MAIN_CPU_CORE, jit ? PowerPC::CPUCore::JITARM64 : PowerPC::CPUCore::CachedInterpreter);
     Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, jit ? VertexLoaderType::Native : VertexLoaderType::Software);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, 1.0f);
+    Config::SetBase(Config::MAIN_AUTO_DISC_CHANGE, files.size() > 1);
     NSLog(@"[PlayTendo] Démarrage GameCube/Wii %s", jit ? "avec JIT" : "sans JIT (interpréteur)");
     s_aspectRatio = 0;
 
@@ -388,12 +395,58 @@ PTDOLPHIN_EXPORT bool PTDolphinBoot(const char* path, bool jit)
     wsi.type = WindowSystemType::iOS;
     wsi.render_surface = (__bridge void*)layer;
     wsi.render_surface_scale = scale;
-    std::unique_ptr<BootParameters> boot = BootParameters::GenerateFromFile(file);
+    std::unique_ptr<BootParameters> boot = BootParameters::GenerateFromFile(files);
     if (!boot)
       return;
     started = BootManager::BootCore(system, std::move(boot), wsi);
   });
   return started;
+}
+
+PTDOLPHIN_EXPORT bool PTDolphinBoot(const char* path, bool jit)
+{
+  return path && PTDolphinBootFiles({path}, jit);
+}
+
+PTDOLPHIN_EXPORT bool PTDolphinBootDiscs(const char* const* paths, int count, bool jit)
+{
+  if (!paths || count < 1)
+    return false;
+  std::vector<std::string> files;
+  for (int i = 0; i < count; i++)
+  {
+    if (paths[i])
+      files.emplace_back(paths[i]);
+  }
+  return PTDolphinBootFiles(std::move(files), jit);
+}
+
+PTDOLPHIN_EXPORT int PTDolphinGetDisc(void)
+{
+  auto& system = Core::System::GetInstance();
+  if (s_discs.size() < 2 || !Core::IsRunning(system))
+    return -1;
+  // Retouche 11 de patch_dolphin.py : rang du disque inséré dans la liste du changement automatique.
+  return static_cast<int>(system.GetDVDInterface().PlayTendoDiscIndex());
+}
+
+PTDOLPHIN_EXPORT bool PTDolphinChangeDisc(int index)
+{
+  if (index < 0 || static_cast<size_t>(index) >= s_discs.size())
+    return false;
+  const std::string path = s_discs[index];
+  __block bool changed = false;
+  DOLHostQueueRunSync(^{
+    auto& system = Core::System::GetInstance();
+    if (!Core::IsRunning(system))
+      return;
+    // Comme « Changer de disque » de Dolphin (DolphinQt, MainWindow::ChangeDisc) : fil de la console tenu, couvercle
+    // ouvert, disque inséré une seconde (de la console) plus tard ; marche aussi jeu en pause.
+    Core::CPUThreadGuard guard(system);
+    system.GetDVDInterface().ChangeDisc(guard, path);
+    changed = true;
+  });
+  return changed;
 }
 
 PTDOLPHIN_EXPORT PTDolphinState PTDolphinGetState(void)

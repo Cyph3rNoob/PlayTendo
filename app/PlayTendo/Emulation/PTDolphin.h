@@ -24,6 +24,13 @@ void *PTDolphinSetup(const char *userDir, const char *gcSaveDir, const char *wii
 /// Démarre un jeu (chemin complet d'un .iso, .rvz, .gcm, .wbfs…). `jit` : turbo (réserve JIT de l'app prête),
 /// sinon interpréteur. Faux si le démarrage n'a pas pu être lancé.
 bool PTDolphinBoot(const char *path, bool jit);
+/// Démarre un jeu en plusieurs disques (`count` chemins, le premier démarré) ; le moteur passe au disque suivant quand
+/// le jeu le demande (« changement de disque automatique » de Dolphin).
+bool PTDolphinBootDiscs(const char *const *paths, int count, bool jit);
+/// Disque en cours (à partir de 0) d'un jeu démarré par PTDolphinBootDiscs, sinon -1.
+int PTDolphinGetDisc(void);
+/// Met le disque `index` du jeu démarré par PTDolphinBootDiscs (couvercle ouvert, disque inséré une seconde après).
+bool PTDolphinChangeDisc(int index);
 PTDolphinState PTDolphinGetState(void);
 void PTDolphinSetPaused(bool paused);
 /// Demande l'arrêt du jeu ; l'état repasse à « arrêté » quand c'est fait.

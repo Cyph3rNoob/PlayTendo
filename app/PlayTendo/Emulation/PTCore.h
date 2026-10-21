@@ -87,7 +87,10 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 /// Jeux sur plusieurs disques (PlayStation).
 @property (nonatomic, readonly) NSUInteger diskCount;
 @property (nonatomic, readonly) NSUInteger currentDiskIndex;
-- (BOOL)switchToNextDisk;
+/// Ouvre le couvercle, met le disque `index` (à partir de 0) et referme.
+- (BOOL)switchToDiskAtIndex:(NSUInteger)index;
+/// Ajoute un disque à la fin de la liste du moteur (jeu en plusieurs fichiers sans .m3u).
+- (BOOL)appendDiskAtPath:(NSString *)path;
 
 /// Entrées — utilisables depuis n'importe quel thread.
 - (void)setButton:(PTButton)button pressed:(BOOL)pressed port:(unsigned)port;

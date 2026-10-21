@@ -32,6 +32,8 @@ Les deux :
 10. State.cpp : `State::g_playtendo_state_loaded` dit si le dernier `LoadAs` a vraiment chargé la sauvegarde rapide
    (Dolphin ne le dit que par un message à l'écran, coupé dans PlayTendo) : PTDolphinLoadState répondait « chargée »
    même pour une sauvegarde refusée (autre jeu, fichier abîmé). Audit du 2026-10-20.
+11. DVDInterface.h : `PlayTendoDiscIndex()` donne le rang du disque inséré d'un jeu en plusieurs disques (Dolphin le
+   garde pour lui) : menu pause › DISQUE de PlayTendo, qui suit aussi les changements automatiques. 2026-10-21.
 """
 import os
 import sys
@@ -279,5 +281,13 @@ void LoadAs(Core::System& system, const std::string& filename)
 
         if (s_on_after_load_callback)
           s_on_after_load_callback();
+"""),
+])
+
+patch("Source/Core/Core/HW/DVD/DVDInterface.h", [
+    ("""  bool AutoChangeDisc(const Core::CPUThreadGuard& guard);
+""", """  bool AutoChangeDisc(const Core::CPUThreadGuard& guard);
+  // PlayTendo : rang du disque inséré dans la liste d'un jeu en plusieurs disques (lu par PTDolphinGetDisc).
+  size_t PlayTendoDiscIndex() const { return m_auto_disc_change_index; }
 """),
 ])

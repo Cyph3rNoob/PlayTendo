@@ -5,10 +5,14 @@ struct Game: Identifiable, Hashable {
     let system: GameSystem
     /// Identifiant stable : le chemin dans Jeux (le chemin complet change à chaque mise à jour de l'app).
     let key: String
+    /// Jeu en plusieurs disques (« … (Disc 1) », « … (Disc 2) ») : tous ses disques dans l'ordre, `url` étant le
+    /// premier. Vide pour un jeu d'un seul fichier (ou dont un .m3u liste déjà les disques).
+    let discs: [URL]
 
-    init(url: URL, system: GameSystem) {
+    init(url: URL, system: GameSystem, discs: [URL] = []) {
         self.url = url
         self.system = system
+        self.discs = discs
         let root = Paths.games.resolvingSymlinksInPath().path
         let path = url.resolvingSymlinksInPath().path
         if path.hasPrefix(root + "/") {

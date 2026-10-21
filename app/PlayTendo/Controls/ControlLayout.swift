@@ -51,14 +51,6 @@ enum DSTouchSize: String, CaseIterable {
         case .large: 0.5
         }
     }
-
-    var next: DSTouchSize {
-        switch self {
-        case .small: .medium
-        case .medium: .large
-        case .large: .small
-        }
-    }
 }
 
 /// Réglages d'affichage des consoles à deux écrans (DS).
@@ -180,7 +172,7 @@ struct ControlLayout: Equatable {
                                                      label: label))
             }
         } else {
-            cluster = max(110, min(dualScreen || scheme.canFillScreen ? 150 : 168, usable.height * 0.42))
+            cluster = max(110, min(dualScreen || scheme.hasAnalogStick ? 150 : 168, usable.height * 0.42))
             if dualScreen {
                 // Grands écrans sur toute la largeur, avec ou sans manette (choix de l'utilisateur,
                 // 2026-10-06) : les boutons tactiles passent par-dessus, en semi-transparent, et un

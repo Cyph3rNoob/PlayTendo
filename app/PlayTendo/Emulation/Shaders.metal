@@ -18,30 +18,47 @@ vertex VertexOut gameVertex(uint vid [[vertex_id]]) {
 
 struct GameUniforms {
     float2 textureSize;
-    float scale;
+    float scale;     // agrandissement entier (pixels de l'écran par pixel de la console, au moins 1)
     float flip;      // 1 = image à l'envers verticalement (rendu OpenGL)
     float4 source;   // partie de l'image à afficher (x, y, largeur, hauteur), de 0 à 1
+    float4 filter;   // x : 0 net, 1 lissé, 2 lignes CRT, 3 grille LCD (consoles 2D, FilterSettings)
 };
 
 // « Sharp bilinear » : les pixels restent nets comme en mode « plus proche voisin »,
-// mais les bords sont lissés pour éviter les pixels de tailles inégales.
+// mais les bords sont lissés pour éviter les pixels de tailles inégales. Filtres des consoles 2D par-dessus.
 fragment float4 gameFragment(VertexOut in [[stage_in]],
                              texture2d<float> frame [[texture(0)]],
                              sampler linearSampler [[sampler(0)]],
                              constant GameUniforms &uniforms [[buffer(0)]]) {
+    float mode = uniforms.filter.x;
     float2 uvIn = in.uv;
     if (uniforms.flip > 0.5) uvIn.y = 1.0 - uvIn.y;
     float2 full = uniforms.source.xy + uvIn * uniforms.source.zw;
     float2 texel = full * uniforms.textureSize;
     float2 texelFloor = floor(texel);
     float2 offset = fract(texel) - 0.5;
-    float range = 0.5 - 0.5 / uniforms.scale;
-    float2 f = (offset - clamp(offset, -range, range)) * uniforms.scale + 0.5;
+    // Lissé : agrandissement bilinéaire ordinaire (comme un agrandissement de 1, sans bord net).
+    float sharpness = (mode > 0.5 && mode < 1.5) ? 1.0 : uniforms.scale;
+    float range = 0.5 - 0.5 / sharpness;
+    float2 f = (offset - clamp(offset, -range, range)) * sharpness + 0.5;
     float2 uv = (texelFloor + f) / uniforms.textureSize;
     // Ne jamais déborder sur la partie voisine (l'autre écran de la DS).
     float2 low = (uniforms.source.xy * uniforms.textureSize + 0.5) / uniforms.textureSize;
     float2 high = ((uniforms.source.xy + uniforms.source.zw) * uniforms.textureSize - 0.5) / uniforms.textureSize;
-    return float4(frame.sample(linearSampler, clamp(uv, low, high)).rgb, 1.0);
+    float3 color = frame.sample(linearSampler, clamp(uv, low, high)).rgb;
+
+    float2 cell = fract(texel);  // position dans le pixel de la console, de 0 à 1
+    if (mode > 1.5 && mode < 2.5) {
+        // CRT : chaque ligne de la console est un trait de lumière, plus sombre entre deux lignes ; luminosité
+        // remontée pour compenser.
+        float d = cell.y - 0.5;
+        color *= mix(0.45, 1.0, exp(-d * d * 14.0)) * 1.18;
+    } else if (mode > 2.5) {
+        // LCD : fine grille sombre entre les pixels, comme l'écran d'une Game Boy (environ un pixel de l'écran).
+        float2 edge = min(cell, 1.0 - cell) * uniforms.scale;
+        color *= mix(0.72, 1.0, smoothstep(0.0, 1.0, min(edge.x, edge.y)));
+    }
+    return float4(min(color, 1.0), 1.0);
 }
 
 // Lissage des bords (FXAA, d'après la version simple de Timothy Lottes), à la taille de l'image du jeu, avant son

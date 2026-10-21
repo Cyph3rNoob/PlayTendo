@@ -297,9 +297,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func nextDisk() {
+    /// Met le disque `index` (à partir de 0) : menu pause › DISQUE.
+    func selectDisk(_ index: Int) {
         perform { [self] in
-            guard let core, core.switchToNextDisk() else { return }
+            guard let core else {
+                // GameCube : le changement est vu par la boucle de runExternal, qui l'annonce.
+                _ = external?.changeDisc(to: index)
+                return
+            }
+            guard core.switchToDisk(at: UInt(index)) else { return }
             let info = DiskInfo(current: Int(core.currentDiskIndex) + 1, count: Int(core.diskCount))
             DispatchQueue.main.async { self.diskInfo = info }
             showToast(tr("Disque \(info.current) inséré"))
@@ -612,6 +618,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                           saveDirectory: Paths.coreSaveDirectory(for: system).path,
                           options: options)
         self.core = core
+        // Jeu en plusieurs fichiers sans .m3u (disques regroupés par la bibliothèque) : les autres disques sont
+        // ajoutés à la liste du moteur, pour le menu pause › DISQUE.
+        if game.discs.count > 1 && core.diskCount == 1 {
+            for disc in game.discs.dropFirst() where !core.appendDisk(atPath: disc.path) {
+                PTLogLine("Disque non ajouté au moteur : \(disc.lastPathComponent)")
+                break
+            }
+        }
 
         if let data = try? Data(contentsOf: Paths.saveRAMFile(for: game)) {
             core.restoreSaveRAM(data)
@@ -959,7 +973,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.02)
         }
         let jitFailures = PTJITFailureCount()
-        guard engine.boot(path: bootPath, jit: PTJITIsActive()) else {
+        // Jeu en plusieurs disques (GameCube) : le moteur les reçoit tous, et passe au suivant quand le jeu le demande.
+        let booted = game.discs.count > 1 ? engine.boot(discs: game.discs.map(\.path), jit: PTJITIsActive())
+                                          : engine.boot(path: bootPath, jit: PTJITIsActive())
+        guard booted else {
             fail(engine.lastError().map(trMessage) ?? tr("Le jeu n'a pas pu démarrer."))
             return
         }
@@ -970,6 +987,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var enginePaused = false
         var failure: String?
         var aspect: CGFloat = 4.0 / 3.0
+        var shownDisc: Int?
 
         while true {
             condition.lock()
@@ -1028,6 +1046,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 aspect = ratio
                 PTLogLine(String(format: "%@ : image au format %.2f", name, ratio))
                 DispatchQueue.main.async { self.aspectRatio = ratio }
+            }
+            // Disque en cours (le moteur en change tout seul quand le jeu le demande) : menu pause › DISQUE.
+            if let disc = engine.currentDisc, disc != shownDisc {
+                let info = DiskInfo(current: disc + 1, count: game.discs.count)
+                PTLogLine("\(name) : disque \(info.current)/\(info.count)")
+                if shownDisc != nil { showToast(tr("Disque \(info.current) inséré")) }
+                shownDisc = disc
+                DispatchQueue.main.async { self.diskInfo = info }
             }
         }
 

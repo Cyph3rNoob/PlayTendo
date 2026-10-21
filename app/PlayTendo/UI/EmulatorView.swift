@@ -20,6 +20,8 @@ struct EmulatorView: View {
     @State private var wiiController: DolphinSettings.WiiController
     /// PS1 : lissage des bords, fait par l'écran de jeu (filtre FXAA de PlayTendo).
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
+    /// Consoles 2D : filtre de l'image (FilterSettings), gardé pour chaque console.
+    @AppStorage private var screenFilter: Int
 
     init(game: Game, onClose: (() -> Void)? = nil) {
         self.game = game
@@ -28,7 +30,10 @@ struct EmulatorView: View {
         _screensSwapped = State(initialValue: Self.savedSwap(for: game))
         let savedSize = UserDefaults.standard.string(forKey: Self.touchSizeKey) ?? ""
         _touchSize = State(initialValue: DSTouchSize(rawValue: savedSize) ?? .medium)
-        _fillScreen = State(initialValue: UserDefaults.standard.object(forKey: Self.fillScreenKey) as? Bool ?? true)
+        let fillKey = Self.fillScreenKey(for: game.system)
+        _fillScreen = State(initialValue: UserDefaults.standard.object(forKey: fillKey) as? Bool
+                                          ?? (fillKey == Self.fillScreenKeyAnalog))
+        _screenFilter = AppStorage(wrappedValue: FilterSettings.Filter.sharp.rawValue, FilterSettings.key(for: game.system))
         _wiiController = State(initialValue: DolphinSettings.controller(for: game))
     }
 
@@ -43,7 +48,14 @@ struct EmulatorView: View {
     private var ps2FillsForController: Bool { game.system == .ps2 && gamepad.isConnected }
 
     private static let touchSizeKey = "tailleEcranTactileDS"
-    private static let fillScreenKey = "pleinEcranPSP"
+    /// Taille de l'image en paysage : consoles à stick (N64, PSP, PS2, GameCube, Wii, PS Vita), plein écran par défaut
+    /// (clé historique « pleinEcranPSP ») ; consoles 2D et PS1, leur propre choix, réduite par défaut (comme avant).
+    private static let fillScreenKeyAnalog = "pleinEcranPSP"
+    private static let fillScreenKey2D = "pleinEcran2D"
+
+    private static func fillScreenKey(for system: GameSystem) -> String {
+        system.controls.hasAnalogStick ? fillScreenKeyAnalog : fillScreenKey2D
+    }
 
     /// Clé du choix « Inverser les écrans » : le chemin du jeu dans Jeux, qui ne change pas d'une mise à
     /// jour à l'autre (contrairement au chemin complet, utilisé avant).
@@ -199,7 +211,11 @@ struct EmulatorView: View {
         } else {
             ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
                 GameScreen(frameBuffer: session.frameBuffer, source: screen.source,
-                           smoothing: game.system == .psx && ps1Smoothing == PS1Settings.Smoothing.on.rawValue)
+                           smoothing: game.system == .psx && ps1Smoothing == PS1Settings.Smoothing.on.rawValue,
+                           filter: FilterSettings.systems.contains(game.system)
+                               ? FilterSettings.shaderMode(FilterSettings.Filter(rawValue: screenFilter) ?? .sharp,
+                                                           system: game.system)
+                               : 0)
                     .frame(width: screen.frame.width, height: screen.frame.height)
                     .position(x: screen.frame.midX, y: screen.frame.midY)
             }
@@ -208,20 +224,21 @@ struct EmulatorView: View {
 
     private func pauseMenu(landscape: Bool) -> some View {
         let swap: (() -> Void)? = controls.usesTouchScreen ? { swapScreens() } : nil
+        let touch = Binding(get: { touchSize }, set: { setTouchSize($0) })
+        let fill = Binding(get: { fillScreen }, set: { setFillScreen($0) })
+        let wii = Binding(get: { wiiController }, set: { setWiiController($0) })
         return PauseMenu(session: session,
                          scheme: controls,
                          compact: landscape,
                          onResume: { closeMenu() },
                          onReset: { confirmingReset = true },
+                         onQuit: { quit() },
                          onSwapScreens: swap,
-                         touchSizeLabel: controls.usesTouchScreen && landscape ? touchSize.label : nil,
-                         onTouchSize: { nextTouchSize() },
-                         imageSizeLabel: Self.hasTouchControls && controls.canFillScreen && landscape && !ps2FillsForController
-                            ? (fillScreen ? tr("Plein écran") : tr("Réduite")) : nil,
-                         onImageSize: { toggleFillScreen() },
-                         controllerLabel: game.system == .wii ? wiiController.label : nil,
-                         onController: { switchWiiController() },
-                         onQuit: { quit() })
+                         touchSize: controls.usesTouchScreen && landscape ? touch : nil,
+                         fillScreen: Self.hasTouchControls && controls.canFillScreen && landscape && !ps2FillsForController
+                            ? fill : nil,
+                         filter: FilterSettings.systems.contains(game.system) ? $screenFilter : nil,
+                         wiiController: game.system == .wii ? wii : nil)
     }
 
     private var failureMessage: String? {
@@ -235,29 +252,27 @@ struct EmulatorView: View {
         closeMenu()
     }
 
-    /// DS en paysage : écran tactile petit → moyen → grand (choix retenu pour tous les jeux).
-    private func nextTouchSize() {
-        touchSize = touchSize.next
-        UserDefaults.standard.set(touchSize.rawValue, forKey: Self.touchSizeKey)
-        closeMenu()
+    /// DS et 3DS en paysage : écran tactile petit, moyen ou grand (choix retenu pour tous les jeux).
+    private func setTouchSize(_ size: DSTouchSize) {
+        touchSize = size
+        UserDefaults.standard.set(size.rawValue, forKey: Self.touchSizeKey)
     }
 
-    /// N64, PSP, PS2, GameCube et Wii en paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à
-    /// côté). Choix commun à ces consoles (clé historique « pleinEcranPSP »).
-    private func toggleFillScreen() {
-        fillScreen.toggle()
-        UserDefaults.standard.set(fillScreen, forKey: Self.fillScreenKey)
-        closeMenu()
+    /// En paysage : image en plein écran (boutons par-dessus) ou réduite (boutons à côté). Choix commun aux consoles
+    /// à stick, et un autre pour les consoles 2D et la PS1.
+    private func setFillScreen(_ fill: Bool) {
+        fillScreen = fill
+        UserDefaults.standard.set(fill, forKey: Self.fillScreenKey(for: game.system))
     }
 
-    /// Wii : passe de la Wiimote à la manette GameCube ou l'inverse (choix retenu pour ce jeu).
-    private func switchWiiController() {
-        wiiController = wiiController.other
-        DolphinSettings.setController(wiiController, for: game)
+    /// Wii : Wiimote + Nunchuk ou manette GameCube (choix retenu pour ce jeu).
+    private func setWiiController(_ controller: DolphinSettings.WiiController) {
+        guard controller != wiiController else { return }
+        wiiController = controller
+        DolphinSettings.setController(controller, for: game)
         session.clearInput()
-        session.setWiimote(wiiController == .wiimote)
+        session.setWiimote(controller == .wiimote)
         gamepad.nintendoLetters = controls.nintendoLetters
-        closeMenu()
     }
 
     private func openMenu() {
@@ -308,21 +323,21 @@ private struct PauseMenu: View {
     @EnvironmentObject private var metadata: GameMetadata
     /// Commandes de la partie (Wii : celles de la manette choisie).
     let scheme: ControlScheme
-    /// Paysage : boutons sur deux colonnes pour tenir dans la hauteur de l'écran.
+    /// Paysage : le cadre (reprendre, sauvegardes, quitter) à gauche, les réglages de la console à droite.
     let compact: Bool
     let onResume: () -> Void
     let onReset: () -> Void
-    let onSwapScreens: (() -> Void)?
-    /// DS en paysage : taille actuelle de l'écran tactile (nil = réglage masqué).
-    let touchSizeLabel: String?
-    let onTouchSize: () -> Void
-    /// En paysage (N64, PSP, PS2, GameCube, Wii) : taille actuelle de l'image (nil = réglage masqué).
-    let imageSizeLabel: String?
-    let onImageSize: () -> Void
-    /// Wii : manette en cours (nil = réglage masqué).
-    let controllerLabel: String?
-    let onController: () -> Void
     let onQuit: () -> Void
+    /// DS et 3DS : échange des deux écrans (nil = pas de bloc ÉCRANS).
+    let onSwapScreens: (() -> Void)?
+    /// DS et 3DS en paysage : taille de l'écran tactile (nil = réglage masqué).
+    let touchSize: Binding<DSTouchSize>?
+    /// En paysage : image réduite (boutons à côté) ou plein écran (boutons par-dessus) ; nil = réglage masqué.
+    let fillScreen: Binding<Bool>?
+    /// Consoles 2D : filtre de l'image (`FilterSettings.Filter`) ; nil pour les autres.
+    let filter: Binding<Int>?
+    /// Wii : manette utilisée (nil = réglage masqué).
+    let wiiController: Binding<DolphinSettings.WiiController>?
 
     /// PSP : résolution et lissage des textures, choisis directement (gardés pour tous les jeux PSP).
     @AppStorage(PSPSettings.resolutionKey) private var resolution = PSPSettings.Resolution.x2.rawValue
@@ -357,71 +372,28 @@ private struct PauseMenu: View {
         [.psp, .ps2, .gameCube, .wii, .n3ds, .nds, .n64, .psx].contains(session.game.system) || session.game.system.isVita
     }
     /// Vita3K n'a ni sauvegarde rapide, ni avance rapide, ni « recommencer » : seules les sauvegardes des jeux existent.
+    /// Les boutons restent à leur place, éteints, pour que le menu ait la même forme pour toutes les consoles.
     private var hasEngineExtras: Bool { !session.game.system.isVita }
 
-    private struct Item: Identifiable {
-        let title: String
-        let icon: String
-        var destructive = false
-        var enabled = true
-        let action: () -> Void
-        var id: String { title }
-    }
-
-    private var items: [Item] {
-        var items: [Item] = []
-        if hasEngineExtras {
-            items += [
-                Item(title: tr("Sauvegarder"), icon: "square.and.arrow.down") {
-                    session.saveState()
-                    onResume()
-                },
-                Item(title: tr("Charger"), icon: "clock.arrow.circlepath", enabled: session.hasSaveState) {
-                    session.loadState()
-                    onResume()
-                },
-                Item(title: session.isFastForwarding ? tr("Vitesse normale") : tr("Avance rapide ×3"),
-                     icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill") {
-                    session.toggleFastForward()
-                    onResume()
-                },
-            ]
-        }
-        if let disk = session.diskInfo {
-            items.append(Item(title: tr("Changer de disque (\(disk.current)/\(disk.count))"), icon: "opticaldisc") {
-                session.nextDisk()
-                onResume()
-            })
-        }
-        if let onSwapScreens {
-            items.append(Item(title: tr("Inverser les écrans"), icon: "rectangle.2.swap", action: onSwapScreens))
-        }
-        if let touchSizeLabel {
-            items.append(Item(title: tr("Écran tactile : \(touchSizeLabel)"), icon: "hand.tap", action: onTouchSize))
-        }
-        if let imageSizeLabel {
-            items.append(Item(title: tr("Image : \(imageSizeLabel)"), icon: "arrow.up.left.and.arrow.down.right",
-                              action: onImageSize))
-        }
-        if let controllerLabel {
-            items.append(Item(title: tr("Manette : \(controllerLabel)"), icon: "gamecontroller", action: onController))
-        }
+    /// Bloc IMAGE : réglages du moteur, taille, filtre (et plein écran de la fenêtre sur Mac).
+    private var hasImageBlock: Bool {
 #if os(macOS)
-        let fullScreen = MacWindow.isFullScreen
-        items.append(Item(title: fullScreen ? tr("Quitter le plein écran") : tr("Plein écran"),
-                          icon: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
-            MacWindow.toggleFullScreen()
-            onResume()
-        })
-        items.append(Item(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true })
+        true
+#else
+        hasImageSettings || fillScreen != nil || filter != nil
 #endif
-        return items
     }
 
-    private var endItems: [Item] {
-        let quit = Item(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, action: onQuit)
-        guard hasEngineExtras else { return [quit] }
-        return [Item(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset), quit]
+    private var hasControlsBlock: Bool {
+#if os(macOS)
+        true
+#else
+        wiiController != nil
+#endif
+    }
+
+    private var hasBlocks: Bool {
+        hasImageBlock || onSwapScreens != nil || session.diskInfo != nil || hasControlsBlock
     }
 
     var body: some View {
@@ -444,7 +416,7 @@ private struct PauseMenu: View {
 #endif
             }
             .padding(compact ? 16 : 20)
-            .frame(maxWidth: compact ? 540 : 340)
+            .frame(maxWidth: compact ? (hasBlocks ? 640 : 300) : 340)
             .background(Chamfer(cut: 22).fill(Neon.panel.opacity(0.94)))
             .overlay(Chamfer(cut: 22).stroke(LinearGradient(colors: [Neon.cyan, Neon.magenta.opacity(0.6)],
                                                            startPoint: .topLeading, endPoint: .bottomTrailing),
@@ -454,26 +426,146 @@ private struct PauseMenu: View {
         }
     }
 
-    /// Boutons du menu, réglages d'image, recommencer et quitter.
+    /// Le cadre est le même pour toutes les consoles (Reprendre, sauvegarde, chargement et avance rapide en haut,
+    /// Recommencer et Quitter en bas) ; entre les deux, seulement les blocs de réglages dont la console se sert.
+    /// En paysage : cadre à gauche, blocs à droite.
     @ViewBuilder private var menuContent: some View {
-        MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
         if compact {
-            grid(items)
-            if hasImageSettings { imageSettings }
-            grid(endItems)
-        } else {
-            if hasEngineExtras {
-                HStack(spacing: 10) {
-                    button(items[0])
-                    button(items[1])
+            HStack(alignment: .top, spacing: 18) {
+                VStack(spacing: 8) {
+                    frameTop
+                    Spacer(minLength: 0)
+                    frameBottom
                 }
-                ForEach(items.dropFirst(2)) { button($0) }
-            } else {
-                ForEach(items) { button($0) }
+                .frame(width: hasBlocks ? 256 : nil)
+                if hasBlocks {
+                    scrollingBlocks
+                }
             }
-            if hasImageSettings { imageSettings }
-            ForEach(endItems) { button($0) }
+        } else {
+            frameTop
+            if hasBlocks {
+                scrollingBlocks
+                    .padding(.vertical, 4)
+            }
+            frameBottom
         }
+    }
+
+    @ViewBuilder private var frameTop: some View {
+        MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
+        HStack(spacing: 8) {
+            QuickButton(title: tr("Sauvegarder"), icon: "square.and.arrow.down", enabled: hasEngineExtras) {
+                session.saveState()
+                onResume()
+            }
+            QuickButton(title: tr("Charger"), icon: "clock.arrow.circlepath", enabled: hasEngineExtras && session.hasSaveState) {
+                session.loadState()
+                onResume()
+            }
+            QuickButton(title: session.isFastForwarding ? tr("Vitesse normale") : tr("Avance rapide ×3"),
+                        icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill", enabled: hasEngineExtras) {
+                session.toggleFastForward()
+                onResume()
+            }
+        }
+        if !hasEngineExtras {
+            Text(tr("PS Vita : seules les sauvegardes faites dans le jeu existent."))
+                .font(.caption)
+                .foregroundStyle(Neon.dim)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var frameBottom: some View {
+        HStack(spacing: 8) {
+            MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset)
+                .disabled(!hasEngineExtras)
+                .opacity(hasEngineExtras ? 1 : 0.4)
+            MenuButton(title: tr("Quitter le jeu"), icon: "xmark", destructive: true, action: onQuit)
+        }
+    }
+
+    /// Les blocs, qui défilent seulement s'ils ne tiennent pas dans la hauteur de l'écran.
+    private var scrollingBlocks: some View {
+        ViewThatFits(in: .vertical) {
+            blocks
+            ScrollView(showsIndicators: false) { blocks }
+        }
+    }
+
+    private var blocks: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if hasImageBlock {
+                MenuBlock(title: tr("IMAGE")) {
+                    if hasImageSettings { imageSettings }
+                    if let fillScreen {
+                        NeonSegments(title: tr("TAILLE"), detail: nil,
+                                     options: [(0, tr("Réduite")), (1, tr("Plein écran"))],
+                                     selection: fillScreen.wrappedValue ? 1 : 0) { value in
+                            pick { fillScreen.wrappedValue = value == 1 }
+                        }
+                    }
+                    if let filter {
+                        NeonSegments(title: tr("FILTRE"), detail: nil,
+                                     options: FilterSettings.Filter.allCases.map {
+                                         ($0.rawValue, FilterSettings.label($0, system: session.game.system))
+                                     },
+                                     selection: filter.wrappedValue) { value in
+                            pick { filter.wrappedValue = value }
+                        }
+                    }
+#if os(macOS)
+                    let fullScreen = MacWindow.isFullScreen
+                    MenuButton(title: fullScreen ? tr("Quitter le plein écran") : tr("Plein écran"),
+                               icon: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+                        MacWindow.toggleFullScreen()
+                        onResume()
+                    }
+#endif
+                }
+            }
+            if let onSwapScreens {
+                MenuBlock(title: tr("ÉCRANS")) {
+                    MenuButton(title: tr("Inverser les écrans"), icon: "rectangle.2.swap", action: onSwapScreens)
+                    if let touchSize {
+                        NeonSegments(title: tr("ÉCRAN TACTILE"), detail: nil,
+                                     options: DSTouchSize.allCases.enumerated().map { ($0.offset, $0.element.label) },
+                                     selection: DSTouchSize.allCases.firstIndex(of: touchSize.wrappedValue) ?? 0) { value in
+                            pick { touchSize.wrappedValue = DSTouchSize.allCases[value] }
+                        }
+                    }
+                }
+            }
+            if let disk = session.diskInfo {
+                MenuBlock(title: tr("DISQUE")) {
+                    NeonSegments(title: tr("DISQUE"), showsTitle: false, detail: nil,
+                                 options: (0..<disk.count).map { ($0, "\($0 + 1)") },
+                                 selection: disk.current - 1) { value in
+                        guard value != disk.current - 1 else { return }
+                        session.selectDisk(value)
+                        onResume()
+                    }
+                }
+            }
+            if hasControlsBlock {
+                MenuBlock(title: tr("COMMANDES")) {
+                    if let wiiController {
+                        NeonSegments(title: tr("MANETTE"), detail: nil,
+                                     options: [(0, DolphinSettings.WiiController.wiimote.label),
+                                               (1, DolphinSettings.WiiController.gameCube.label)],
+                                     selection: wiiController.wrappedValue == .wiimote ? 0 : 1) { value in
+                            pick { wiiController.wrappedValue = value == 0 ? .wiimote : .gameCube }
+                        }
+                    }
+#if os(macOS)
+                    MenuButton(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true }
+#endif
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var header: some View {
@@ -494,12 +586,6 @@ private struct PauseMenu: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
             }
-        }
-    }
-
-    private func grid(_ items: [Item]) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-            ForEach(items) { button($0) }
         }
     }
 
@@ -628,28 +714,22 @@ private struct PauseMenu: View {
     @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
                                             smoothing smoothingPicker: NeonSegments? = nil,
                                             format formatPicker: NeonSegments? = nil) -> some View {
-        if compact {
-            HStack(alignment: .top, spacing: 14) {
-                resolutionPicker
-                if let smoothingPicker { smoothingPicker }
-                if let formatPicker { formatPicker }
-            }
-            .padding(.vertical, 2)
-        } else {
-            VStack(spacing: 10) {
-                resolutionPicker
-                if let smoothingPicker { smoothingPicker }
-                if let formatPicker { formatPicker }
-            }
-            .padding(.vertical, 4)
-        }
+        resolutionPicker
+        if let smoothingPicker { smoothingPicker }
+        if let formatPicker { formatPicker }
     }
 
-    private func choose(_ change: () -> Void) {
+    /// Réglage de l'écran de jeu (taille, filtre, écran tactile, manette) : rien à renvoyer au moteur.
+    private func pick(_ change: () -> Void) {
         change()
 #if os(iOS)
         UISelectionFeedbackGenerator().selectionChanged()
 #endif
+    }
+
+    /// Réglage d'image du moteur : appliqué tout de suite.
+    private func choose(_ change: () -> Void) {
+        pick(change)
         // PS Vita : retenue pour le prochain lancement (EmulatorSession la donne au moteur avant chaque démarrage).
         if session.game.system.isVita { return }
         if isDolphin {
@@ -670,10 +750,60 @@ private struct PauseMenu: View {
         }
     }
 
-    private func button(_ item: Item) -> some View {
-        MenuButton(title: item.title, icon: item.icon, destructive: item.destructive, action: item.action)
-            .disabled(!item.enabled)
-            .opacity(item.enabled ? 1 : 0.4)
+}
+
+/// Bloc de réglages du menu pause : titre néon, puis ses réglages.
+private struct MenuBlock<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Rectangle()
+                    .fill(Neon.magenta)
+                    .frame(width: 3, height: 12)
+                Text(title)
+                    .font(.display(11, weight: 800))
+                    .tracking(2)
+                    .foregroundStyle(Neon.text)
+                Rectangle()
+                    .fill(LinearGradient(colors: [Neon.magenta.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 1)
+            }
+            content
+        }
+    }
+}
+
+/// Sauvegarder, Charger, Avance rapide : trois petits boutons côte à côte, à la même place sur toutes les consoles
+/// (éteints quand le moteur ne les a pas).
+private struct QuickButton: View {
+    let title: String
+    let icon: String
+    var enabled = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(Neon.text)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .padding(.horizontal, 4)
+            .background(Chamfer(cut: 9).fill(Neon.text.opacity(0.07)))
+            .overlay(Chamfer(cut: 9).stroke(Neon.text.opacity(0.25), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
     }
 }
 
@@ -689,6 +819,8 @@ private struct MenuButton: View {
         Button(action: action) {
             Label(title, systemImage: icon)
                 .font(.system(size: 16, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .foregroundStyle(prominent ? Neon.onAccent : color)
@@ -703,6 +835,8 @@ private struct MenuButton: View {
 /// Rangée de pastilles néon : tous les choix visibles, celui en cours allumé.
 private struct NeonSegments: View {
     let title: String
+    /// Faux quand le titre du bloc suffit (DISQUE) ; il sert encore à VoiceOver.
+    var showsTitle = true
     let detail: String?
     let options: [(Int, String)]
     let selection: Int
@@ -710,15 +844,17 @@ private struct NeonSegments: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.display(10, weight: 800))
-                    .tracking(1.5)
-                    .foregroundStyle(Neon.dim)
-                if let detail {
-                    Text(detail)
-                        .font(Neon.mono(10, weight: .semibold))
-                        .foregroundStyle(Neon.cyan)
+            if showsTitle {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.display(10, weight: 800))
+                        .tracking(1.5)
+                        .foregroundStyle(Neon.dim)
+                    if let detail {
+                        Text(detail)
+                            .font(Neon.mono(10, weight: .semibold))
+                            .foregroundStyle(Neon.cyan)
+                    }
                 }
             }
             HStack(spacing: 6) {
@@ -727,6 +863,9 @@ private struct NeonSegments: View {
                     Button { onSelect(value) } label: {
                         Text(label)
                             .font(.display(13, weight: 800))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .padding(.horizontal, 4)
                             .foregroundStyle(selected ? Neon.onAccent : Neon.text)
                             .frame(maxWidth: .infinity, minHeight: 36)
                             .background(Chamfer(cut: 7).fill(selected ? Neon.cyan : Neon.text.opacity(0.06)))

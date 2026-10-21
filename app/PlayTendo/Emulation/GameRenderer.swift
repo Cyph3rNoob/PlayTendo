@@ -10,6 +10,8 @@ struct GameScreen {
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
     /// Lissage des bords (FXAA) avant l'agrandissement (PS1).
     var smoothing = false
+    /// Consoles 2D : mode du filtre (FilterSettings.shaderMode) ; 0 = pixels nets.
+    var filter = 0
 
     func makeCoordinator() -> GameRenderer {
         GameRenderer(frameBuffer: frameBuffer)
@@ -35,6 +37,7 @@ struct GameScreen {
     private func update(_ renderer: GameRenderer) {
         renderer.source = source
         renderer.smoothing = smoothing
+        renderer.filter = filter
     }
 }
 
@@ -65,6 +68,8 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     private var smoothedTexture: MTLTexture?
     var smoothing = false
     private var drawnSmoothing = false
+    var filter = 0
+    private var drawnFilter = 0
     private var sampler: MTLSamplerState?
     private var texture: MTLTexture?
     private var lastSequence: UInt64 = 0
@@ -113,6 +118,7 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         // Rien de nouveau (jeu en pause, même image, jeu à 30 images/s) : l'écran garde l'image déjà
         // affichée, sans réveiller la puce graphique.
         guard frameNotShown || view.drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing
+              || filter != drawnFilter
         else { return }
         guard let queue, let pipeline, let sampler,
               let pass = view.currentRenderPassDescriptor,
@@ -146,11 +152,12 @@ final class GameRenderer: NSObject, MTKViewDelegate {
             let scale = max(1, floor(min(Float(drawableSize.width) / shown.x, Float(drawableSize.height) / shown.y)))
             var uniforms = [SIMD4<Float>(size.x, size.y, scale, flipped ? 1 : 0),
                             SIMD4<Float>(Float(shownRect.minX), Float(shownRect.minY),
-                                         Float(shownRect.width), Float(shownRect.height))]
+                                         Float(shownRect.width), Float(shownRect.height)),
+                            SIMD4<Float>(Float(filter), 0, 0, 0)]
             encoder.setRenderPipelineState(pipeline)
             encoder.setFragmentTexture(texture, index: 0)
             encoder.setFragmentSamplerState(sampler, index: 0)
-            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride * 2, index: 0)
+            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride * uniforms.count, index: 0)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         }
         encoder.endEncoding()
@@ -159,6 +166,7 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         drawnSize = view.drawableSize
         drawnSource = source
         drawnSmoothing = smoothing
+        drawnFilter = filter
         frameNotShown = false
     }
 
@@ -181,11 +189,12 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         pass.colorAttachments[0].storeAction = .store
         guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return nil }
         var uniforms = [SIMD4<Float>(Float(frame.width), Float(frame.height), 1, flipped ? 1 : 0),
-                        SIMD4<Float>(Float(rect.minX), Float(rect.minY), Float(rect.width), Float(rect.height))]
+                        SIMD4<Float>(Float(rect.minX), Float(rect.minY), Float(rect.width), Float(rect.height)),
+                        SIMD4<Float>(0, 0, 0, 0)]
         encoder.setRenderPipelineState(fxaaPipeline)
         encoder.setFragmentTexture(frame, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
-        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride * 2, index: 0)
+        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride * uniforms.count, index: 0)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
         return target

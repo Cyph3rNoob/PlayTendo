@@ -60,8 +60,9 @@ enum ControlScheme {
     /// Toucher l'image du jeu sert de pointeur (Wiimote) ou d'écran tactile avant (PS Vita). La DS a son propre écran
     /// tactile (`usesTouchScreen`).
     var usesPointer: Bool { self == .wiimote || isPSVita }
-    /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (réglage du menu).
-    var canFillScreen: Bool { [.nintendo64, .psp, .playStation2, .gameCube, .wiimote].contains(self) || isPSVita }
+    /// En paysage, l'image peut prendre toute la hauteur avec les boutons par-dessus (menu pause › IMAGE › TAILLE) :
+    /// toutes les consoles à un seul écran.
+    var canFillScreen: Bool { !usesTouchScreen }
 
     /// Manette Nintendo (Switch Pro, Joy-Con) : boutons de l'app faits par ses A, B, X, Y. Par défaut ceux à la même
     /// place (les bonnes lettres sur NES, Super Nintendo, Game Boy, DS, 3DS ; la croix en bas sur les consoles Sony).

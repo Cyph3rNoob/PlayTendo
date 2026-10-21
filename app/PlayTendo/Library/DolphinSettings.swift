@@ -33,7 +33,6 @@ enum DolphinSettings {
         case wiimote, gameCube
 
         var label: String { self == .wiimote ? "Wiimote" : "GameCube" }
-        var other: WiiController { self == .wiimote ? .gameCube : .wiimote }
     }
 
     static let resolutionKey = "resolutionGCWii"

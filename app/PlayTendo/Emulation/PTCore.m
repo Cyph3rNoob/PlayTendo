@@ -647,15 +647,21 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     return (_hasDiskControl && _disk.get_image_index) ? _disk.get_image_index() : 0;
 }
 
-- (BOOL)switchToNextDisk {
+- (BOOL)switchToDiskAtIndex:(NSUInteger)index {
     NSUInteger count = self.diskCount;
-    if (count < 2 || !_disk.set_eject_state || !_disk.set_image_index) return NO;
-    unsigned next = (unsigned)((self.currentDiskIndex + 1) % count);
+    if (index >= count || !_disk.set_eject_state || !_disk.set_image_index) return NO;
     _disk.set_eject_state(true);
-    BOOL ok = _disk.set_image_index(next);
+    BOOL ok = _disk.set_image_index((unsigned)index);
     _disk.set_eject_state(false);
-    PTLogLine([NSString stringWithFormat:@"Changement de disque → %u/%lu", next + 1, (unsigned long)count]);
+    PTLogLine([NSString stringWithFormat:@"Changement de disque → %lu/%lu", (unsigned long)index + 1, (unsigned long)count]);
     return ok;
+}
+
+- (BOOL)appendDiskAtPath:(NSString *)path {
+    if (!_hasDiskControl || !_disk.add_image_index || !_disk.replace_image_index || !_disk.get_num_images) return NO;
+    if (!_disk.add_image_index()) return NO;
+    struct retro_game_info info = { .path = path.fileSystemRepresentation };
+    return _disk.replace_image_index(_disk.get_num_images() - 1, &info);
 }
 
 #pragma mark Entrées

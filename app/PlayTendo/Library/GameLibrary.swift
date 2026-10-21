@@ -38,7 +38,9 @@ final class GameLibrary: ObservableObject {
                 self.games = found
                 if let pending = self.pendingLaunch {
                     let path = pending.resolvingSymlinksInPath().path
-                    if let game = found.first(where: { $0.url.resolvingSymlinksInPath().path == path }) {
+                    if let game = found.first(where: { game in
+                        ([game.url] + game.discs).contains { $0.resolvingSymlinksInPath().path == path }
+                    }) {
                         self.pendingLaunch = nil
                         self.gameToLaunch = game
                     }
@@ -81,14 +83,14 @@ final class GameLibrary: ObservableObject {
             for entry in referencedFiles(of: playlist) { hidden.insert(entry.path) }
         }
 
-        let found = files.compactMap { url -> Game? in
+        let found = groupDiscs(files.compactMap { url -> Game? in
             guard let system = GameSystem.detect(url),
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
 #if PLAYTENDO_VITA
             if system == .vita, VitaGame.kind(of: url) != .game { return nil }
 #endif
             return Game(url: url, system: system)
-        }
+        })
 #if PLAYTENDO_VITA
         // PS Vita : les jeux installés dont l'original n'est plus dans Jeux (retiré après l'installation).
         let vitaOriginals = vitaFolders + found.filter { $0.system == .vita }.map(\.url)
@@ -103,6 +105,49 @@ final class GameLibrary: ObservableObject {
         // Noms des sauvegardes, avant que les jeux soient affichés (deux jeux du même nom dans deux dossiers).
         Paths.assignFileNames(to: all)
         return all.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    /// Consoles dont le moteur sait changer de disque en cours de partie (menu pause › DISQUE).
+    nonisolated private static let multiDiscSystems: Set<GameSystem> = [.psx, .gameCube]
+
+    /// Mention du disque dans un nom de fichier : « (Disc 2) », « (Disque 2) », « (CD 2) », « (Disc 2 of 3) ».
+    nonisolated private static let discTag = try! NSRegularExpression(
+        pattern: #"\s*[\(\[](?:disc|disk|disque|cd)\s*(\d+)(?:\s*(?:of|sur|/)\s*\d+)?[\)\]]"#,
+        options: [.caseInsensitive])
+
+    /// Jeux en plusieurs disques rangés dans le même dossier (« Metal Gear Solid - The Twin Snakes (Europe) (Disc 1) »
+    /// et « (Disc 2) ») : un seul jeu, lancé sur son premier disque, les autres choisis depuis le menu pause.
+    /// GameCube : le moteur passe aussi tout seul au disque suivant quand le jeu le demande.
+    nonisolated private static func groupDiscs(_ games: [Game]) -> [Game] {
+        var result: [Game] = []
+        var groups: [String: [(number: Int, game: Game)]] = [:]
+        for game in games {
+            let name = game.baseName
+            let range = NSRange(name.startIndex..., in: name)
+            guard multiDiscSystems.contains(game.system),
+                  let match = discTag.firstMatch(in: name, range: range),
+                  let numberRange = Range(match.range(at: 1), in: name),
+                  let number = Int(name[numberRange]) else {
+                result.append(game)
+                continue
+            }
+            let base = discTag.stringByReplacingMatches(in: name, range: range, withTemplate: "").lowercased()
+            let key = "\(game.system.rawValue)|\(game.url.deletingLastPathComponent().standardizedFileURL.path)|\(base)"
+            groups[key, default: []].append((number, game))
+        }
+        for discs in groups.values {
+            // Un seul fichier par numéro (« (Disc 1).iso » et « (Disc 1).rvz » : le premier trouvé).
+            var seen = Set<Int>()
+            let sorted = discs.sorted { $0.number < $1.number }.filter { seen.insert($0.number).inserted }
+            if sorted.count < 2 {
+                result += discs.map(\.game)
+                continue
+            }
+            let first = sorted[0].game
+            result.append(Game(url: first.url, system: first.system, discs: sorted.map(\.game.url)))
+            result += discs.map(\.game).filter { game in !sorted.contains { $0.game.id == game.id } }
+        }
+        return result
     }
 
     // MARK: Import
@@ -835,7 +880,8 @@ final class GameLibrary: ObservableObject {
     nonisolated static func files(of game: Game) -> [URL] {
         let main = game.url.standardizedFileURL
         var result = [main]
-        var queue = referencedFiles(of: main)
+        // Jeu en plusieurs disques : les autres disques partent avec lui.
+        var queue = referencedFiles(of: main) + game.discs.dropFirst().map(\.standardizedFileURL)
         while let file = queue.first, result.count < 64 {
             queue.removeFirst()
             guard !result.contains(file) else { continue }

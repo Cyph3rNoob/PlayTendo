@@ -21,8 +21,11 @@ static NSString *loadFailure;
 
 @implementation PTDolphinEngine {
     PTDolphinFunctions _fn;
-    /// Facultative (moteurs compilés avant elle).
+    /// Facultatives (moteurs compilés avant elles).
     __typeof__(&PTDolphinShutdown) _shutdown;
+    __typeof__(&PTDolphinBootDiscs) _bootDiscs;
+    __typeof__(&PTDolphinGetDisc) _getDisc;
+    __typeof__(&PTDolphinChangeDisc) _changeDisc;
 }
 
 + (PTDolphinEngine *)loadedEngine {
@@ -50,6 +53,9 @@ static NSString *loadFailure;
     PT_DOLPHIN_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
     engine->_shutdown = (__typeof__(&PTDolphinShutdown))dlsym(handle, "PTDolphinShutdown");
+    engine->_bootDiscs = (__typeof__(&PTDolphinBootDiscs))dlsym(handle, "PTDolphinBootDiscs");
+    engine->_getDisc = (__typeof__(&PTDolphinGetDisc))dlsym(handle, "PTDolphinGetDisc");
+    engine->_changeDisc = (__typeof__(&PTDolphinChangeDisc))dlsym(handle, "PTDolphinChangeDisc");
 
     void *view = engine->_fn.PTDolphinSetup(userDirectory.fileSystemRepresentation,
                                             gameCubeSaveDirectory.fileSystemRepresentation,
@@ -76,6 +82,21 @@ static NSString *loadFailure;
 
 - (BOOL)bootGameAtPath:(NSString *)path jit:(BOOL)jit {
     return _fn.PTDolphinBoot(path.fileSystemRepresentation, jit);
+}
+
+- (BOOL)bootGameAtPaths:(NSArray<NSString *> *)paths jit:(BOOL)jit {
+    if (!_bootDiscs || paths.count < 2) return [self bootGameAtPath:paths.firstObject ?: @"" jit:jit];
+    const char *list[paths.count];
+    for (NSUInteger i = 0; i < paths.count; i++) list[i] = paths[i].fileSystemRepresentation;
+    return _bootDiscs(list, (int)paths.count, jit);
+}
+
+- (NSInteger)discIndex {
+    return _getDisc ? _getDisc() : -1;
+}
+
+- (BOOL)changeDiscAt:(NSInteger)index {
+    return _changeDisc ? _changeDisc((int)index) : NO;
 }
 
 - (void)setPaused:(BOOL)paused {
