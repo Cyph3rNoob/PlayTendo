@@ -362,6 +362,13 @@ struct LibraryView: View {
 
     // MARK: Jeux
 
+    /// Colonnes d'une console : boîtes couchées (N64, Super Nintendo) sur deux largeurs de colonne, pour qu'elles aient
+    /// à peu près la surface d'une boîte debout au lieu de paraître petites.
+    private static func gridColumn(for system: GameSystem) -> GridItem {
+        let wide = BoxArt.aspect(for: system) > 1
+        return GridItem(.adaptive(minimum: wide ? 314 : 150, maximum: wide ? 454 : 220), spacing: 14, alignment: .top)
+    }
+
     private var sections: some View {
         LazyVStack(alignment: .leading, spacing: 28) {
             ForEach(filter.map { [$0] } ?? GameSystem.libraryGroups) { system in
@@ -369,7 +376,7 @@ struct LibraryView: View {
                 if !games.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         NeonSectionTitle(text: system.libraryTitle, color: system.neon, count: games.count)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14, alignment: .top)],
+                        LazyVGrid(columns: [Self.gridColumn(for: system)],
                                   spacing: 20) {
                             ForEach(games) { game in
                                 Button { play(game) } label: { GameCard(game: game) }
