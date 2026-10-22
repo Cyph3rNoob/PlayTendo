@@ -689,12 +689,14 @@ PTDOLPHIN_EXPORT void PTDolphinSetBootState(const char* path)
   s_bootState = path ? path : "";
 }
 
-/// Écran large forcé (« Widescreen Hack » de Dolphin) : jeux GameCube en 16:9 au lieu de 4:3. Quelques objets peuvent
-/// apparaître tard sur les bords de l'image. Appliqué à l'image suivante.
+/// Écran large forcé : jeux GameCube en 16:9 au lieu de 4:3. Comme dans DolphinQt, il faut les deux réglages : le
+/// « Widescreen Hack » élargit le champ de vision du jeu jusqu'au format d'affichage, qui doit donc être 16:9 (seul,
+/// il ne changeait rien). Quelques objets peuvent apparaître tard sur les bords. Appliqué à l'image suivante.
 PTDOLPHIN_EXPORT void PTDolphinSetWidescreen(bool enabled)
 {
   DOLHostQueueRunSync(^{
     Config::SetBase(Config::GFX_WIDESCREEN_HACK, enabled);
+    Config::SetBase(Config::GFX_ASPECT_RATIO, enabled ? AspectMode::ForceWide : AspectMode::Auto);
   });
 }
 
