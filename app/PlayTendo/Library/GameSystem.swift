@@ -347,6 +347,8 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 // Aucun accès réseau (jeu en ligne) : évite toute demande d'autorisation d'iOS.
                 "ppsspp_enable_wlan": "disabled",
                 "ppsspp_enable_upnp": "disabled",
+                // Codes de triche (CWCheat) : lus par PPSSPP seulement si activés.
+                "ppsspp_cheats": "enabled",
             ].merging(PSPSettings.coreOptions) { $1 }
         default:
             [:]

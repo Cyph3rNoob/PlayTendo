@@ -81,6 +81,20 @@ static void WritePNG(NSData *frame, unsigned w, unsigned h, size_t pitch, PTPixe
     CFRelease(dest); CGImageRelease(image); CGDataProviderRelease(provider); CGColorSpaceRelease(space);
 }
 
+/// Nombre de fois où `pattern` paraît dans `data` (codes de triche : la valeur écrite par le code).
+static NSUInteger Occurrences(NSData *data, NSData *pattern) {
+    if (!data || !pattern.length) return 0;
+    NSUInteger count = 0;
+    NSRange range = NSMakeRange(0, data.length);
+    while (range.length >= pattern.length) {
+        NSRange found = [data rangeOfData:pattern options:0 range:range];
+        if (found.location == NSNotFound) break;
+        count++;
+        range = NSMakeRange(found.location + 1, data.length - found.location - 1);
+    }
+    return count;
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         if (argc < 5) {
@@ -99,6 +113,10 @@ int main(int argc, const char *argv[]) {
         NSArray<NSString *> *sequence = @[];
         NSMutableArray<NSNumber *> *peeks = [NSMutableArray array];
         NSMutableDictionary<NSNumber *, NSMutableDictionary *> *updates = [NSMutableDictionary dictionary];
+        // Codes de triche : envoyés à une image donnée (« --cheat 60:code1|code2 », au format du moteur, voir
+        // Cheats.swift) ; « --find 42EF » cherche ces octets dans la mémoire (ou la sauvegarde rapide) avant et après.
+        NSMutableDictionary<NSNumber *, NSArray<NSString *> *> *cheats = [NSMutableDictionary dictionary];
+        NSData *findPattern = nil;
         int sequenceStart = 120;
         for (int i = 5; i + 1 < argc; i += 2) {
             NSString *flag = @(argv[i]), *value = @(argv[i + 1]);
@@ -125,6 +143,17 @@ int main(int argc, const char *argv[]) {
                 [peeks addObject:@(strtoul(value.UTF8String, NULL, 0))];
             } else if ([flag isEqualToString:@"--start"]) {
                 sequenceStart = [value intValue];
+            } else if ([flag isEqualToString:@"--cheat"]) {
+                NSRange colon = [value rangeOfString:@":"];
+                cheats[@([[value substringToIndex:colon.location] intValue])] =
+                    [[value substringFromIndex:colon.location + 1] componentsSeparatedByString:@"|"];
+            } else if ([flag isEqualToString:@"--find"]) {
+                NSMutableData *bytes = [NSMutableData data];
+                for (NSUInteger k = 0; k + 1 < value.length; k += 2) {
+                    uint8_t byte = (uint8_t)strtoul([value substringWithRange:NSMakeRange(k, 2)].UTF8String, NULL, 16);
+                    [bytes appendBytes:&byte length:1];
+                }
+                findPattern = bytes;
             } else if ([flag isEqualToString:@"--opt"]) {
                 NSArray *kv = [value componentsSeparatedByString:@"="];
                 options[kv[0]] = kv[1];
@@ -203,8 +232,15 @@ int main(int argc, const char *argv[]) {
         }
         if (sequence.count) frames = MAX(frames, sequenceStart + (int)sequence.count * 30 + 10);
 
+        NSData *ramBefore = nil, *stateBefore = nil;
         CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
         for (int i = 1; i <= frames; i++) {
+            if (cheats[@(i)]) {
+                ramBefore = [core systemRAM];
+                stateBefore = [core saveState];
+                [core setCheats:cheats[@(i)]];
+                printf("codes    : image %d → %s\n", i, [cheats[@(i)] componentsJoinedByString:@" | "].UTF8String);
+            }
             for (NSValue *v in presses) {
                 Press p; [v getValue:&p];
                 if (i == p.from) [core setButton:p.button pressed:YES port:0];
@@ -255,6 +291,12 @@ int main(int argc, const char *argv[]) {
             } else {
                 printf("mémoire  : indisponible (taille %lu)\n", (unsigned long)ram.length);
             }
+        }
+        if (findPattern) {
+            NSData *stateAfter = [core saveState];
+            printf("cherche  : mémoire avant %lu, après %lu ; sauvegarde rapide avant %lu, après %lu\n",
+                   (unsigned long)Occurrences(ramBefore, findPattern), (unsigned long)Occurrences(ram, findPattern),
+                   (unsigned long)Occurrences(stateBefore, findPattern), (unsigned long)Occurrences(stateAfter, findPattern));
         }
         NSData *state = [core saveState];
         BOOL restored = state ? [core loadState:state] : NO;

@@ -80,9 +80,12 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 - (nullable NSData *)saveRAM;
 - (void)restoreSaveRAM:(NSData *)data;
 
-/// Mémoire vive de la console émulée (débogage, codes de triche).
 /// Mémoire vive de la console (utilisée par le banc d'essai Mac, scripts/test/harness.m).
 - (nullable NSData *)systemRAM;
+
+/// Codes de triche : efface ceux du moteur, puis met chacun de `codes` (déjà au format du moteur, voir Cheats.swift).
+/// Sans effet si le moteur ne sait pas (retro_cheat_set absent).
+- (void)setCheats:(NSArray<NSString *> *)codes;
 
 /// Jeux sur plusieurs disques (PlayStation).
 @property (nonatomic, readonly) NSUInteger diskCount;

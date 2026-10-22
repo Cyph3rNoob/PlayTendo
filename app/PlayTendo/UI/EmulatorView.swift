@@ -489,6 +489,7 @@ private struct PauseMenu: View {
     }
 
     @State private var tab: MenuTab = .game
+    @State private var showingCheats = false
 
     var body: some View {
         ZStack {
@@ -500,6 +501,9 @@ private struct PauseMenu: View {
             } else {
                 portraitMenu
             }
+        }
+        .sheet(isPresented: $showingCheats) {
+            CheatsView(session: session, title: metadata.display(for: session.game).title)
         }
     }
 
@@ -570,6 +574,7 @@ private struct PauseMenu: View {
         switch tab {
         case .game:
             quickActions
+            cheatsButton
             if let disk = session.diskInfo { discPicker(disk, showsTitle: true) }
             MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset)
                 .disabled(!hasEngineExtras)
@@ -616,6 +621,7 @@ private struct PauseMenu: View {
     @ViewBuilder private var portraitContent: some View {
         MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
         quickActions
+        cheatsButton
         if hasBlocks {
             ViewThatFits(in: .vertical) {
                 blocks
@@ -685,6 +691,18 @@ private struct PauseMenu: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }
+    }
+
+    /// Codes de triche : leur écran, avec le nombre de codes actifs (éteint si le moteur de la console ne les lit pas).
+    private var cheatsButton: some View {
+        let supported = Cheats.supported(session.game.system)
+        let active = session.cheats.filter(\.enabled).count
+        return MenuButton(title: active > 0 ? tr("Codes de triche") + " · \(active)" : tr("Codes de triche"),
+                          icon: "wand.and.stars") {
+            showingCheats = true
+        }
+        .disabled(!supported)
+        .opacity(supported ? 1 : 0.4)
     }
 
     @ViewBuilder private var imageSection: some View {

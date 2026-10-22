@@ -186,6 +186,9 @@ typedef struct {
     void (*unload_game)(void);
     void *(*get_memory_data)(unsigned);
     size_t (*get_memory_size)(unsigned);
+    // Facultatives : les codes de triche.
+    void (*cheat_reset)(void);
+    void (*cheat_set)(unsigned, bool, const char *);
 } PTCoreAPI;
 
 #define PT_ENV(cmd) ((cmd) & ~RETRO_ENVIRONMENT_EXPERIMENTAL)
@@ -382,6 +385,8 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     PT_LOAD(get_memory_data)
     PT_LOAD(get_memory_size)
 #undef PT_LOAD
+    _api.cheat_reset = dlsym(_handle, "retro_cheat_reset");
+    _api.cheat_set = dlsym(_handle, "retro_cheat_set");
 
     if (_api.api_version() != RETRO_API_VERSION) {
         return [self failWithMessage:@"Version d'API libretro incompatible." error:error];
@@ -635,6 +640,15 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     size_t size = _api.get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
     void *bytes = _api.get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
     return (size > 0 && bytes) ? [NSData dataWithBytes:bytes length:size] : nil;
+}
+
+#pragma mark Codes de triche
+
+- (void)setCheats:(NSArray<NSString *> *)codes {
+    if (!_gameLoaded || !_api.cheat_reset || !_api.cheat_set) return;
+    _api.cheat_reset();
+    unsigned index = 0;
+    for (NSString *code in codes) _api.cheat_set(index++, true, code.UTF8String);
 }
 
 #pragma mark Disques

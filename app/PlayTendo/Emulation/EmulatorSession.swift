@@ -35,6 +35,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var isRewindingFromMenu = false
     /// Plus de photo à reprendre : la partie reste à la plus ancienne.
     @Published private(set) var rewindReachedStart = false
+    /// Codes de triche du jeu (menu pause › Codes de triche), gardés par Cheats.
+    @Published private(set) var cheats: [Cheat]
     @Published var toast: String?
     /// Étape longue en cours pendant le chargement (installation du firmware ou d'un jeu PS Vita), montrée sous la roue.
     @Published private(set) var loadingDetail: String?
@@ -76,6 +78,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     /// Partie en train de reculer : son coupé (lu par le moteur, sur son thread).
     private var rewindingNow = false
     private var lastSavedRAM: Data?
+    /// Codes de triche au format du moteur, envoyés une fois le jeu lancé (`cheatsSent`) puis à chaque changement.
+    private var cheatCodes: [String]
+    private var cheatsSent = false
+    private var cheatFrames = 0
     /// N64 : moteur à recharger à la reprise (réglages d'image lus seulement au démarrage d'un jeu).
     private var coreReloadRequested = false
     /// Partie à reprendre après un rechargement du moteur : Mupen64Plus refuse une sauvegarde rapide avant d'avoir
@@ -94,6 +100,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         self.game = game
         ring = PTAudioRingCreate(48_000)
         hasSaveState = FileManager.default.fileExists(atPath: Paths.stateFile(for: game).path)
+        let cheats = Cheats.supported(game.system) ? Cheats.load(for: game) : []
+        self.cheats = cheats
+        cheatCodes = Cheats.engineCodes(for: cheats, system: game.system)
     }
 
     deinit {
@@ -183,6 +192,20 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         perform { [self] in
             core?.reset()
             external?.reset()
+            // Codes de triche renvoyés au nouveau départ (certains moteurs les oublient).
+            cheatsSent = false
+            cheatFrames = 0
+        }
+    }
+
+    /// Codes de triche changés (ajout, interrupteur, suppression) : gardés, et appliqués tout de suite.
+    func setCheats(_ list: [Cheat]) {
+        cheats = list
+        Cheats.save(list, for: game)
+        let codes = Cheats.engineCodes(for: list, system: game.system)
+        perform { [self] in
+            cheatCodes = codes
+            if cheatsSent { core?.setCheats(codes) }
         }
     }
 
@@ -578,6 +601,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                         return
                     }
                     core = reloaded
+                    cheatsSent = false
+                    cheatFrames = 0
                 }
                 deadline = clock.now - 0.05
                 statStart = clock.now
@@ -607,6 +632,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 rewindExhausted = false
                 let steps = fastForward ? 3 : 1
                 for _ in 0..<steps { core.runFrame() }
+                // Codes de triche : envoyés après la première image (le moteur a fini de démarrer). La PSP ne sait quel
+                // est son jeu qu'une fois démarrée : 5 s (elle relit d'elle-même les codes déjà envoyés une autre fois).
+                if !cheatsSent {
+                    cheatFrames += 1
+                    if cheatFrames >= (game.system == .psp ? 300 : 1) {
+                        cheatsSent = true
+                        if !cheatCodes.isEmpty { core.setCheats(cheatCodes) }
+                    }
+                }
                 // Photo de la partie pour pouvoir reculer (toutes les `interval` images).
                 if rewindEnabled {
                     rewindFrame += 1

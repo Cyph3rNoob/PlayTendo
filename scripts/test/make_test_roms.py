@@ -365,12 +365,31 @@ def nds():
     arm9 = arm_color_program(ArmAsm(0x02000000), width=256, height=192, vram=0x06800000, buttons=13,
                              colors=GBA_COLORS + ["jaune", "cyan", "noir"], setup=setup, extra_keys=extra_keys)
     arm7asm = ArmAsm(0x02380000)
+    # Interruption VBlank de l'ARM7, comme dans les vrais jeux : c'est là que melonDS applique les codes Action Replay.
+    arm7asm.ldr(0, 0x0380FFFC); arm7asm.ldr(1, "irq")
+    arm7asm.word(0xE5801000)                   # str r1, [r0]   (gestionnaire d'interruption)
+    arm7asm.ldr(0, 0x04000004)
+    arm7asm.word(0xE3A01008)                   # mov r1, #8
+    arm7asm.word(0xE1C010B0)                   # strh r1, [r0]  (DISPSTAT : interruption VBlank)
+    arm7asm.ldr(0, 0x04000210)
+    arm7asm.word(0xE3A01001)                   # mov r1, #1
+    arm7asm.word(0xE5801000)                   # str r1, [r0]   (IE = VBlank)
+    arm7asm.ldr(0, 0x04000208)
+    arm7asm.word(0xE5801000)                   # str r1, [r0]   (IME = 1)
+    arm7asm.word(0xE10F3000)                   # mrs r3, cpsr
+    arm7asm.word(0xE3C33080)                   # bic r3, r3, #0x80
+    arm7asm.word(0xE121F003)                   # msr cpsr_c, r3 (interruptions permises)
     arm7asm.ldr(0, 0x04000136)                 # EXTKEYIN
     arm7asm.ldr(2, SHARED_KEYS)
     arm7asm.label("loop")
     arm7asm.word(0xE1D010B0)                   # ldrh r1, [r0]
     arm7asm.word(0xE1C210B0)                   # strh r1, [r2]
     arm7asm.branch("loop")
+    arm7asm.label("irq")                       # appelé par le BIOS (r0-r3 gardés) : VBlank traité, retour
+    arm7asm.ldr(0, 0x04000214)
+    arm7asm.word(0xE3A01001)                   # mov r1, #1
+    arm7asm.word(0xE5801000)                   # str r1, [r0]   (IF)
+    arm7asm.word(0xE12FFF1E)                   # bx lr
     arm7asm.flush_pool()
     arm7 = arm7asm.resolve()
 
