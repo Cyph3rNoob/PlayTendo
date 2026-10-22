@@ -472,18 +472,10 @@ private struct GameCard: View {
         let display = metadata.display(for: game)
         let color = game.system.neon
         VStack(alignment: .leading, spacing: 9) {
-            // Cadre aux proportions fixes : les images se placent dedans sans pouvoir l'agrandir.
+            // Place aux proportions fixes (les cartes restent alignées) : la jaquette s'y pose sans pouvoir l'agrandir.
             Color.clear
                 .aspectRatio(3 / 4, contentMode: .fit)
                 .overlay { CoverArt(game: game, title: display.title) }
-                .overlay(alignment: .topLeading) {
-                    SystemBadge(system: game.system, size: 9).padding(9)
-                }
-                .clipShape(Chamfer(cut: 16))
-                .overlay(Chamfer(cut: 16).stroke(LinearGradient(colors: [color, color.opacity(0.15), Neon.magenta.opacity(0.55)],
-                                                                startPoint: .topLeading, endPoint: .bottomTrailing),
-                                                 lineWidth: 1.2))
-                .themedShadow(color.opacity(0.28), radius: 12)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(display.title)
@@ -511,48 +503,44 @@ private struct GameCard: View {
     }
 }
 
-/// Jaquette du jeu sur son propre reflet flouté, ou une jaquette générée en attendant.
+/// Jaquette du jeu seule, sans cadre (les boîtes 3D de ScreenScraper ont un fond transparent), posée en bas de sa
+/// place pour que toutes les jaquettes d'une rangée reposent sur la même ligne. Sans jaquette : une jaquette générée,
+/// dans un cadre aux couleurs de la console.
 private struct CoverArt: View {
     @EnvironmentObject private var metadata: GameMetadata
     let game: Game
     let title: String
     @State private var cover: PlatformImage?
-    @State private var backdrop: PlatformImage?
 
     var body: some View {
+        let color = game.system.neon
         ZStack {
             if let cover {
-                ZStack {
-                    Neon.coverBase
-                    if let backdrop {
-                        Color.clear.overlay {
-                            Image(platformImage: backdrop)
-                                .resizable()
-                                .interpolation(.medium)
-                                .aspectRatio(contentMode: .fill)
-                                .opacity(0.55)
-                        }
-                        .clipped()
-                    }
-                    Image(platformImage: cover)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .shadow(color: .black.opacity(0.6), radius: 8)
-                }
-                .transition(.opacity)
+                Image(platformImage: cover)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .shadow(color: .black.opacity(0.45), radius: 6, y: 4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.opacity)
             } else {
                 GeneratedCover(system: game.system, title: title)
+                    .overlay(alignment: .topLeading) {
+                        SystemBadge(system: game.system, size: 9).padding(9)
+                    }
+                    .clipShape(Chamfer(cut: 16))
+                    .overlay(Chamfer(cut: 16).stroke(LinearGradient(colors: [color, color.opacity(0.15),
+                                                                             Neon.magenta.opacity(0.55)],
+                                                                    startPoint: .topLeading, endPoint: .bottomTrailing),
+                                                     lineWidth: 1.2))
+                    .themedShadow(color.opacity(0.28), radius: 12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
         .task(id: "\(game.key)#\(metadata.coverRevision(for: game))") {
             guard let url = metadata.coverFile(for: game) else {
                 cover = nil
                 return
             }
-            // Une version minuscule, agrandie, fait un flou d'arrière-plan qui ne coûte rien.
-            backdrop = await CoverImages.load(url, maxPixel: 24)
             let image = await CoverImages.load(url)
             withAnimation(.easeOut(duration: 0.25)) { cover = image }
         }

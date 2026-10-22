@@ -427,7 +427,7 @@ struct GameDisplay {
 /// Images des jaquettes et vignettes, réduites et gardées en mémoire.
 enum CoverImages {
     private static let cache = NSCache<NSString, PlatformImage>()
-    private static let sizes = [24, 600, 700]
+    private static let sizes = [600, 700]
 
     private static func key(_ url: URL, _ maxPixel: Int) -> NSString { "\(url.path)#\(maxPixel)" as NSString }
 
