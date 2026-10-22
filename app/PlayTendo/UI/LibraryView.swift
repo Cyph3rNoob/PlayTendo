@@ -472,10 +472,7 @@ private struct GameCard: View {
         let display = metadata.display(for: game)
         let color = game.system.neon
         VStack(alignment: .leading, spacing: 9) {
-            // Place aux proportions fixes (les cartes restent alignées) : la jaquette s'y pose sans pouvoir l'agrandir.
-            Color.clear
-                .aspectRatio(3 / 4, contentMode: .fit)
-                .overlay { CoverArt(game: game, title: display.title) }
+            CoverArt(game: game, title: display.title)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(display.title)
@@ -503,9 +500,9 @@ private struct GameCard: View {
     }
 }
 
-/// Jaquette du jeu seule, sans cadre (les boîtes 3D de ScreenScraper ont un fond transparent), posée en bas de sa
-/// place pour que toutes les jaquettes d'une rangée reposent sur la même ligne. Sans jaquette : une jaquette générée,
-/// dans un cadre aux couleurs de la console.
+/// Jaquette du jeu seule, sans cadre (les boîtes 3D de ScreenScraper ont un fond transparent), à sa propre forme :
+/// une boîte couchée (N64, Super Nintendo européenne) prend moins de hauteur qu'une boîte debout, sans vide au-dessus.
+/// Sans jaquette : une jaquette générée, en portrait, dans un cadre aux couleurs de la console.
 private struct CoverArt: View {
     @EnvironmentObject private var metadata: GameMetadata
     let game: Game
@@ -514,16 +511,23 @@ private struct CoverArt: View {
 
     var body: some View {
         let color = game.system.neon
-        ZStack {
-            if let cover {
-                Image(platformImage: cover)
+        let file = metadata.coverFile(for: game)
+        // Déjà en mémoire : affichée tout de suite, la carte garde sa taille en défilant.
+        let shown = cover ?? file.flatMap { CoverImages.cached($0) }
+        Group {
+            if let shown {
+                Image(platformImage: shown)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .shadow(color: .black.opacity(0.45), radius: 6, y: 4)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .frame(maxWidth: .infinity)
                     .transition(.opacity)
+            } else if file != nil {
+                // Jaquette en cours de lecture : place en portrait, vide.
+                Color.clear.aspectRatio(3 / 4, contentMode: .fit)
             } else {
                 GeneratedCover(system: game.system, title: title)
+                    .aspectRatio(3 / 4, contentMode: .fit)
                     .overlay(alignment: .topLeading) {
                         SystemBadge(system: game.system, size: 9).padding(9)
                     }
@@ -535,13 +539,12 @@ private struct CoverArt: View {
                     .themedShadow(color.opacity(0.28), radius: 12)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: "\(game.key)#\(metadata.coverRevision(for: game))") {
-            guard let url = metadata.coverFile(for: game) else {
+            guard let file else {
                 cover = nil
                 return
             }
-            let image = await CoverImages.load(url)
+            let image = await CoverImages.load(file)
             withAnimation(.easeOut(duration: 0.25)) { cover = image }
         }
     }

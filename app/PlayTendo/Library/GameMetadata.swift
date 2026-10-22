@@ -445,6 +445,11 @@ enum CoverImages {
         return image
     }
 
+    /// L'image si elle est déjà en mémoire (sans attendre), sinon nil.
+    static func cached(_ url: URL, maxPixel: Int = 700) -> PlatformImage? {
+        cache.object(forKey: key(url, maxPixel))
+    }
+
     static func forget(_ url: URL) {
         for size in sizes { cache.removeObject(forKey: key(url, size)) }
     }
