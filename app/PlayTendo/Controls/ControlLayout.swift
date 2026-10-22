@@ -12,8 +12,6 @@ enum ControlElement: Hashable {
     /// Bouton C jaune de la N64, transmis au moteur par le stick analogique droit.
     case cButton(CDirection)
     case menu
-    /// Retour en arrière (maintenu), à gauche du bouton menu.
-    case rewind
 }
 
 enum CDirection: CaseIterable {
@@ -93,8 +91,7 @@ struct ControlLayout: Equatable {
     /// passent par-dessus.
     static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect, safe: UIEdgeInsets,
                      controllerConnected: Bool, hideTouchControls: Bool,
-                     dual: DualScreenOptions = DualScreenOptions(), fillScreen: Bool = false,
-                     rewind: Bool = false) -> ControlLayout {
+                     dual: DualScreenOptions = DualScreenOptions(), fillScreen: Bool = false) -> ControlLayout {
         let usable = bounds.inset(by: safe)
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
@@ -163,11 +160,7 @@ struct ControlLayout: Equatable {
             layout.controls.append(PlacedControl(element: .menu,
                                                  frame: CGRect(x: area.midX - menuSize / 2, y: topRow,
                                                                width: menuSize, height: menuSize), label: ""))
-            if rewind {
-                layout.controls.append(PlacedControl(element: .rewind,
-                                                     frame: CGRect(x: area.midX - menuSize * 1.5 - 14, y: topRow,
-                                                                   width: menuSize, height: menuSize), label: ""))
-            }
+
             layout.addShoulders(scheme: scheme, size: shoulderSize, top: topRow,
                                 left: area.minX + 14, right: area.maxX - 14, stacked: false)
             // Centrés, 16 points entre deux.
@@ -266,12 +259,7 @@ struct ControlLayout: Equatable {
             layout.controls.append(PlacedControl(element: .menu,
                                                  frame: CGRect(x: bounds.midX - menuSize / 2, y: usable.maxY - menuSize - 4,
                                                                width: menuSize, height: menuSize), label: ""))
-            if rewind {
-                layout.controls.append(PlacedControl(element: .rewind,
-                                                     frame: CGRect(x: bounds.midX - menuSize * 1.5 - 14,
-                                                                   y: usable.maxY - menuSize - 4,
-                                                                   width: menuSize, height: menuSize), label: ""))
-            }
+
         }
 
         if layout.screens.isEmpty {
@@ -298,7 +286,7 @@ struct ControlLayout: Equatable {
         if hideTouchControls {
             // Manette utilisée : seuls les boutons tactiles disparaissent. L'image du jeu garde
             // exactement la même place, pour ne pas sauter quand les boutons reviennent.
-            layout.controls = layout.controls.filter { $0.element == .menu || $0.element == .rewind }
+            layout.controls = layout.controls.filter { $0.element == .menu }
         }
         return layout
     }

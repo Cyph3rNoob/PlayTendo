@@ -25,8 +25,6 @@ final class TouchControlsView: UIView {
     var onAnalog: ((UInt32, CGFloat, CGFloat) -> Void)?
     var onPointer: ((CGPoint, Bool) -> Void)?
     var onMenu: (() -> Void)?
-    /// Bouton ⏪ enfoncé (vrai) ou relâché (faux).
-    var onRewind: ((Bool) -> Void)?
     /// Appelé quand on touche l'écran ailleurs que sur le bouton menu.
     var onTouchDown: (() -> Void)?
 
@@ -36,7 +34,6 @@ final class TouchControlsView: UIView {
         case stick(Int)
         case pointer
         case menu
-        case rewind
     }
 
     private var touches: [ObjectIdentifier: TouchRole] = [:]
@@ -45,7 +42,6 @@ final class TouchControlsView: UIView {
     private var stickOffsets: [CGPoint] = [.zero, .zero]
     private var cStick = CGPoint.zero
     private var menuHighlighted = false
-    private var rewindHighlighted = false
     private let haptics = UIImpactFeedbackGenerator(style: .light)
     /// Têtes des sticks : des calques à part, déplacés seuls quand le doigt bouge (sans redessiner les boutons).
     private let knobLayers = [CAShapeLayer(), CAShapeLayer()]
@@ -77,13 +73,6 @@ final class TouchControlsView: UIView {
                 self.touches[id] = .menu
                 menuHighlighted = true
                 setNeedsDisplay()
-            } else if let rewind = layout.controls.first(where: { $0.element == .rewind }),
-                      rewind.frame.insetBy(dx: -8, dy: -8).contains(point) {
-                self.touches[id] = .rewind
-                rewindHighlighted = true
-                setNeedsDisplay()
-                haptics.impactOccurred()
-                onRewind?(true)
             } else if let index = stickIndex(at: point) {
                 self.touches[id] = .stick(index)
                 moveStick(index, to: point)
@@ -142,10 +131,6 @@ final class TouchControlsView: UIView {
                    menu.frame.insetBy(dx: -16, dy: -16).contains(point) {
                     onMenu?()
                 }
-            case .rewind:
-                rewindHighlighted = false
-                setNeedsDisplay()
-                onRewind?(false)
             case .pointer:
                 sendPointer(touch.location(in: self), pressed: false)
             case .stick(let index):
@@ -304,7 +289,7 @@ final class TouchControlsView: UIView {
                    hypot(point.x - control.frame.midX, point.y - control.frame.midY) < control.frame.width / 2 * 1.15 {
                     result.insert(input)
                 }
-            case .shoulder, .small, .stick, .rightStick, .menu, .rewind:
+            case .shoulder, .small, .stick, .rightStick, .menu:
                 break
             }
         }
@@ -353,7 +338,6 @@ final class TouchControlsView: UIView {
                 drawPill(control, pressed: pressed.contains(.button(button)), radius: control.frame.height / 2,
                          fontSize: control.label.count == 1 ? 18 : 11)
             case .menu: drawMenu(control.frame)
-            case .rewind: drawRound(control.frame, symbol: "backward.fill", highlighted: rewindHighlighted)
             }
         }
     }
@@ -521,19 +505,14 @@ final class TouchControlsView: UIView {
     }
 
     private func drawMenu(_ frame: CGRect) {
-        drawRound(frame, symbol: "line.3.horizontal", highlighted: menuHighlighted)
-    }
-
-    /// Petit bouton rond à symbole : menu, retour en arrière.
-    private func drawRound(_ frame: CGRect, symbol: String, highlighted: Bool) {
         let circle = UIBezierPath(ovalIn: frame)
-        (highlighted ? fillPressed : fill).setFill()
+        (menuHighlighted ? fillPressed : fill).setFill()
         circle.fill()
         circle.lineWidth = 1.5
         stroke.setStroke()
         circle.stroke()
         let config = UIImage.SymbolConfiguration(pointSize: frame.height * 0.4, weight: .semibold)
-        if let image = UIImage(systemName: symbol, withConfiguration: config)?
+        if let image = UIImage(systemName: "line.3.horizontal", withConfiguration: config)?
             .withTintColor(text, renderingMode: .alwaysOriginal) {
             image.draw(at: CGPoint(x: frame.midX - image.size.width / 2, y: frame.midY - image.size.height / 2))
         }
@@ -562,7 +541,6 @@ struct TouchControls: UIViewRepresentable {
     func makeUIView(context: Context) -> TouchControlsView {
         let view = TouchControlsView()
         view.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
-        view.onRewind = { [session] on in session.setRewinding(on) }
         view.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: Float(x), y: Float(y)) }
         view.onPointer = { [session] point, pressed in session.setPointer(x: point.x, y: point.y, pressed: pressed) }
         return view

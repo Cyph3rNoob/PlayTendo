@@ -143,7 +143,7 @@ enum English {
         "Infos et jaquettes : ScreenScraper.fr": "Info and covers: ScreenScraper.fr",
         "JOUER": "PLAY",
         "Retour en arrière": "Rewind",
-        "Maintiens le bouton ⏪ (à côté du menu) pour reculer d'une trentaine de secondes au plus ; à la manette, la gâchette L2 (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1.": "Hold the ⏪ button (next to the menu button) to go back up to about thirty seconds; on a controller, the L2 trigger (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 and PS1.",
+        "Avec une manette, maintiens la gâchette L2 pour reculer d'une trentaine de secondes au plus (NES, Super Nintendo, Game Boy, GBA).": "With a controller, hold the L2 trigger to go back up to about thirty seconds (NES, Super Nintendo, Game Boy, GBA).",
         "Maintiens Espace (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) pour reculer d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1.": "Hold Space (or a controller's L2 trigger, on NES, Super Nintendo, Game Boy and GBA) to go back up to about thirty seconds. NES, Super Nintendo, Game Boy, GBA, N64 and PS1.",
         "Trier": "Sort",
         "★ FAVORIS": "★ FAVORITES",

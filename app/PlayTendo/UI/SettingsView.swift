@@ -414,7 +414,7 @@ struct SettingsView: View {
             }
         } footer: {
 #if os(iOS)
-            Text(tr("Maintiens le bouton ⏪ (à côté du menu) pour reculer d'une trentaine de secondes au plus ; à la manette, la gâchette L2 (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
+            Text(tr("Avec une manette, maintiens la gâchette L2 pour reculer d'une trentaine de secondes au plus (NES, Super Nintendo, Game Boy, GBA)."))
 #else
             Text(tr("Maintiens Espace (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) pour reculer d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
 #endif

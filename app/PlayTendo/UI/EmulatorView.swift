@@ -207,8 +207,7 @@ struct EmulatorView: View {
                                   controllerConnected: gamepad.isConnected,
                                   hideTouchControls: gamepad.isActive,
                                   dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
-                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController),
-                                  rewind: session.rewindAvailable)
+                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController))
 #endif
     }
 

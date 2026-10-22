@@ -312,9 +312,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     /// Consoles qui peuvent reculer : sauvegarde rapide petite et rapide (pas la DS, la 3DS, la PSP, ni les moteurs
-    /// autonomes PS2, GameCube, Wii, PS Vita).
+    /// autonomes PS2, GameCube, Wii, PS Vita). Sur iPhone, on ne recule qu'avec la gâchette L2 d'une manette : pas la
+    /// N64 ni la PS1, qui s'en servent (inutile d'y garder des photos).
     static func supportsRewind(_ system: GameSystem) -> Bool {
+#if os(iOS)
+        [.nes, .snes, .gb, .gbc, .gba].contains(system)
+#else
         [.nes, .snes, .gb, .gbc, .gba, .n64, .psx].contains(system)
+#endif
     }
 
     /// Retour en arrière possible pour ce jeu (console qui sait, réglage activé).
