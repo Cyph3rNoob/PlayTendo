@@ -135,6 +135,11 @@ struct EmulatorView: View {
                      onMenu: { showingMenu ? closeMenu() : openMenu() })
 #endif
             if session.state == .loading {
+                // Étape longue (installation PS Vita, reprise d'une partie) : fond noir, le démarrage de la console
+                // ne se voit pas.
+                if session.loadingDetail != nil {
+                    Color.black.ignoresSafeArea()
+                }
                 VStack(spacing: 22) {
                     ProgressView()
                         .tint(.white)

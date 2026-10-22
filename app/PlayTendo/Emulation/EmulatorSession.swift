@@ -1024,6 +1024,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var failure: String?
         var aspect: CGFloat = 4.0 / 3.0
         var shownDisc: Int?
+        var resumeAt: Double?     // reprise automatique à charger à ce moment-là
 
         while true {
             condition.lock()
@@ -1060,17 +1061,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #if os(iOS)
                     if jit { showToast(tr("Mode turbo (JIT) actif")) }
 #endif
-                    DispatchQueue.main.async { self.state = .running }
-                    // Reprise automatique (PS2, GameCube, Wii ; la PS Vita n'a pas de sauvegarde rapide).
-                    let resume = Paths.resumeFile(for: game)
-                    if !game.system.isVita, FileManager.default.fileExists(atPath: resume.path) {
-                        if engine.loadState(fromPath: resume.path) {
-                            PTLogLine("\(name) : reprise automatique chargée")
-                            showToast(tr("Partie reprise"))
-                        } else {
-                            PTLogLine("\(name) : reprise automatique illisible (\(engine.lastError() ?? "raison inconnue")), jeu démarré du début")
-                            showToast(tr("Reprise impossible : le jeu démarre du début"))
-                        }
+                    // Reprise automatique (PS2, GameCube, Wii ; la PS Vita n'a pas de sauvegarde rapide) : chargée
+                    // quelques secondes après le démarrage, console allumée, derrière l'écran de chargement. Chargée
+                    // tout de suite, la PS2 restait sur un écran noir avec le son (son affichage venait d'ouvrir).
+                    if !game.system.isVita, FileManager.default.fileExists(atPath: Paths.resumeFile(for: game).path) {
+                        resumeAt = clock.now + (game.system == .ps2 ? 4 : 2)
+                        setLoadingDetail(tr("Reprise de la partie…"))
+                    } else {
+                        DispatchQueue.main.async { self.state = .running }
                     }
                 } else if engineState == .stopped && (seenActivity || clock.now - bootStart > 20) {
                     failure = engine.lastError().map(trMessage) ?? tr("La console n'a pas pu démarrer le jeu.")
@@ -1081,6 +1079,18 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             if engineState == .stopped {
                 failure = engine.lastError().map(trMessage) ?? tr("La console s'est arrêtée.")
                 break
+            }
+            if let at = resumeAt, clock.now >= at {
+                resumeAt = nil
+                if engine.loadState(fromPath: Paths.resumeFile(for: game).path) {
+                    PTLogLine("\(name) : reprise automatique chargée")
+                    showToast(tr("Partie reprise"))
+                } else {
+                    PTLogLine("\(name) : reprise automatique illisible (\(engine.lastError() ?? "raison inconnue")), jeu démarré du début")
+                    showToast(tr("Reprise impossible : le jeu démarre du début"))
+                }
+                setLoadingDetail(nil)
+                DispatchQueue.main.async { self.state = .running }
             }
             if paused != enginePaused {
                 // Image de la vignette « Continuer » prise juste avant la pause (GameCube/Wii : en marche seulement).

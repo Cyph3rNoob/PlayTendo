@@ -20,7 +20,6 @@ struct GameDetailView: View {
         let info = metadata.details(for: game)
         ZStack(alignment: .topTrailing) {
             Neon.background.ignoresSafeArea()
-            backdrop
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     hero(display)
@@ -29,6 +28,9 @@ struct GameDetailView: View {
                     synopsis(info)
                     facts(info, display: display)
                     actions
+#if os(macOS)
+                    MenuCloseButton { dismiss() }
+#endif
                     Text(tr("Infos et jaquettes : ScreenScraper.fr"))
                         .font(Neon.mono(10, weight: .medium))
                         .foregroundStyle(Neon.dim)
@@ -40,10 +42,14 @@ struct GameDetailView: View {
                 .frame(maxWidth: 620)
                 .frame(maxWidth: .infinity)
             }
+            // Fond flou derrière la fiche, sans compter dans sa taille.
+            .background(alignment: .top) { backdrop }
             closeButton
         }
 #if os(macOS)
-        .frame(minWidth: 520, idealWidth: 600, minHeight: 640, idealHeight: 760)
+        // Taille fixe : une feuille Mac prend sinon la taille de son contenu (plus haute que l'écran, bouton de
+        // fermeture hors d'atteinte).
+        .frame(width: 600, height: 700)
 #endif
         .task(id: metadata.coverRevision(for: game)) {
             if let file = metadata.coverFile(for: game) { cover = await CoverImages.load(file) }
@@ -68,11 +74,10 @@ struct GameDetailView: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(height: 380)
                 .frame(maxWidth: .infinity)
+                .clipped()
                 .blur(radius: 40)
                 .opacity(0.35)
-                .clipped()
                 .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom))
-                .ignoresSafeArea()
                 .allowsHitTesting(false)
         }
     }
@@ -238,7 +243,6 @@ struct GameDetailView: View {
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(Neon.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
                     }
                     .padding(.vertical, 9)
                     if index < rows.count - 1 {
@@ -362,3 +366,23 @@ private struct ActionButton: View {
         .buttonStyle(.plain)
     }
 }
+
+#if os(macOS)
+/// Bas de la fiche (Mac) : Fermer, en plus de la croix et de la touche Échap.
+private struct MenuCloseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(tr("Fermer"))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Neon.text)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(Chamfer(cut: 9).fill(Neon.text.opacity(0.06)))
+                .overlay(Chamfer(cut: 9).stroke(Neon.text.opacity(0.25), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+#endif

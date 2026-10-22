@@ -143,6 +143,7 @@ enum English {
         "Infos et jaquettes : ScreenScraper.fr": "Info and covers: ScreenScraper.fr",
         "JOUER": "PLAY",
         "Partie reprise": "Game resumed",
+        "Reprise de la partie…": "Resuming your game…",
         "Reprise impossible : le jeu démarre du début": "Couldn't resume: the game starts from the beginning",
         "Reprend là où tu t'étais arrêté.": "Picks up where you left off.",
         "1 joueur": "1 player",
