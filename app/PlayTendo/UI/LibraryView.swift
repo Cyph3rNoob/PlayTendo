@@ -16,6 +16,7 @@ struct LibraryView: View {
     @State private var filter: GameSystem?
     /// Filtre ★ : seulement les favoris (toutes consoles).
     @State private var favoritesOnly = false
+    @State private var sectionCache = SectionCache()
     /// Ordre des jeux dans chaque console (les favoris restent en tête).
     @AppStorage(LibrarySort.key) private var sortRaw = LibrarySort.name.rawValue
     @State private var gameToDelete: Game?
@@ -427,10 +428,38 @@ struct LibraryView: View {
 
     // MARK: Jeux
 
+    /// Listes rangées des consoles, gardées tant que rien de ce qui les change ne bouge : une jaquette qui arrive (une
+    /// par seconde au premier remplissage) ne re-trie plus toute la bibliothèque.
+    private final class SectionCache {
+        var key: Int?
+        var lists: [GameSystem: [Game]] = [:]
+    }
+
+    private var sectionLists: [GameSystem: [Game]] {
+        var hasher = Hasher()
+        hasher.combine(library.games)
+        hasher.combine(search)
+        hasher.combine(filter)
+        hasher.combine(favoritesOnly)
+        hasher.combine(sortRaw)
+        hasher.combine(metadata.favorites)
+        hasher.combine(metadata.namesVersion)
+        if sort == .recent { hasher.combine(metadata.lastPlayed) }
+        let key = hasher.finalize()
+        if key != sectionCache.key {
+            var lists: [GameSystem: [Game]] = [:]
+            for system in filter.map({ [$0] }) ?? GameSystem.libraryGroups { lists[system] = filteredGames(for: system) }
+            sectionCache.key = key
+            sectionCache.lists = lists
+        }
+        return sectionCache.lists
+    }
+
     private var sections: some View {
-        LazyVStack(alignment: .leading, spacing: 28) {
+        let lists = sectionLists
+        return LazyVStack(alignment: .leading, spacing: 28) {
             ForEach(filter.map { [$0] } ?? GameSystem.libraryGroups) { system in
-                let games = filteredGames(for: system)
+                let games = lists[system] ?? []
                 if !games.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         NeonSectionTitle(text: system.libraryTitle, color: system.neon, count: games.count)
@@ -464,7 +493,7 @@ struct LibraryView: View {
                     }
                 }
             }
-            if sectionsAreEmpty {
+            if lists.values.allSatisfy(\.isEmpty) {
                 Text(tr("AUCUN JEU NE CORRESPOND"))
                     .font(Neon.mono(13, weight: .semibold))
                     .tracking(1.5)
@@ -473,10 +502,6 @@ struct LibraryView: View {
                     .padding(.top, 30)
             }
         }
-    }
-
-    private var sectionsAreEmpty: Bool {
-        (filter.map { [$0] } ?? GameSystem.libraryGroups).allSatisfy { filteredGames(for: $0).isEmpty }
     }
 
     /// Jeux d'une console, triés par titre affiché, filtrés par la recherche.

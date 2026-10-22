@@ -35,7 +35,8 @@ final class GameLibrary: ObservableObject {
                     self.rescanRequested = false
                     self.refresh()
                 }
-                self.games = found
+                // Liste inchangée (retour dans l'app) : rien à republier, la bibliothèque n'est pas redessinée.
+                if self.games != found { self.games = found }
                 if let pending = self.pendingLaunch {
                     let path = pending.resolvingSymlinksInPath().path
                     if let game = found.first(where: { game in
@@ -52,8 +53,10 @@ final class GameLibrary: ObservableObject {
     nonisolated private static func scan(_ root: URL) -> [Game] {
         removeEmptyFoldersOnce(in: root)
         let manager = FileManager.default
-        guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
+        guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey,
+                                                                                        .fileSizeKey, .contentModificationDateKey],
                                                   options: [.skipsHiddenFiles]) else { return [] }
+        var detection = DetectionCache.load()
         var files: [URL] = []
 #if PLAYTENDO_VITA
         var vitaFolders: [URL] = []
@@ -84,13 +87,14 @@ final class GameLibrary: ObservableObject {
         }
 
         let found = groupDiscs(files.compactMap { url -> Game? in
-            guard let system = GameSystem.detect(url),
+            guard let system = detection.system(of: url),
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
 #if PLAYTENDO_VITA
             if system == .vita, VitaGame.kind(of: url) != .game { return nil }
 #endif
             return Game(url: url, system: system)
         })
+        detection.save()
 #if PLAYTENDO_VITA
         // PS Vita : les jeux installés dont l'original n'est plus dans Jeux (retiré après l'installation).
         let vitaOriginals = vitaFolders + found.filter { $0.system == .vita }.map(\.url)
@@ -929,5 +933,52 @@ final class GameLibrary: ObservableObject {
             used.formUnion(referencedFiles(of: entry))
         }
         return used
+    }
+}
+
+/// Console de chaque fichier de Jeux, retenue avec sa taille et sa date : une relecture du dossier (à chaque retour dans
+/// l'app) ne rouvre que les fichiers nouveaux ou modifiés pour savoir de quelle console ils sont.
+private struct DetectionCache: Codable {
+    struct Entry: Codable {
+        let size: Int
+        let modified: Double
+        /// nil : pas un jeu (piste .bin, fichier inconnu).
+        let system: GameSystem?
+    }
+
+    private var entries: [String: Entry] = [:]
+    private var used = Set<String>()
+    private var changed = false
+
+    private static let file = Paths.support.appendingPathComponent("Bibliotheque/consoles.json")
+
+    private enum CodingKeys: String, CodingKey { case entries }
+
+    static func load() -> DetectionCache {
+        guard let data = try? Data(contentsOf: file),
+              let cache = try? JSONDecoder().decode(DetectionCache.self, from: data) else { return DetectionCache() }
+        return cache
+    }
+
+    mutating func system(of url: URL) -> GameSystem? {
+        let path = url.standardizedFileURL.path
+        used.insert(path)
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let size = values?.fileSize ?? -1
+        let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        if let entry = entries[path], entry.size == size, entry.modified == modified { return entry.system }
+        let system = GameSystem.detect(url)
+        entries[path] = Entry(size: size, modified: modified, system: system)
+        changed = true
+        return system
+    }
+
+    /// Enregistré si quelque chose a changé ; les fichiers disparus sont oubliés.
+    mutating func save() {
+        let before = entries.count
+        entries = entries.filter { used.contains($0.key) }
+        guard changed || entries.count != before else { return }
+        try? FileManager.default.createDirectory(at: Self.file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(self).write(to: Self.file, options: .atomic)
     }
 }

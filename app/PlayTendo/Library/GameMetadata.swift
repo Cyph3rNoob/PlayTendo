@@ -22,6 +22,8 @@ final class GameMetadata: ObservableObject {
     @Published private(set) var lastPlayed: [String: Double] = [:]
     /// Jeux favoris (clés des jeux) : en tête de leur console, filtre ★ de la bibliothèque.
     @Published private(set) var favorites: Set<String> = []
+    /// Change quand des noms officiels changent (jeux reconnus) : la bibliothèque re-range alors ses listes.
+    @Published private(set) var namesVersion = 0
     @Published private(set) var details: [String: GameDetails] = [:]
 
     private var running = false
@@ -262,6 +264,7 @@ final class GameMetadata: ObservableObject {
     private func merge(_ found: [String: Info]) {
         guard !found.isEmpty else { return }
         infos.merge(found) { $1 }
+        namesVersion += 1
         save()
     }
 
@@ -533,23 +536,61 @@ struct GameDisplay {
 
 /// Images des jaquettes et vignettes, réduites et gardées en mémoire.
 enum CoverImages {
-    private static let cache = NSCache<NSString, PlatformImage>()
+    /// Images décodées gardées en mémoire, au plus ~150 Mo (une grosse bibliothèque ne remplit plus la mémoire : les
+    /// moins récentes sont oubliées, puis relues au besoin).
+    private static let cache: NSCache<NSString, PlatformImage> = {
+        let cache = NSCache<NSString, PlatformImage>()
+        cache.totalCostLimit = 150 << 20
+        return cache
+    }()
     private static let sizes = [600, 700]
+    /// Au plus quatre jaquettes décodées à la fois : en défilant vite, les cartes déjà sorties de l'écran ne passent
+    /// plus devant celles qui y entrent.
+    private static let decoding = DecodeSlots(count: 4)
 
     private static func key(_ url: URL, _ maxPixel: Int) -> NSString { "\(url.path)#\(maxPixel)" as NSString }
 
     static func load(_ url: URL, maxPixel: Int = 700) async -> PlatformImage? {
         if let image = cache.object(forKey: key(url, maxPixel)) { return image }
-        let image = await Task.detached(priority: .userInitiated) { () -> PlatformImage? in
+        await decoding.acquire()
+        defer { Task { await decoding.release() } }
+        // Carte sortie de l'écran pendant l'attente : rien à décoder.
+        if Task.isCancelled { return nil }
+        if let image = cache.object(forKey: key(url, maxPixel)) { return image }
+        let decoded = await Task.detached(priority: .userInitiated) { () -> (PlatformImage, Int)? in
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
                                             kCGImageSourceCreateThumbnailWithTransform: true]
             guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-            return PlatformImage.make(cgImage)
+            return (PlatformImage.make(cgImage), cgImage.bytesPerRow * cgImage.height)
         }.value
-        if let image { cache.setObject(image, forKey: key(url, maxPixel)) }
+        guard let (image, bytes) = decoded else { return nil }
+        cache.setObject(image, forKey: key(url, maxPixel), cost: bytes)
         return image
+    }
+
+    private actor DecodeSlots {
+        private var free: Int
+        private var waiting: [CheckedContinuation<Void, Never>] = []
+
+        init(count: Int) { free = count }
+
+        func acquire() async {
+            if free > 0 {
+                free -= 1
+            } else {
+                await withCheckedContinuation { waiting.append($0) }
+            }
+        }
+
+        func release() {
+            if waiting.isEmpty {
+                free += 1
+            } else {
+                waiting.removeFirst().resume()
+            }
+        }
     }
 
     /// L'image si elle est déjà en mémoire (sans attendre), sinon nil.
