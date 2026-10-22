@@ -503,7 +503,8 @@ private struct PauseMenu: View {
             }
         }
         .sheet(isPresented: $showingCheats) {
-            CheatsView(session: session, title: metadata.display(for: session.game).title)
+            CheatsView(session: session, title: metadata.display(for: session.game).title,
+                       officialName: metadata.officialName(for: session.game))
         }
     }
 

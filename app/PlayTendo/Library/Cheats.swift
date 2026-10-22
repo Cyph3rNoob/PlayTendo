@@ -8,6 +8,14 @@ struct Cheat: Codable, Identifiable, Equatable {
     var enabled = true
     /// GameCube, Wii : Action Replay ou Gecko (en clair, les deux se ressemblent). Nil ailleurs.
     var kind: Kind?
+    /// Code téléchargé (« Codes disponibles ») : d'où il vient. Nil pour un code écrit à la main.
+    var source: String?
+
+    /// Code à activer avec les autres de son appareil (« Master Code », « Must Be On »).
+    var isMaster: Bool {
+        let lower = name.lowercased()
+        return ["must be on", "master code", "enable code", "(m)", "code maître"].contains { lower.contains($0) }
+    }
 
     enum Kind: String, Codable {
         case actionReplay, gecko
@@ -82,13 +90,16 @@ enum Cheats {
         }
         var text = code
         if system == .psp {
-            // CWCheat : seules les lignes « _L » sont des codes (« _S », « _G », « _C0 Nom » : jeu et nom du code).
-            let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
-            let codeLines = lines.filter { $0.uppercased().hasPrefix("_L") }
-            if !codeLines.isEmpty { text = codeLines.map { String($0.dropFirst(2)) }.joined(separator: " ") }
+            // CWCheat : « _S », « _G », « _C0 Nom » donnent le jeu et le nom du code ; les codes sont après « _L »
+            // (une ligne chacun, ou à la suite sur une seule ligne dans les fichiers de libretro).
+            text = text.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { line in !["_S", "_G", "_C"].contains { line.uppercased().hasPrefix($0) } }
+                .joined(separator: " ")
         }
-        let tokens = text.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "+")))
+        var tokens = text.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "+")))
             .filter { !$0.isEmpty }
+        if system == .psp { tokens.removeAll { $0.uppercased() == "_L" } }
         guard !tokens.isEmpty else { return nil }
         switch system {
         case .nes:

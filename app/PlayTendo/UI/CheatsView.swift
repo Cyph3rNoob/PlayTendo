@@ -1,14 +1,19 @@
 import SwiftUI
 
-/// Menu pause › Codes de triche : les codes du jeu, écrits à la main (nom, code, interrupteur). Ils s'appliquent tout
-/// de suite et restent pour ce jeu (Cheats).
+/// Menu pause › Codes de triche : les codes du jeu, écrits à la main ou téléchargés (« Codes disponibles »,
+/// CheatLibrary), chacun avec son interrupteur. Ils s'appliquent tout de suite et restent pour ce jeu (Cheats).
 struct CheatsView: View {
     @ObservedObject var session: EmulatorSession
     let title: String
+    /// Nom officiel du jeu (base No-Intro / Redump de l'app) : pour trouver ses codes.
+    let officialName: String?
     @Environment(\.dismiss) private var dismiss
     /// Code ouvert dans l'éditeur (nouveau ou existant) ; nil : la liste.
     @State private var editing: Cheat?
     @State private var deleting: Cheat?
+    @State private var downloading = false
+    @State private var downloadMessage: String?
+    @State private var search = ""
 
     private var system: GameSystem { session.game.system }
 
@@ -16,7 +21,8 @@ struct CheatsView: View {
         ZStack(alignment: .topTrailing) {
             Neon.background.ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                // Paresseux : un jeu peut avoir plus de mille codes téléchargés.
+                LazyVStack(alignment: .leading, spacing: 14) {
                     header
                     if let editing {
                         CheatEditor(cheat: editing, system: system,
@@ -63,32 +69,113 @@ struct CheatsView: View {
     // MARK: Liste
 
     @ViewBuilder private var list: some View {
+        let downloaded = session.cheats.filter { $0.source != nil }
         if session.cheats.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(tr("Aucun code pour ce jeu."))
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Neon.text)
-                Text(tr("Trouve des codes pour ce jeu sur un site spécialisé (GameHacking.org par exemple), puis ajoute-les ici."))
+                Text(CheatLibrary.isAvailable(for: system)
+                     ? tr("Touche « Codes disponibles » pour récupérer ceux de ce jeu, ou ajoute un code trouvé sur un site spécialisé (GameHacking.org par exemple).")
+                     : tr("Trouve des codes pour ce jeu sur un site spécialisé (GameHacking.org par exemple), puis ajoute-les ici."))
                     .font(.system(size: 13))
                     .foregroundStyle(Neon.dim)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.vertical, 6)
-        } else {
-            VStack(spacing: 10) {
-                ForEach(session.cheats) { cheat in row(cheat) }
-            }
         }
+        ForEach(session.cheats.filter { $0.source == nil }) { cheat in row(cheat) }
         CheatButton(title: tr("Ajouter un code"), icon: "plus", prominent: true) {
             editing = Cheat(name: "", code: "")
+        }
+        if CheatLibrary.isAvailable(for: system) {
+            CheatButton(title: downloading ? tr("Recherche des codes…") : tr("Codes disponibles"),
+                        icon: downloading ? nil : "arrow.down.circle", action: download)
+                .disabled(downloading)
+            if let downloadMessage {
+                Text(downloadMessage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Neon.cyan)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if !downloaded.isEmpty {
+            NeonSectionTitle(text: tr("CODES TÉLÉCHARGÉS"), color: Neon.cyan, count: downloaded.count)
+                .padding(.top, 8)
+            if downloaded.count > 8 {
+                TextField(tr("Chercher un code"), text: $search)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Neon.text)
+                    .autocorrectionDisabled()
+                    .padding(10)
+                    .background(Chamfer(cut: 8).fill(Neon.text.opacity(0.06)))
+                    .overlay(Chamfer(cut: 8).stroke(Neon.text.opacity(0.25), lineWidth: 1))
+            }
+            ForEach(search.isEmpty ? downloaded : downloaded.filter { $0.name.localizedStandardContains(search) }) { cheat in
+                row(cheat)
+            }
+            CheatButton(title: tr("Retirer les codes téléchargés coupés"), icon: "trash") {
+                session.setCheats(session.cheats.filter { $0.source == nil || $0.enabled })
+                search = ""
+            }
         }
         Text(tr("Les codes s'appliquent tout de suite et restent pour ce jeu. Couper un code arrête son effet, mais ce qu'il a déjà changé dans la partie peut rester. Si un code bloque le jeu : coupe-le, puis Charger ou Recommencer."))
             .font(.system(size: 12))
             .foregroundStyle(Neon.dim)
             .fixedSize(horizontal: false, vertical: true)
+        if CheatLibrary.isAvailable(for: system) {
+            Text(Cheats.hasKinds(system)
+                 ? tr("Codes disponibles : ceux fournis avec Dolphin et la base Gecko codes.rc24.xyz.")
+                 : tr("Codes disponibles : base libretro-database (licence CC BY-SA 4.0)."))
+                .font(Neon.mono(10, weight: .medium))
+                .foregroundStyle(Neon.dim)
+        }
 #if os(macOS)
         CheatButton(title: tr("Fermer"), icon: nil) { dismiss() }
 #endif
+    }
+
+    /// « Codes disponibles » : codes trouvés pour ce jeu, ajoutés coupés (sauf ceux déjà là).
+    private func download() {
+        downloading = true
+        downloadMessage = nil
+        Task {
+            let message: String
+            do {
+                let result = try await CheatLibrary.download(for: session.game, officialName: officialName)
+                let known = Set(session.cheats.map { CheatLibrary.codeKey($0.code) })
+                var seen = Set<String>()
+                let new = result.cheats.filter { cheat in
+                    let key = CheatLibrary.codeKey(cheat.code)
+                    return !known.contains(key) && seen.insert(key).inserted
+                }
+                if result.cheats.isEmpty {
+                    message = tr("Aucun code trouvé pour ce jeu.")
+                } else if new.isEmpty {
+                    message = tr("Tous les codes trouvés sont déjà dans la liste.")
+                } else {
+                    session.setCheats(session.cheats + new)
+                    var lines = [tr("\(new.count) codes ajoutés, coupés : active ceux que tu veux, un à la fois de préférence.")]
+                    if new.contains(where: \.isMaster) {
+                        lines.append(tr("Les codes « maîtres » (en tête) doivent être activés avec les autres codes du même appareil."))
+                    }
+                    if let other = result.otherVersion {
+                        lines.append(tr("Codes de « \(other) » : ils peuvent ne pas marcher avec ta version."))
+                    }
+                    if result.skipped > 0 {
+                        lines.append(tr("\(result.skipped) codes écartés : format que la console ne lit pas."))
+                    }
+                    message = lines.joined(separator: "\n")
+                }
+            } catch CheatLibrary.Failure.unknownGame {
+                message = tr("Jeu non reconnu : impossible de trouver ses codes.")
+            } catch {
+                message = tr("Pas de connexion à Internet : réessaie plus tard.")
+            }
+            downloading = false
+            downloadMessage = message
+        }
     }
 
     private func row(_ cheat: Cheat) -> some View {
@@ -133,11 +220,17 @@ struct CheatsView: View {
         .overlay(Chamfer(cut: 9).stroke(cheat.enabled ? Neon.cyan.opacity(0.5) : Neon.text.opacity(0.18), lineWidth: 1))
     }
 
-    /// Le code sur une ligne (GameCube, Wii : précédé de son type).
+    /// Le code sur une ligne (GameCube, Wii : précédé de son type ; code téléchargé : de sa source).
     private func codeSummary(_ cheat: Cheat) -> String {
-        let code = cheat.code.components(separatedBy: .newlines).joined(separator: " ")
-        guard Cheats.hasKinds(system) else { return code }
-        return (cheat.kind == .gecko ? "Gecko" : "Action Replay") + " · " + code
+        var parts: [String] = []
+        if cheat.isMaster { parts.append(tr("CODE MAÎTRE")) }
+        if let source = cheat.source {
+            parts.append(source)
+        } else if Cheats.hasKinds(system) {
+            parts.append(cheat.kind == .gecko ? "Gecko" : "Action Replay")
+        }
+        parts.append(cheat.code.components(separatedBy: .newlines).joined(separator: " "))
+        return parts.joined(separator: " · ")
     }
 
     private func update(_ cheat: Cheat) {
