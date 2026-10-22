@@ -28,6 +28,10 @@ echo "=== Préparation du projet ($PLATFORM) ==="
 # FMT_CONSTEVAL vide : fmt 10.2.1 (Externals) ne compile pas avec le clang d'Xcode 26 (« call to consteval
 # function … is not a constant expression » dans chrono.h) ; seules les vérifications à la compilation des
 # chaînes de format sautent, le résultat est le même.
+# Seules les fonctions PTDolphin* (cherchées par l'app avec dlsym) restent visibles : le lieur retire le code jamais
+# appelé (-dead_strip) et la table des 21 000 symboles publics. Moteur plus léger, même comportement. En _RELEASE :
+# la chaîne d'outils iOS écrase CMAKE_SHARED_LINKER_FLAGS (rpath).
+DOLPHIN_LINK="-Wl,-exported_symbols_list,$ROOT/dolphin/DolphinCore.exports -Wl,-dead_strip"
 if [ "$PLATFORM" = mac ]; then
   # Mac : le Dolphin d'origine pour macOS (Metal, son Cubeb, turbo MAP_JIT), sans son interface Qt ni rien qui
   # demanderait un téléchargement (Vulkan/MoltenVK, SDL, FFmpeg, LLVM) ; seulement les bibliothèques incluses
@@ -40,6 +44,7 @@ if [ "$PLATFORM" = mac ]; then
     -DENABLE_LLVM=OFF -DENCODE_FRAMEDUMPS=OFF -DUSE_UPNP=OFF -DUSE_DISCORD_PRESENCE=OFF -DENABLE_AUTOUPDATE=OFF \
     "-DCMAKE_IGNORE_PREFIX_PATH=/opt/homebrew;/usr/local" \
     -DPLAYTENDO_DOLPHIN_HOST="$ROOT/dolphin/PTDolphinHost.mm" \
+    -DCMAKE_SHARED_LINKER_FLAGS= "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=$DOLPHIN_LINK" \
     -DPLAYTENDO_INCLUDE="$ROOT/app/PlayTendo/Emulation" > /dev/null
 else
   cmake -S "$SRC" -B "$BUILD" -G Ninja \
@@ -48,6 +53,7 @@ else
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-fPIC -DFMT_CONSTEVAL=" -DIOS=ON -DENABLE_ANALYTICS=NO \
     -DUSE_SYSTEM_LIBS=OFF -DENABLE_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DPLAYTENDO_DOLPHIN_HOST="$ROOT/dolphin/PTDolphinHost.mm" \
+    -DCMAKE_SHARED_LINKER_FLAGS= "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=$DOLPHIN_LINK" \
     -DPLAYTENDO_INCLUDE="$ROOT/app/PlayTendo/Emulation" > /dev/null
 fi
 

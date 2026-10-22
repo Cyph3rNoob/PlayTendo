@@ -64,7 +64,10 @@ echo "=== Préparation du projet ($PLATFORM) ==="
 # Sans Discord (module non libre) ; SDL intégré au moteur (pas de bibliothèque à part) ; capstone pour arm64
 # seulement (il viserait aussi les Mac Intel) ; cubeb sans sortie AudioUnit : le son passe par SDL. PLAYTENDO : les
 # retouches de patch_vita3k.py (bibliothèque sans Qt, OpenSSL et MoltenVK fournis ici).
+# Seules les fonctions PTVita* (cherchées par l'app avec dlsym) restent visibles : le lieur retire alors tout le code
+# jamais appelé (-dead_strip) et la table des 66 000 symboles publics. Moteur bien plus léger, même comportement.
 COMMON=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-exported_symbols_list,$ROOT/vita/VitaCore.exports -Wl,-dead_strip"
   -DPLAYTENDO=ON -DUSE_DISCORD_RICH_PRESENCE=OFF -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST_LIBRARY=OFF -DSDL_EXAMPLES=OFF
   -DCAPSTONE_BUILD_MACOS_THIN=ON -DUSE_AUDIOUNIT=OFF
   -DPLAYTENDO_OPENSSL="$OSSL_OUT"

@@ -59,11 +59,20 @@ cp -R "$APP" "$ROOT/build/ipa/Payload/"
 # Signature locale : les moteurs d'abord (codesign refuse une app dont le contenu n'est pas signé), puis l'app
 # avec ses droits.
 PAYLOAD_APP="$ROOT/build/ipa/Payload/PlayTendo.app"
+# Plus léger, sans rien changer au jeu : symboles internes retirés de l'app et des moteurs (strip -x garde ceux que
+# l'app cherche par dlsym), et fichiers de Dolphin dont PlayTendo ne se sert pas (noms des jeux en 15 langues : titre
+# de fenêtre seulement ; base de symboles de son débogueur).
+strip -x "$PAYLOAD_APP/PlayTendo" >> "$LOG" 2>&1
+for fw in "$PAYLOAD_APP"/Frameworks/*.framework; do
+  strip -x "$fw/$(basename "$fw" .framework)" >> "$LOG" 2>&1
+done
+rm -f "$PAYLOAD_APP"/Frameworks/DolphinCore.framework/Sys/wiitdb-*.txt \
+      "$PAYLOAD_APP"/Frameworks/DolphinCore.framework/Sys/totaldb.dsy
 for fw in "$PAYLOAD_APP"/Frameworks/*.framework; do
   codesign --force --sign - --timestamp=none "$fw" >> "$LOG" 2>&1
 done
 codesign --force --sign - --timestamp=none --entitlements "$ROOT/app/PlayTendo.entitlements" "$PAYLOAD_APP" >> "$LOG" 2>&1
 rm -f "$ROOT/PlayTendo.ipa"
-(cd "$ROOT/build/ipa" && zip -qry "$ROOT/PlayTendo.ipa" Payload)
+(cd "$ROOT/build/ipa" && zip -qry -9 "$ROOT/PlayTendo.ipa" Payload)
 # Taille du fichier (du compterait la place occupée sur le disque, souvent plus grande).
 echo "=== OK : $ROOT/PlayTendo.ipa ($(( $(stat -f %z "$ROOT/PlayTendo.ipa") / 1000000 )) Mo) ==="
