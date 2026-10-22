@@ -38,13 +38,18 @@
 #include "Common/MemoryUtil.h"
 #include "Common/MsgHandler.h"
 #include "Common/WindowSystemInfo.h"
+#include "Core/ARDecrypt.h"
+#include "Core/ActionReplay.h"
 #include "Core/Boot/Boot.h"
 #include "Core/BootManager.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/UISettings.h"
+#include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/DolphinAnalytics.h"
+#include "Core/GeckoCode.h"
+#include "Core/GeckoCodeConfig.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/GCPad.h"
 #include "Core/HW/ProcessorInterface.h"
@@ -390,6 +395,8 @@ static bool PTDolphinBootFiles(std::vector<std::string> files, bool jit)
     Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, jit ? VertexLoaderType::Native : VertexLoaderType::Software);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, 1.0f);
     Config::SetBase(Config::MAIN_AUTO_DISC_CHANGE, files.size() > 1);
+    // Codes de triche : ceux de PlayTendo (PTDolphinSetCheats), donnés une fois le jeu lancé.
+    Config::SetBase(Config::MAIN_ENABLE_CHEATS, true);
     NSLog(@"[PlayTendo] Démarrage GameCube/Wii %s", jit ? "avec JIT" : "sans JIT (interpréteur)");
     s_aspectRatio = 0;
 
@@ -697,6 +704,83 @@ PTDOLPHIN_EXPORT void PTDolphinSetWidescreen(bool enabled)
   DOLHostQueueRunSync(^{
     Config::SetBase(Config::GFX_WIDESCREEN_HACK, enabled);
     Config::SetBase(Config::GFX_ASPECT_RATIO, enabled ? AspectMode::ForceWide : AspectMode::Auto);
+  });
+}
+
+/// Codes séparés par une ligne vide, une instruction par ligne.
+static std::vector<std::vector<std::string>> PTDolphinCheatBlocks(const std::string& text)
+{
+  std::vector<std::vector<std::string>> blocks(1);
+  size_t start = 0;
+  while (start <= text.size())
+  {
+    size_t end = text.find('\n', start);
+    if (end == std::string::npos)
+      end = text.size();
+    std::string line = text.substr(start, end - start);
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+      line.pop_back();
+    if (line.empty())
+    {
+      if (!blocks.back().empty())
+        blocks.emplace_back();
+    }
+    else
+    {
+      blocks.back().push_back(line);
+    }
+    start = end + 1;
+  }
+  if (blocks.back().empty())
+    blocks.pop_back();
+  return blocks;
+}
+
+/// Codes de triche du jeu en cours (menu pause › Codes de triche) : Action Replay (chiffrés « XXXX-XXXX-XXXXX »,
+/// déchiffrés ici comme dans DolphinQt, ou en clair) et Gecko. Remplacent les codes actifs, tout de suite.
+PTDOLPHIN_EXPORT void PTDolphinSetCheats(const char* actionReplay, const char* gecko)
+{
+  const std::string arText = actionReplay ? actionReplay : "";
+  const std::string geckoText = gecko ? gecko : "";
+  DOLHostQueueRunSync(^{
+    std::vector<ActionReplay::ARCode> arCodes;
+    for (const auto& block : PTDolphinCheatBlocks(arText))
+    {
+      ActionReplay::ARCode code;
+      code.name = "PlayTendo " + std::to_string(arCodes.size() + 1);
+      code.enabled = code.user_defined = true;
+      std::vector<std::string> encrypted;
+      for (const std::string& line : block)
+      {
+        auto parsed = ActionReplay::DeserializeLine(line);
+        if (auto* entry = std::get_if<ActionReplay::AREntry>(&parsed))
+          code.ops.push_back(*entry);
+        else if (auto* line_encrypted = std::get_if<ActionReplay::EncryptedLine>(&parsed))
+          encrypted.push_back(*line_encrypted);
+      }
+      if (!encrypted.empty())
+        ActionReplay::DecryptARCode(encrypted, &code.ops);
+      if (!code.ops.empty())
+        arCodes.push_back(std::move(code));
+    }
+    std::vector<Gecko::GeckoCode> geckoCodes;
+    for (const auto& block : PTDolphinCheatBlocks(geckoText))
+    {
+      Gecko::GeckoCode code;
+      code.name = "PlayTendo " + std::to_string(geckoCodes.size() + 1);
+      code.enabled = code.user_defined = true;
+      for (const std::string& line : block)
+      {
+        if (auto parsed = Gecko::DeserializeLine(line))
+          code.codes.push_back(*parsed);
+      }
+      if (!code.codes.empty())
+        geckoCodes.push_back(std::move(code));
+    }
+    const SConfig& config = SConfig::GetInstance();
+    ActionReplay::ApplyCodes(arCodes, config.GetGameID(), config.GetRevision());
+    Gecko::SetActiveCodes(geckoCodes, config.GetGameID(), config.GetRevision());
+    NSLog(@"[PlayTendo] Codes de triche : %zu Action Replay, %zu Gecko", arCodes.size(), geckoCodes.size());
   });
 }
 

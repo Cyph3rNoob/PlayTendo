@@ -48,6 +48,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Image : définition (multiple de la PS2, 1 à 4), lissage des bords et écran large (16:9 si le jeu a un correctif).
 /// Appliqués tout de suite en partie.
 - (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing widescreen:(BOOL)widescreen;
+/// Codes de triche du jeu en cours (texte .pnach ; vide : aucun). Sans effet avec un moteur d'avant ce réglage.
+- (void)setCheats:(NSString *)pnach;
 /// Format de l'image du jeu (largeur / hauteur), 0 si inconnu.
 @property (nonatomic, readonly) float aspectRatio;
 /// Image du jeu en cours (640×480), pour la vignette « Continuer ». Bloquant, hors du thread principal.

@@ -165,6 +165,7 @@ static void PTPS2ApplyFixedSettings(INISettingsInterface* si, const char* biosDi
     si->SetStringValue("Folders", "Bios", biosDir);
     si->SetStringValue("Folders", "MemoryCards", memcardDir);
     si->SetStringValue("Folders", "Logs", "logs");
+    si->SetBoolValue("EmuCore", "EnableCheats", true); // codes de triche écrits par PlayTendo (PTPS2SetCheats)
     // Recompilateurs ARM64 (le cœur prend sa mémoire exécutable avec MAP_JIT, permis à l'app signée localement).
     si->SetIntValue("EmuCore/CPU", "CoreType", 2);
     si->SetBoolValue("EmuCore/CPU", "UseArm64Dynarec", true);
@@ -878,6 +879,30 @@ PTPS2_EXPORT void PTPS2SetImageOptions(int upscale, bool smoothing, bool widescr
         VMManager::ApplySettings();
         if (MTGS::IsOpen())
             MTGS::ApplySettings();
+    }, false);
+}
+
+// MARK: - Codes de triche
+
+/// Codes de triche du jeu (menu pause › Codes de triche) : écrits dans cheats/<numéro du jeu>_PlayTendo.pnach (effacé
+/// s'il n'y en a plus), puis relus par PCSX2. Codes sans nom de groupe : toujours actifs (EnableCheats). Le fichier
+/// reste : aux lancements suivants, PCSX2 le relit de lui-même dès le démarrage du jeu.
+PTPS2_EXPORT void PTPS2SetCheats(const char* pnach)
+{
+    std::string text = pnach ? pnach : "";
+    Host::RunOnCPUThread([text = std::move(text)]() {
+        if (!VMManager::HasValidVM())
+            return;
+        const std::string serial = VMManager::GetDiscSerial();
+        if (serial.empty())
+            return;
+        FileSystem::EnsureDirectoryExists(EmuFolders::Cheats.c_str(), true);
+        const std::string path = Path::Combine(EmuFolders::Cheats, serial + "_PlayTendo.pnach");
+        if (text.empty())
+            FileSystem::DeleteFilePath(path.c_str());
+        else
+            FileSystem::WriteStringToFile(path.c_str(), text);
+        VMManager::ReloadPatches(true, false, false, false);
     }, false);
 }
 

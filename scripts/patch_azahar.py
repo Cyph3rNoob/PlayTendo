@@ -15,6 +15,9 @@ consoles) peut exécuter du code. Elle est vue deux fois : une adresse pour écr
 
 Écrans : 6. citra_libretro.cpp : L3 n'inverse plus les écrans (il reste le bouton HOME) ; PlayTendo découpe l'image
    du moteur en deux écrans qu'il place lui-même, et une inversion par le moteur les mélangerait.
+
+Codes de triche : 7. citra_libretro.cpp : retro_cheat_reset et retro_cheat_set étaient vides ; ils remplissent le
+   moteur de codes Gateway d'Azahar (lignes « XXXXXXXX YYYYYYYY », une par ligne), appliqués 5 fois par seconde.
 """
 import os
 import sys
@@ -143,4 +146,23 @@ patch("src/core/arm/dynarmic/arm_dynarmic.cpp", [
      "    // PlayTendo : 32 Mo de code par cœur (128 par défaut), pris dans la réserve JIT partagée de l'app.\n"
      "    config.code_cache_size = 32 * 1024 * 1024;\n"
      "#endif\n"),
+])
+
+patch("src/citra_libretro/citra_libretro.cpp", [
+    ('#include "core/core.h"\n',
+     '#include "core/cheats/cheats.h"\n#include "core/cheats/gateway_cheat.h"\n#include "core/core.h"\n'),
+    ("void retro_cheat_reset() {}\n",
+     "// PlayTendo : codes de triche Gateway (menu pause › Codes de triche).\n"
+     "void retro_cheat_reset() {\n"
+     "    auto& engine = Core::System::GetInstance().CheatEngine();\n"
+     "    for (std::size_t i = engine.GetCheats().size(); i > 0; --i)\n"
+     "        engine.RemoveCheat(i - 1);\n"
+     "}\n"),
+    ("void retro_cheat_set(unsigned index, bool enabled, const char* code) {}\n",
+     "void retro_cheat_set(unsigned index, bool enabled, const char* code) {\n"
+     "    auto cheat = std::make_shared<Cheats::GatewayCheat>(\"PlayTendo \" + std::to_string(index),\n"
+     "                                                        std::string(code ? code : \"\"), \"\");\n"
+     "    cheat->SetEnabled(enabled);\n"
+     "    Core::System::GetInstance().CheatEngine().AddCheat(std::move(cheat));\n"
+     "}\n"),
 ])

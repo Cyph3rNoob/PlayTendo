@@ -108,7 +108,7 @@ struct CheatsView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(cheat.enabled ? Neon.text : Neon.dim)
                         .lineLimit(2)
-                    Text(cheat.code.components(separatedBy: .newlines).joined(separator: " "))
+                    Text(codeSummary(cheat))
                         .font(Neon.mono(11))
                         .foregroundStyle(Neon.dim)
                         .lineLimit(2)
@@ -131,6 +131,13 @@ struct CheatsView: View {
         .padding(.vertical, 10)
         .background(Chamfer(cut: 9).fill(Neon.text.opacity(0.05)))
         .overlay(Chamfer(cut: 9).stroke(cheat.enabled ? Neon.cyan.opacity(0.5) : Neon.text.opacity(0.18), lineWidth: 1))
+    }
+
+    /// Le code sur une ligne (GameCube, Wii : précédé de son type).
+    private func codeSummary(_ cheat: Cheat) -> String {
+        let code = cheat.code.components(separatedBy: .newlines).joined(separator: " ")
+        guard Cheats.hasKinds(system) else { return code }
+        return (cheat.kind == .gecko ? "Gecko" : "Action Replay") + " · " + code
     }
 
     private func update(_ cheat: Cheat) {
@@ -174,6 +181,8 @@ private struct CheatEditor: View {
     let onCancel: () -> Void
     @State private var name: String
     @State private var code: String
+    /// GameCube, Wii : Action Replay ou Gecko (au départ : Gecko pour la Wii, où presque tous les codes le sont).
+    @State private var kind: Cheat.Kind
     @State private var invalid = false
 
     init(cheat: Cheat, system: GameSystem, isNew: Bool, onSave: @escaping (Cheat) -> Void, onCancel: @escaping () -> Void) {
@@ -184,6 +193,7 @@ private struct CheatEditor: View {
         self.onCancel = onCancel
         _name = State(initialValue: cheat.name)
         _code = State(initialValue: cheat.code)
+        _kind = State(initialValue: cheat.kind ?? (system == .wii ? .gecko : .actionReplay))
     }
 
     var body: some View {
@@ -199,6 +209,13 @@ private struct CheatEditor: View {
                 .foregroundStyle(Neon.text)
                 .padding(10)
                 .background(fieldBackground)
+            if Cheats.hasKinds(system) {
+                label(tr("Type"))
+                HStack(spacing: 6) {
+                    kindButton(.actionReplay, title: "Action Replay")
+                    kindButton(.gecko, title: "Gecko")
+                }
+            }
             label(tr("Code"))
             TextEditor(text: $code)
                 .font(Neon.mono(14))
@@ -222,7 +239,7 @@ private struct CheatEditor: View {
                     }
                 }
                 .onChange(of: code) { _, _ in invalid = false }
-            Text(Cheats.formats(for: system) + " " + tr("Un code sur plusieurs lignes : colle-les toutes."))
+            Text(Cheats.formats(for: system, kind: kind) + " " + tr("Un code sur plusieurs lignes : colle-les toutes."))
                 .font(.system(size: 12))
                 .foregroundStyle(Neon.dim)
                 .fixedSize(horizontal: false, vertical: true)
@@ -240,6 +257,25 @@ private struct CheatEditor: View {
         }
     }
 
+    private func kindButton(_ value: Cheat.Kind, title: String) -> some View {
+        let selected = value == kind
+        return Button {
+            kind = value
+            invalid = false
+        } label: {
+            Text(title)
+                .font(.display(13, weight: 800))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(selected ? Neon.onAccent : Neon.text)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .background(Chamfer(cut: 7).fill(selected ? Neon.cyan : Neon.text.opacity(0.06)))
+                .overlay(Chamfer(cut: 7).stroke(Neon.cyan.opacity(selected ? 0 : 0.35), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     private func label(_ text: String) -> some View {
         Text(text.uppercased())
             .font(Neon.mono(11, weight: .bold))
@@ -255,7 +291,7 @@ private struct CheatEditor: View {
 
     private func save() {
         let text = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Cheats.parts(of: text, system: system) != nil else {
+        guard Cheats.parts(of: text, system: system, kind: kind) != nil else {
             invalid = true
             return
         }
@@ -263,6 +299,7 @@ private struct CheatEditor: View {
         var cheat = original
         cheat.name = title.isEmpty ? tr("Code sans nom") : title
         cheat.code = text
+        cheat.kind = Cheats.hasKinds(system) ? kind : nil
         onSave(cheat)
     }
 }

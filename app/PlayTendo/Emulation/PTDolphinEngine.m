@@ -28,6 +28,7 @@ static NSString *loadFailure;
     __typeof__(&PTDolphinChangeDisc) _changeDisc;
     __typeof__(&PTDolphinSetBootState) _setBootState;
     __typeof__(&PTDolphinSetWidescreen) _setWidescreen;
+    __typeof__(&PTDolphinSetCheats) _setCheats;
 }
 
 + (PTDolphinEngine *)loadedEngine {
@@ -60,6 +61,7 @@ static NSString *loadFailure;
     engine->_changeDisc = (__typeof__(&PTDolphinChangeDisc))dlsym(handle, "PTDolphinChangeDisc");
     engine->_setBootState = (__typeof__(&PTDolphinSetBootState))dlsym(handle, "PTDolphinSetBootState");
     engine->_setWidescreen = (__typeof__(&PTDolphinSetWidescreen))dlsym(handle, "PTDolphinSetWidescreen");
+    engine->_setCheats = (__typeof__(&PTDolphinSetCheats))dlsym(handle, "PTDolphinSetCheats");
 
     void *view = engine->_fn.PTDolphinSetup(userDirectory.fileSystemRepresentation,
                                             gameCubeSaveDirectory.fileSystemRepresentation,
@@ -103,6 +105,10 @@ static NSString *loadFailure;
 
 - (void)setWidescreen:(BOOL)enabled {
     if (_setWidescreen) _setWidescreen(enabled);
+}
+
+- (void)setCheatsActionReplay:(NSString *)actionReplay gecko:(NSString *)gecko {
+    if (_setCheats) _setCheats(actionReplay.UTF8String, gecko.UTF8String);
 }
 
 - (NSInteger)discIndex {

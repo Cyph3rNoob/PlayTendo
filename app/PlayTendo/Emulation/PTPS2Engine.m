@@ -25,6 +25,7 @@ static NSString *loadFailure;
     /// Facultatives (moteurs compilés avant elles) : reprise au démarrage, démarrage rapide.
     __typeof__(&PTPS2SetBootOptions) _setBootOptions;
     __typeof__(&PTPS2GetBootStateResult) _bootStateResult;
+    __typeof__(&PTPS2SetCheats) _setCheats;
 }
 
 + (PTPS2Engine *)loadedEngine {
@@ -54,6 +55,7 @@ static NSString *loadFailure;
     engine->_shutdown = (__typeof__(&PTPS2Shutdown))dlsym(handle, "PTPS2Shutdown");
     engine->_setBootOptions = (__typeof__(&PTPS2SetBootOptions))dlsym(handle, "PTPS2SetBootOptions");
     engine->_bootStateResult = (__typeof__(&PTPS2GetBootStateResult))dlsym(handle, "PTPS2GetBootStateResult");
+    engine->_setCheats = (__typeof__(&PTPS2SetCheats))dlsym(handle, "PTPS2SetCheats");
 
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);
@@ -129,6 +131,10 @@ static NSString *loadFailure;
 
 - (BOOL)loadStateFromPath:(NSString *)path {
     return _fn.PTPS2LoadState(path.fileSystemRepresentation);
+}
+
+- (void)setCheats:(NSString *)pnach {
+    if (_setCheats) _setCheats(pnach.UTF8String);
 }
 
 - (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing widescreen:(BOOL)widescreen {

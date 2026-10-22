@@ -41,6 +41,8 @@ protocol ExternalEngine: AnyObject {
     /// Après un démarrage sur une reprise : vrai si elle a été chargée, faux si elle était illisible, nil si on ne
     /// sait pas.
     var resumeLoaded: Bool? { get }
+    /// Codes de triche du jeu en cours (PS2, GameCube, Wii), appliqués tout de suite. Jeu démarré.
+    func applyCheats(_ cheats: [Cheat], system: GameSystem)
 }
 
 /// Moteurs sans changement de disque : le premier disque seulement.
@@ -50,6 +52,7 @@ extension ExternalEngine {
     func changeDisc(to index: Int) -> Bool { false }
     func prepareBoot(resume: String?) -> Bool { false }
     var resumeLoaded: Bool? { nil }
+    func applyCheats(_ cheats: [Cheat], system: GameSystem) {}
 }
 
 extension PTPS2Engine: ExternalEngine {
@@ -63,6 +66,11 @@ extension PTPS2Engine: ExternalEngine {
     }
 
     func boot(path: String, jit: Bool) -> Bool { bootGame(atPath: path) }
+
+    /// Codes de triche : fichier .pnach du jeu (gardé par le moteur pour ses prochains lancements).
+    func applyCheats(_ cheats: [Cheat], system: GameSystem) {
+        setCheats(Cheats.pnach(for: cheats))
+    }
 
     /// Le démarrage rapide (sans le logo PS2, Réglages) est réglé à chaque démarrage, avec ou sans reprise.
     func prepareBoot(resume: String?) -> Bool {
@@ -88,6 +96,12 @@ extension PTPS2Engine: ExternalEngine {
 }
 
 extension PTDolphinEngine: ExternalEngine {
+    /// Codes de triche Action Replay et Gecko, remplacés tout de suite.
+    func applyCheats(_ cheats: [Cheat], system: GameSystem) {
+        let codes = Cheats.dolphin(for: cheats, system: system)
+        setCheatsActionReplay(codes.actionReplay, gecko: codes.gecko)
+    }
+
     var engineState: ExternalEngineState {
         switch state {
         case PTDolphinStateRunning: .running

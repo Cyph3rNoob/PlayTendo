@@ -31,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)setBootState:(nullable NSString *)statePath;
 /// Écran large forcé (GameCube en 16:9). Sans effet avec un moteur d'avant ce réglage.
 - (void)setWidescreen:(BOOL)enabled;
+/// Codes de triche du jeu en cours (voir PTDolphinSetCheats). Sans effet avec un moteur d'avant ce réglage.
+- (void)setCheatsActionReplay:(NSString *)actionReplay gecko:(NSString *)gecko;
 /// Disque en cours (à partir de 0) d'un jeu démarré avec plusieurs disques, sinon -1.
 @property (nonatomic, readonly) NSInteger discIndex;
 /// Met le disque `index` (à partir de 0) du jeu en cours. NO si impossible.

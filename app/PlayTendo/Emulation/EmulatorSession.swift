@@ -80,6 +80,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private var lastSavedRAM: Data?
     /// Codes de triche au format du moteur, envoyés une fois le jeu lancé (`cheatsSent`) puis à chaque changement.
     private var cheatCodes: [String]
+    /// Les mêmes, tels quels, pour les moteurs autonomes (PS2, GameCube, Wii).
+    private var cheatList: [Cheat]
     private var cheatsSent = false
     private var cheatFrames = 0
     /// N64 : moteur à recharger à la reprise (réglages d'image lus seulement au démarrage d'un jeu).
@@ -102,6 +104,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         hasSaveState = FileManager.default.fileExists(atPath: Paths.stateFile(for: game).path)
         let cheats = Cheats.supported(game.system) ? Cheats.load(for: game) : []
         self.cheats = cheats
+        cheatList = cheats
         cheatCodes = Cheats.engineCodes(for: cheats, system: game.system)
     }
 
@@ -204,8 +207,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         Cheats.save(list, for: game)
         let codes = Cheats.engineCodes(for: list, system: game.system)
         perform { [self] in
+            cheatList = list
             cheatCodes = codes
-            if cheatsSent { core?.setCheats(codes) }
+            if cheatsSent {
+                core?.setCheats(codes)
+                external?.applyCheats(list, system: game.system)
+            }
         }
     }
 
@@ -1143,6 +1150,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var aspect: CGFloat = 4.0 / 3.0
         var shownDisc: Int?
         var resumeAt: Double?     // reprise automatique à charger à ce moment-là
+        var cheatsAt: Double?     // codes de triche à donner à ce moment-là
 
         while true {
             condition.lock()
@@ -1218,6 +1226,20 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 }
                 setLoadingDetail(nil)
                 DispatchQueue.main.async { self.state = .running }
+            }
+            // Codes de triche : donnés 3 s après le démarrage (ou après Recommencer), le moteur connaît alors le jeu ;
+            // ensuite à chaque changement (setCheats). PS2 sans code : rien à écrire. GameCube, Wii : toujours, ce qui
+            // remplace les codes que Dolphin active d'office pour certains jeux.
+            if !cheatsSent && cheatsAt == nil && Cheats.supported(game.system) {
+                cheatsAt = clock.now + 3
+            }
+            if let at = cheatsAt, clock.now >= at {
+                cheatsAt = nil
+                cheatsSent = true
+                if game.system != .ps2 || !cheatList.isEmpty {
+                    engine.applyCheats(cheatList, system: game.system)
+                    PTLogLine("\(name) : \(cheatList.filter(\.enabled).count) code(s) de triche actif(s)")
+                }
             }
             if paused != enginePaused {
                 // Image de la vignette « Continuer » prise juste avant la pause (GameCube/Wii : en marche seulement).
