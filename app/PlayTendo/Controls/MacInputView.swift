@@ -342,6 +342,8 @@ enum KeyboardMap {
         /// Stick 0 (gauche) ou 1 (droit), direction.
         case stick(Int, CDirection)
         case menu
+        /// Retour en arrière, tant que la touche est tenue (Espace, si elle ne fait rien d'autre).
+        case rewind
     }
 
     /// Touches de modification utilisables comme bouton (⌘ reste aux raccourcis du Mac, ⇪ et fn ne se tiennent pas),
@@ -424,6 +426,9 @@ final class MacInputView: NSView {
     var onAnalog: ((UInt32, CGFloat, CGFloat) -> Void)?
     var onPointer: ((CGPoint, Bool) -> Void)?
     var onMenu: (() -> Void)?
+    var onRewind: ((Bool) -> Void)?
+    /// La console de la partie sait reculer (Espace tenu).
+    var rewindAvailable = false
     /// Appelé à chaque touche du clavier (la manette n'est plus « en cours d'utilisation »).
     var onKeyboard: (() -> Void)?
 
@@ -459,7 +464,10 @@ final class MacInputView: NSView {
             super.keyDown(with: event)
             return
         }
-        guard let action = KeyboardMap.action(for: Int(event.keyCode), scheme: scheme) else { return }
+        // Espace : retour en arrière, si la touche ne fait pas déjà un bouton (Réglages › Clavier).
+        let keyCode = Int(event.keyCode)
+        guard let action = KeyboardMap.action(for: keyCode, scheme: scheme)
+            ?? (keyCode == kVK_Space && rewindAvailable ? .rewind : nil) else { return }
         if event.isARepeat { return }
         onKeyboard?()
         // On joue au clavier : la flèche de la souris disparaît jusqu'à ce qu'elle bouge.
@@ -509,6 +517,8 @@ final class MacInputView: NSView {
             onAnalog?(UInt32(index), x, y)
         case .menu:
             break
+        case .rewind:
+            onRewind?(heldKeys.values.contains(.rewind))
         }
     }
 
@@ -628,6 +638,8 @@ struct MacInput: NSViewRepresentable {
         view.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
         view.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: Float(x), y: Float(y)) }
         view.onPointer = { [session] point, pressed in session.setPointer(x: point.x, y: point.y, pressed: pressed) }
+        view.onRewind = { [session] on in session.setRewinding(on) }
+        view.rewindAvailable = session.rewindAvailable
         return view
     }
 

@@ -83,7 +83,15 @@ struct EmulatorView: View {
         .persistentSystemOverlays(.hidden)
 #endif
         .onAppear {
-            gamepad.onButton = { [session] button, pressed in session.setButton(button, pressed: pressed) }
+            // Manette : la gâchette L2 recule sur les consoles qui n'en ont pas (NES, Super Nintendo, Game Boy, GBA).
+            let rewindTrigger = session.rewindAvailable && [.nes, .snes, .gb, .gbc, .gba].contains(game.system)
+            gamepad.onButton = { [session] button, pressed in
+                if rewindTrigger && button == .l2 {
+                    session.setRewinding(pressed)
+                } else {
+                    session.setButton(button, pressed: pressed)
+                }
+            }
             gamepad.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: x, y: y) }
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
             gamepad.stickMovesDPad = !controls.hasAnalogStick
@@ -199,7 +207,8 @@ struct EmulatorView: View {
                                   controllerConnected: gamepad.isConnected,
                                   hideTouchControls: gamepad.isActive,
                                   dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
-                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController))
+                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController),
+                                  rewind: session.rewindAvailable)
 #endif
     }
 

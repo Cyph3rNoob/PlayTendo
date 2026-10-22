@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 /// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la PS Vita, de la GameCube/Wii et de la 3DS, le BIOS PS2,
 /// le firmware de la PS Vita et le son du démarrage. Sur Mac, en trois pages (Général, Clavier, Jeux et BIOS) avec les touches de chaque console.
 struct SettingsView: View {
+    /// Retour en arrière (RewindSettings).
+    @AppStorage(RewindSettings.key) private var rewindEnabled = true
     /// PS2 : démarrage sans le logo de la console (PS2Settings.fastBoot).
     @AppStorage(PS2Settings.fastBootKey) private var ps2FastBoot = true
     @EnvironmentObject private var jit: JITManager
@@ -71,6 +73,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 languageSection
+                rewindSection
                 jitSections
                 biosSection
 #if PLAYTENDO_VITA
@@ -225,6 +228,7 @@ struct SettingsView: View {
         case .general:
             Form {
                 languageSection
+                rewindSection
                 bootSection
                 if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
                     Section {
@@ -401,6 +405,21 @@ struct SettingsView: View {
         return vitaHasFirmware && vitaHasFonts ? tr("pas nécessaire") : tr("au prochain jeu PS Vita")
     }
 #endif
+
+    /// Retour en arrière : activé par défaut ; le couper rend la mémoire qu'il prend (jusqu'à 128 Mo pendant une partie).
+    private var rewindSection: some View {
+        Section {
+            Toggle(isOn: $rewindEnabled) {
+                Label(tr("Retour en arrière"), systemImage: "backward.fill")
+            }
+        } footer: {
+#if os(iOS)
+            Text(tr("Maintiens le bouton ⏪ (à côté du menu) pour reculer d'une trentaine de secondes au plus ; à la manette, la gâchette L2 (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
+#else
+            Text(tr("Maintiens Espace (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) pour reculer d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
+#endif
+        }
+    }
 
     private var bootSection: some View {
         Section {

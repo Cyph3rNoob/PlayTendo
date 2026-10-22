@@ -67,6 +67,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     // Uniquement manipulés sur le thread d'émulation.
     private var fastForward = false
+    /// Retour en arrière tenu (bouton ⏪, gâchette L2, Espace sur Mac), sous `condition`.
+    private var rewindRequested = false
+    /// Partie en train de reculer : son coupé (lu par le moteur, sur son thread).
+    private var rewindingNow = false
     private var lastSavedRAM: Data?
     /// N64 : moteur à recharger à la reprise (réglages d'image lus seulement au démarrage d'un jeu).
     private var coreReloadRequested = false
@@ -307,6 +311,23 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         return try? (Data(file.dropFirst(compressedStateMagic.count)) as NSData).decompressed(using: .lzfse) as Data
     }
 
+    /// Consoles qui peuvent reculer : sauvegarde rapide petite et rapide (pas la DS, la 3DS, la PSP, ni les moteurs
+    /// autonomes PS2, GameCube, Wii, PS Vita).
+    static func supportsRewind(_ system: GameSystem) -> Bool {
+        [.nes, .snes, .gb, .gbc, .gba, .n64, .psx].contains(system)
+    }
+
+    /// Retour en arrière possible pour ce jeu (console qui sait, réglage activé).
+    var rewindAvailable: Bool { Self.supportsRewind(game.system) && RewindSettings.enabled }
+
+    /// Maintenu : la partie recule. Relâché : elle reprend de là.
+    func setRewinding(_ on: Bool) {
+        condition.lock()
+        rewindRequested = on
+        condition.signal()
+        condition.unlock()
+    }
+
     func toggleFastForward() {
         isFastForwarding.toggle()
         let enabled = isFastForwarding
@@ -495,6 +516,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         // Démarre avec un peu d'avance pour remplir le tampon audio.
         var deadline = clock.now - 0.05
         var lastAutoSave = clock.now
+        // Retour en arrière : photos de la partie, images depuis la dernière, images à garder la photo reprise.
+        let rewindEnabled = rewindAvailable
+        var rewindBuffer = RewindBuffer()
+        var rewindFrame = 0
+        var rewindHold = 0
         var clockReset = false
         var wasPaused = false
         // Mesure de vitesse (journal toutes les 10 s si le jeu n'arrive pas à suivre : son haché, ralentis).
@@ -512,6 +538,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             pendingCommands.removeAll()
             let stop = stopRequested
             let paused = pauseRequested
+            let rewinding = rewindRequested && rewindEnabled
             condition.unlock()
 
             for command in commands { command() }
@@ -540,9 +567,31 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 statWork = 0
             }
 
-            let steps = fastForward ? 3 : 1
             let workStart = clock.now
-            for _ in 0..<steps { core.runFrame() }
+            if rewinding {
+                // Retour en arrière : une photo reprise de temps en temps (assez souvent pour reculer environ deux fois
+                // plus vite que le jeu n'avance), chacune montrée avec une image du moteur, sans le son.
+                rewindingNow = true
+                if rewindHold > 0 {
+                    rewindHold -= 1
+                } else if let state = rewindBuffer.popLast() {
+                    if core.loadState(state) { core.runFrame() }
+                    rewindHold = max(0, rewindBuffer.interval / 2 - 1)
+                }
+            } else {
+                rewindingNow = false
+                rewindHold = 0
+                let steps = fastForward ? 3 : 1
+                for _ in 0..<steps { core.runFrame() }
+                // Photo de la partie pour pouvoir reculer (toutes les `interval` images).
+                if rewindEnabled {
+                    rewindFrame += 1
+                    if rewindFrame >= rewindBuffer.interval, let state = core.saveState() {
+                        rewindFrame = 0
+                        rewindBuffer.push(state)
+                    }
+                }
+            }
             statWork += clock.now - workStart
             statFrames += 1
             if core.shutdownRequested { break }
@@ -648,7 +697,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             frameBuffer.storeHardware(buffer, width: Int(width), height: Int(height), flipped: flipped)
         }
         core.audioHandler = { [unowned self] samples, frames in
-            if !self.fastForward { PTAudioRingWrite(ring, samples, frames) }
+            if !self.fastForward && !self.rewindingNow { PTAudioRingWrite(ring, samples, frames) }
         }
 
         condition.lock()
@@ -1229,4 +1278,38 @@ struct MachClock {
         guard ticks.isFinite, ticks > 0, ticks < Double(UInt64.max) else { return }
         mach_wait_until(UInt64(ticks))
     }
+}
+
+/// Photos de la partie pour le retour en arrière : environ 30 secondes, au plus 128 Mo. L'écart entre deux photos est
+/// choisi à la première, d'après sa taille : NES, Game Boy, toutes les 2 images ; PS1, N64, bien plus espacées (le
+/// retour se fait alors par à-coups).
+struct RewindBuffer {
+    private(set) var interval = 2
+    private var capacity = 900
+    private var states: [Data] = []
+    private var sized = false
+
+    private static let seconds = 30
+    private static let budget = 128 << 20
+
+    mutating func push(_ state: Data) {
+        if !sized {
+            sized = true
+            let frames = Self.seconds * 60
+            let maxStates = max(8, Self.budget / max(state.count, 1))
+            interval = max(2, Int((Double(frames) / Double(maxStates)).rounded(.up)))
+            capacity = min(maxStates, frames / interval)
+            PTLogLine("Retour en arrière : une photo de \(state.count / 1024) Ko toutes les \(interval) images, \(capacity) gardées")
+        }
+        states.append(state)
+        if states.count > capacity { states.removeFirst(states.count - capacity) }
+    }
+
+    mutating func popLast() -> Data? { states.popLast() }
+}
+
+/// Réglages › Retour en arrière (activé par défaut).
+enum RewindSettings {
+    static let key = "retourArriere"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }
