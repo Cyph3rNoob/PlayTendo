@@ -27,6 +27,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Jeu en plusieurs disques : démarre le premier ; Dolphin passe au suivant quand le jeu le demande. Moteur sans
 /// cette fonction : le premier disque seulement.
 - (BOOL)bootGameAtPaths:(NSArray<NSString *> *)paths jit:(BOOL)jit;
+/// Reprise sur laquelle le prochain démarrage commence (nil : aucune). NO si le moteur est d'avant ce réglage.
+- (BOOL)setBootState:(nullable NSString *)statePath;
+/// Écran large forcé (GameCube en 16:9). Sans effet avec un moteur d'avant ce réglage.
+- (void)setWidescreen:(BOOL)enabled;
 /// Disque en cours (à partir de 0) d'un jeu démarré avec plusieurs disques, sinon -1.
 @property (nonatomic, readonly) NSInteger discIndex;
 /// Met le disque `index` (à partir de 0) du jeu en cours. NO si impossible.

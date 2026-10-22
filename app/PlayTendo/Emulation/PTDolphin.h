@@ -27,6 +27,10 @@ bool PTDolphinBoot(const char *path, bool jit);
 /// Démarre un jeu en plusieurs disques (`count` chemins, le premier démarré) ; le moteur passe au disque suivant quand
 /// le jeu le demande (« changement de disque automatique » de Dolphin).
 bool PTDolphinBootDiscs(const char *const *paths, int count, bool jit);
+/// Reprise automatique (sauvegarde rapide) sur laquelle le prochain démarrage commence, ou NULL.
+void PTDolphinSetBootState(const char *path);
+/// Écran large forcé (GameCube en 16:9). Appliqué à l'image suivante.
+void PTDolphinSetWidescreen(bool enabled);
 /// Disque en cours (à partir de 0) d'un jeu démarré par PTDolphinBootDiscs, sinon -1.
 int PTDolphinGetDisc(void);
 /// Met le disque `index` du jeu démarré par PTDolphinBootDiscs (couvercle ouvert, disque inséré une seconde après).

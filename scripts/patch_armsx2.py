@@ -22,6 +22,9 @@ Appelé par build_ps2.sh. Une retouche déjà faite est sautée : relancer le sc
    ajoutés par build_ps2.sh mac.
 7. libjpeg-turbo (copie d'ARMSX2) : la fabrication de son installeur Mac (.dmg) est sautée quand ses fichiers
    manquent (retirés de la copie) ; elle bloquait la préparation du projet Mac.
+8. ARMSX2Bridge.mm : reprise automatique de PlayTendo (`g_playtendo_boot_state`, posée par PTPS2SetBootOptions)
+   chargée dans ARMSX2IOSCompleteGameBoot, avant la première image, comme la « reprise de la dernière sauvegarde »
+   d'ARMSX2 : ni logo ni son de démarrage. Résultat dans `g_playtendo_boot_state_result`. 2026-10-22.
 """
 import os
 import sys
@@ -256,3 +259,36 @@ patch("platforms/android/app/src/main/cpp/3rdparty/libjpeg-turbo/cmakescripts/Bu
      "# PlayTendo : installeur Mac sauté si ses fichiers manquent (copie d'ARMSX2 sans le dossier release).\n"
      "if(APPLE AND NOT IOS AND EXISTS \"${CMAKE_CURRENT_SOURCE_DIR}/release/makemacpkg.in\")\n"),
 ], base=ARMSX2)
+
+patch("ARMSX2Bridge.mm", [
+    ("""void ARMSX2IOSCompleteGameBoot(const std::string& game, bool loadLastSaveState)
+{
+""", """// PlayTendo : reprise automatique demandée par PTPS2SetBootOptions (ps2/PTPS2Host.mm), chargée au démarrage avant
+// la première image ; résultat : -1 aucune, 1 chargée, 0 illisible (jeu démarré du début).
+std::string g_playtendo_boot_state;
+std::atomic<int> g_playtendo_boot_state_result{-1};
+
+void ARMSX2IOSCompleteGameBoot(const std::string& game, bool loadLastSaveState)
+{
+"""),
+    ("""    if (!loadLastSaveState || !g_p44_settings_interface->GetBoolValue(
+            "ARMSX2iOS/Boot", "AutomaticLoadLastSaveState", false))
+        return;
+""", """    if (!g_playtendo_boot_state.empty())
+    {
+        const std::string state = g_playtendo_boot_state;
+        g_playtendo_boot_state.clear();
+        Error error;
+        // Comme la reprise d'ARMSX2 ci-dessous : LoadState remet la console à zéro si elle échoue.
+        const bool loaded = VMManager::LoadState(state.c_str(), &error);
+        g_playtendo_boot_state_result.store(loaded ? 1 : 0);
+        if (!loaded)
+            Console.Error("[PlayTendo] Reprise illisible : %s", error.GetDescription().c_str());
+        return;
+    }
+
+    if (!loadLastSaveState || !g_p44_settings_interface->GetBoolValue(
+            "ARMSX2iOS/Boot", "AutomaticLoadLastSaveState", false))
+        return;
+"""),
+])

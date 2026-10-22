@@ -26,6 +26,10 @@ char *PTPS2PickBIOS(void);
 
 /// Démarre un jeu (chemin complet d'un .iso, .chd, .cso…). Faux sans BIOS.
 bool PTPS2Boot(const char *path);
+/// Prochain démarrage : reprise automatique sur laquelle commencer (ou NULL), démarrage rapide (sans le logo PS2).
+void PTPS2SetBootOptions(const char *statePath, bool fastBoot);
+/// Reprise du dernier démarrage : -1 aucune, 1 chargée, 0 illisible (jeu démarré du début).
+int PTPS2GetBootStateResult(void);
 PTPS2State PTPS2GetState(void);
 void PTPS2SetPaused(bool paused);
 /// Demande l'arrêt du jeu ; l'état repasse à « arrêté » quand c'est fait.

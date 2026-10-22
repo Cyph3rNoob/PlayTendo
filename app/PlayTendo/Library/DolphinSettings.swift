@@ -27,6 +27,21 @@ enum DolphinSettings {
         var label: String { self == .off ? tr("Non") : tr("Oui") }
     }
 
+    /// Format des jeux GameCube : 16:9 force l'écran large (« Widescreen Hack » de Dolphin) ; quelques objets peuvent
+    /// apparaître tard sur les bords. Les jeux Wii choisissent eux-mêmes (16:9 pour la plupart).
+    enum Format: Int, CaseIterable, Identifiable {
+        case standard = 0, wide
+
+        var id: Int { rawValue }
+        var label: String { self == .standard ? "4:3" : "16:9" }
+    }
+
+    static let formatKey = "formatGameCube"
+
+    static var format: Format {
+        Format(rawValue: UserDefaults.standard.integer(forKey: formatKey)) ?? .standard
+    }
+
     /// Manette d'un jeu Wii : la Wiimote avec son Nunchuk (la plupart des jeux) ou la manette GameCube (Smash
     /// Bros. Brawl, Mario Kart Wii…).
     enum WiiController: String {

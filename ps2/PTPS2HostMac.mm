@@ -79,6 +79,11 @@ static std::condition_variable s_queueCV;
 static std::deque<std::function<void()>> s_queue;
 static std::optional<VMBootParameters> s_pendingBoot;  // sous s_queueMutex
 static std::atomic<bool> s_booting{false};
+// Prochain démarrage (PTPS2SetBootOptions) : reprise automatique à charger, démarrage rapide (sans le logo PS2).
+static std::string s_bootState;
+static bool s_fastBoot = false;
+// Reprise du dernier démarrage : -1 aucune, 1 chargée, 0 illisible (jeu démarré du début).
+static std::atomic<int> s_bootStateResult{-1};
 /// Fermeture de l'app : le thread de la console s'arrête (PTPS2Shutdown) avant la sortie du programme.
 static std::atomic<bool> s_quit{false};
 static std::atomic<bool> s_cpuThreadDone{false};
@@ -314,7 +319,21 @@ static void PTPS2CPUThreadMain()
                 if (boot.has_value())
                 {
                     Error error;
-                    const VMBootResult result = VMManager::Initialize(*boot, &error);
+                    VMBootResult result = VMManager::Initialize(*boot, &error);
+                    if (result != VMBootResult::StartupSuccess && !boot->save_state.empty())
+                    {
+                        // Reprise illisible (autre version du moteur, fichier abîmé) : le jeu démarre du début plutôt
+                        // que pas du tout.
+                        Console.ErrorFmt("[PlayTendo] Reprise illisible ({}), démarrage normal", error.GetDescription());
+                        s_bootStateResult.store(0);
+                        boot->save_state.clear();
+                        error = Error();
+                        result = VMManager::Initialize(*boot, &error);
+                    }
+                    else if (result == VMBootResult::StartupSuccess && !boot->save_state.empty())
+                    {
+                        s_bootStateResult.store(1);
+                    }
                     if (result == VMBootResult::StartupSuccess)
                     {
                         VMManager::SetState(VMState::Running);
@@ -646,7 +665,11 @@ PTPS2_EXPORT bool PTPS2Boot(const char* path)
     [s_view updateWindowInfo];
     VMBootParameters params;
     params.filename = path;
-    params.fast_boot = false;
+    params.fast_boot = s_fastBoot;
+    // Reprise automatique : la console démarre directement sur la partie (ni logo ni son de démarrage).
+    params.save_state = std::move(s_bootState);
+    s_bootState.clear();
+    s_bootStateResult.store(-1);
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_pendingBoot = std::move(params);
@@ -655,6 +678,17 @@ PTPS2_EXPORT bool PTPS2Boot(const char* path)
     s_queueCV.notify_all();
     Console.WriteLn("[PlayTendo] Démarrage PS2 : %s", path);
     return true;
+}
+
+PTPS2_EXPORT void PTPS2SetBootOptions(const char* statePath, bool fastBoot)
+{
+    s_bootState = statePath ? statePath : "";
+    s_fastBoot = fastBoot;
+}
+
+PTPS2_EXPORT int PTPS2GetBootStateResult(void)
+{
+    return s_bootStateResult.load();
 }
 
 PTPS2_EXPORT PTPS2State PTPS2GetState(void)

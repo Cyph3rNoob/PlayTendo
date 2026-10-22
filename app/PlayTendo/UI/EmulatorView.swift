@@ -354,6 +354,8 @@ private struct PauseMenu: View {
     /// GameCube et Wii : résolution et lissage des bords (gardés pour tous leurs jeux).
     @AppStorage(DolphinSettings.resolutionKey) private var dolphinResolution = DolphinSettings.Resolution.x1.rawValue
     @AppStorage(DolphinSettings.smoothingKey) private var dolphinSmoothing = DolphinSettings.Smoothing.off.rawValue
+    /// GameCube : écran large forcé (gardé pour tous ses jeux).
+    @AppStorage(DolphinSettings.formatKey) private var dolphinFormat = DolphinSettings.Format.standard.rawValue
     /// 3DS : résolution et lissage des textures (gardés pour tous ses jeux).
     @AppStorage(N3DSSettings.resolutionKey) private var n3dsResolution = N3DSSettings.Resolution.x1.rawValue
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
@@ -733,7 +735,14 @@ private struct PauseMenu: View {
                                         options: DolphinSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: dolphinSmoothing) { value in
                     choose { dolphinSmoothing = value }
-                })
+                },
+                format: session.game.system == .gameCube
+                    ? NeonSegments(title: tr("FORMAT"), detail: nil,
+                                   options: DolphinSettings.Format.allCases.map { ($0.rawValue, $0.label) },
+                                   selection: dolphinFormat) { value in
+                        choose { dolphinFormat = value }
+                    }
+                    : nil)
         } else if session.game.system == .n64 {
             imageSettings(
                 resolution: NeonSegments(title: tr("RÉSOLUTION"),

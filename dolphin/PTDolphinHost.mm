@@ -361,6 +361,8 @@ PTDOLPHIN_EXPORT void PTDolphinShutdown(void)
 
 // Disques du jeu en cours s'il en a plusieurs (PTDolphinBootDiscs), sinon vide.
 static std::vector<std::string> s_discs;
+// Reprise automatique du prochain démarrage (PTDolphinSetBootState) : le jeu démarre directement dessus.
+static std::string s_bootState;
 
 // Démarre le jeu : un fichier, ou les disques d'un jeu qui en a plusieurs (Dolphin met le premier, puis passe tout
 // seul au suivant quand le jeu ouvre le couvercle : « changement de disque automatique »).
@@ -395,7 +397,13 @@ static bool PTDolphinBootFiles(std::vector<std::string> files, bool jit)
     wsi.type = WindowSystemType::iOS;
     wsi.render_surface = (__bridge void*)layer;
     wsi.render_surface_scale = scale;
-    std::unique_ptr<BootParameters> boot = BootParameters::GenerateFromFile(files);
+    // Reprise automatique : chargée par Dolphin au démarrage (comme « Démarrer avec cette sauvegarde » de DolphinQt).
+    std::optional<std::string> state;
+    if (!s_bootState.empty())
+      state = s_bootState;
+    s_bootState.clear();
+    std::unique_ptr<BootParameters> boot = BootParameters::GenerateFromFile(
+        files, BootSessionData(std::move(state), DeleteSavestateAfterBoot::No));
     if (!boot)
       return;
     started = BootManager::BootCore(system, std::move(boot), wsi);
@@ -673,6 +681,20 @@ PTDOLPHIN_EXPORT void PTDolphinSetImageOptions(int scale, bool smoothing)
     Config::SetBase(Config::GFX_MSAA, 1u);
     Config::SetBase(Config::GFX_SSAA, false);
     Config::SetBase(Config::GFX_ENHANCE_POST_SHADER, std::string(smoothing ? "FXAA" : ""));
+  });
+}
+
+PTDOLPHIN_EXPORT void PTDolphinSetBootState(const char* path)
+{
+  s_bootState = path ? path : "";
+}
+
+/// Écran large forcé (« Widescreen Hack » de Dolphin) : jeux GameCube en 16:9 au lieu de 4:3. Quelques objets peuvent
+/// apparaître tard sur les bords de l'image. Appliqué à l'image suivante.
+PTDOLPHIN_EXPORT void PTDolphinSetWidescreen(bool enabled)
+{
+  DOLHostQueueRunSync(^{
+    Config::SetBase(Config::GFX_WIDESCREEN_HACK, enabled);
   });
 }
 

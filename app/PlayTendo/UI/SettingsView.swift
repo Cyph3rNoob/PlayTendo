@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 /// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la PS Vita, de la GameCube/Wii et de la 3DS, le BIOS PS2,
 /// le firmware de la PS Vita et le son du démarrage. Sur Mac, en trois pages (Général, Clavier, Jeux et BIOS) avec les touches de chaque console.
 struct SettingsView: View {
+    /// PS2 : démarrage sans le logo de la console (PS2Settings.fastBoot).
+    @AppStorage(PS2Settings.fastBootKey) private var ps2FastBoot = true
     @EnvironmentObject private var jit: JITManager
     @AppStorage(BootSound.enabledKey) private var bootSound = true
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
@@ -328,6 +330,13 @@ struct SettingsView: View {
                 Text(tr("BIOS PS2"))
             } footer: {
                 Text(tr("Obligatoire pour la PS2. Choisis le BIOS de ta console (fichier de 4 Mo, souvent « SCPH-… », n'importe quel nom ; dans un .zip, .7z ou .rar aussi) : PlayTendo vérifie que c'en est bien un et le range dans le dossier BIOS. PlayTendo n'en fournit aucun."))
+            }
+            Section {
+                Toggle(isOn: $ps2FastBoot) {
+                    Label(tr("Démarrage rapide"), systemImage: "hare.fill")
+                }
+            } footer: {
+                Text(tr("Les jeux PS2 démarrent sans le logo ni le son de la console. Désactive-le si un jeu refuse de démarrer."))
             }
         }
     }

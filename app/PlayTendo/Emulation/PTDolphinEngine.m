@@ -26,6 +26,8 @@ static NSString *loadFailure;
     __typeof__(&PTDolphinBootDiscs) _bootDiscs;
     __typeof__(&PTDolphinGetDisc) _getDisc;
     __typeof__(&PTDolphinChangeDisc) _changeDisc;
+    __typeof__(&PTDolphinSetBootState) _setBootState;
+    __typeof__(&PTDolphinSetWidescreen) _setWidescreen;
 }
 
 + (PTDolphinEngine *)loadedEngine {
@@ -56,6 +58,8 @@ static NSString *loadFailure;
     engine->_bootDiscs = (__typeof__(&PTDolphinBootDiscs))dlsym(handle, "PTDolphinBootDiscs");
     engine->_getDisc = (__typeof__(&PTDolphinGetDisc))dlsym(handle, "PTDolphinGetDisc");
     engine->_changeDisc = (__typeof__(&PTDolphinChangeDisc))dlsym(handle, "PTDolphinChangeDisc");
+    engine->_setBootState = (__typeof__(&PTDolphinSetBootState))dlsym(handle, "PTDolphinSetBootState");
+    engine->_setWidescreen = (__typeof__(&PTDolphinSetWidescreen))dlsym(handle, "PTDolphinSetWidescreen");
 
     void *view = engine->_fn.PTDolphinSetup(userDirectory.fileSystemRepresentation,
                                             gameCubeSaveDirectory.fileSystemRepresentation,
@@ -89,6 +93,16 @@ static NSString *loadFailure;
     const char *list[paths.count];
     for (NSUInteger i = 0; i < paths.count; i++) list[i] = paths[i].fileSystemRepresentation;
     return _bootDiscs(list, (int)paths.count, jit);
+}
+
+- (BOOL)setBootState:(NSString *)statePath {
+    if (!_setBootState) return NO;
+    _setBootState(statePath.length > 0 ? statePath.fileSystemRepresentation : NULL);
+    return YES;
+}
+
+- (void)setWidescreen:(BOOL)enabled {
+    if (_setWidescreen) _setWidescreen(enabled);
 }
 
 - (NSInteger)discIndex {

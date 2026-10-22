@@ -22,6 +22,9 @@ static NSString *loadFailure;
     PTPS2Functions _fn;
     /// Facultative (moteur Mac seulement).
     __typeof__(&PTPS2Shutdown) _shutdown;
+    /// Facultatives (moteurs compilés avant elles) : reprise au démarrage, démarrage rapide.
+    __typeof__(&PTPS2SetBootOptions) _setBootOptions;
+    __typeof__(&PTPS2GetBootStateResult) _bootStateResult;
 }
 
 + (PTPS2Engine *)loadedEngine {
@@ -49,6 +52,8 @@ static NSString *loadFailure;
     PT_PS2_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
     engine->_shutdown = (__typeof__(&PTPS2Shutdown))dlsym(handle, "PTPS2Shutdown");
+    engine->_setBootOptions = (__typeof__(&PTPS2SetBootOptions))dlsym(handle, "PTPS2SetBootOptions");
+    engine->_bootStateResult = (__typeof__(&PTPS2GetBootStateResult))dlsym(handle, "PTPS2GetBootStateResult");
 
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);
@@ -74,6 +79,16 @@ static NSString *loadFailure;
 
 - (NSString *)pickBIOS {
     return [self takeString:_fn.PTPS2PickBIOS()];
+}
+
+- (BOOL)setBootState:(NSString *)statePath fastBoot:(BOOL)fastBoot {
+    if (!_setBootOptions) return NO;
+    _setBootOptions(statePath.length > 0 ? statePath.fileSystemRepresentation : NULL, fastBoot);
+    return YES;
+}
+
+- (NSInteger)bootStateResult {
+    return _bootStateResult ? _bootStateResult() : -1;
 }
 
 - (BOOL)bootGameAtPath:(NSString *)path {

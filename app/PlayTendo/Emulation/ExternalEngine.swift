@@ -35,6 +35,12 @@ protocol ExternalEngine: AnyObject {
     var currentDisc: Int? { get }
     /// Met le disque `index` du jeu démarré par `boot(discs:jit:)`. Faux si le moteur ne sait pas.
     func changeDisc(to index: Int) -> Bool
+    /// Reprise automatique : le prochain démarrage commence directement sur cette partie (ni logo ni son de démarrage).
+    /// Faux si le moteur ne sait pas (la partie est alors chargée quelques secondes après le démarrage).
+    func prepareBoot(resume: String?) -> Bool
+    /// Après un démarrage sur une reprise : vrai si elle a été chargée, faux si elle était illisible, nil si on ne
+    /// sait pas.
+    var resumeLoaded: Bool? { get }
 }
 
 /// Moteurs sans changement de disque : le premier disque seulement.
@@ -42,6 +48,8 @@ extension ExternalEngine {
     func boot(discs: [String], jit: Bool) -> Bool { boot(path: discs[0], jit: jit) }
     var currentDisc: Int? { nil }
     func changeDisc(to index: Int) -> Bool { false }
+    func prepareBoot(resume: String?) -> Bool { false }
+    var resumeLoaded: Bool? { nil }
 }
 
 extension PTPS2Engine: ExternalEngine {
@@ -55,6 +63,20 @@ extension PTPS2Engine: ExternalEngine {
     }
 
     func boot(path: String, jit: Bool) -> Bool { bootGame(atPath: path) }
+
+    /// Le démarrage rapide (sans le logo PS2, Réglages) est réglé à chaque démarrage, avec ou sans reprise.
+    func prepareBoot(resume: String?) -> Bool {
+        setBootState(resume, fastBoot: PS2Settings.fastBoot) && resume != nil
+    }
+
+    var resumeLoaded: Bool? {
+        switch bootStateResult {
+        case 1: true
+        case 0: false
+        default: nil
+        }
+    }
+
     /// La PS2 capture son image même en pause (`snapshot`).
     func prepareSnapshot() {}
 
@@ -97,6 +119,8 @@ extension PTDolphinEngine: ExternalEngine {
     }
 
     func changeDisc(to index: Int) -> Bool { changeDisc(at: index) }
+
+    func prepareBoot(resume: String?) -> Bool { setBootState(resume) && resume != nil }
 
     func prepareSnapshot() {
         _ = captureScreen(toPath: Self.captureURL.path)

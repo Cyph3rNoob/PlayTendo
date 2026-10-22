@@ -25,6 +25,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// Nom du BIOS PS2 retenu dans le dossier des BIOS, ou nil s'il n'y en a pas.
 - (nullable NSString *)pickBIOS;
 - (BOOL)bootGameAtPath:(NSString *)path;
+/// Prochain démarrage : reprise sur laquelle commencer (nil : aucune) et démarrage rapide (sans le logo PS2). NO si le
+/// moteur est d'avant ces réglages.
+- (BOOL)setBootState:(nullable NSString *)statePath fastBoot:(BOOL)fastBoot;
+/// Reprise du dernier démarrage : -1 aucune, 1 chargée, 0 illisible (jeu démarré du début).
+@property (nonatomic, readonly) NSInteger bootStateResult;
 - (void)setPaused:(BOOL)paused;
 - (void)stop;
 - (void)reset;

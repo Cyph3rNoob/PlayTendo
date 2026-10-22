@@ -311,6 +311,29 @@ PTPS2_EXPORT char* PTPS2PickBIOS(void)
 
 // MARK: - Partie
 
+// Reprise automatique du prochain démarrage, chargée par ARMSX2IOSCompleteGameBoot avant la première image (retouche 8
+// de patch_armsx2.py) ; résultat : -1 aucune, 1 chargée, 0 illisible (jeu démarré du début).
+extern std::string g_playtendo_boot_state;
+extern std::atomic<int> g_playtendo_boot_state_result;
+
+PTPS2_EXPORT void PTPS2SetBootOptions(const char* statePath, bool fastBoot)
+{
+    g_playtendo_boot_state = statePath ? statePath : "";
+    g_playtendo_boot_state_result.store(-1);
+    if (!s_settings_interface)
+        return;
+    // Démarrage rapide (sans le logo PS2) : réglage global, lu par bootISO puis par le thread de la console.
+    auto lock = Host::GetSettingsLock();
+    s_settings_interface->SetBoolValue("EmuCore", "EnableFastBoot", fastBoot);
+    s_settings_interface->SetBoolValue("GameISO", "FastBoot", fastBoot);
+    s_settings_interface->Save();
+}
+
+PTPS2_EXPORT int PTPS2GetBootStateResult(void)
+{
+    return g_playtendo_boot_state_result.load();
+}
+
 PTPS2_EXPORT bool PTPS2Boot(const char* path)
 {
     if (!s_launcher || !path)

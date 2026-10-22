@@ -142,6 +142,8 @@ enum English {
         "IMAGE": "PICTURE",
         "Infos et jaquettes : ScreenScraper.fr": "Info and covers: ScreenScraper.fr",
         "JOUER": "PLAY",
+        "Démarrage rapide": "Fast boot",
+        "Les jeux PS2 démarrent sans le logo ni le son de la console. Désactive-le si un jeu refuse de démarrer.": "PS2 games start without the console's logo and sound. Turn it off if a game won't start.",
         "Partie reprise": "Game resumed",
         "Reprise de la partie…": "Resuming your game…",
         "Reprise impossible : le jeu démarre du début": "Couldn't resume: the game starts from the beginning",

@@ -201,11 +201,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     /// GameCube/Wii : applique la résolution et le lissage choisis dans le menu pause (DolphinSettings).
     func applyDolphinImage() {
-        perform { [self] in Self.applyDolphinImage(to: external as? PTDolphinEngine) }
+        perform { [self] in Self.applyDolphinImage(to: external as? PTDolphinEngine, system: game.system) }
     }
 
-    private static func applyDolphinImage(to engine: PTDolphinEngine?) {
+    private static func applyDolphinImage(to engine: PTDolphinEngine?, system: GameSystem) {
         engine?.setImageScale(Int32(DolphinSettings.resolution.rawValue), smoothing: DolphinSettings.smoothing == .on)
+        // Écran large forcé : jeux GameCube seulement (les jeux Wii choisissent eux-mêmes).
+        engine?.setWidescreen(system == .gameCube && DolphinSettings.format == .wide)
     }
 
     /// Wii : commandes vers la Wiimote + Nunchuk (vrai) ou vers la manette GameCube. Avant ou pendant la partie.
@@ -944,7 +946,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             return false
         }
 #endif
-        Self.applyDolphinImage(to: engine as? PTDolphinEngine)
+        Self.applyDolphinImage(to: engine as? PTDolphinEngine, system: game.system)
         return true
     }
 
@@ -1009,6 +1011,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.02)
         }
         let jitFailures = PTJITFailureCount()
+        // Reprise automatique (pas de PS Vita : pas de sauvegarde rapide) : de préférence, la console démarre directement
+        // dessus, sans logo ni son de démarrage ; sinon (moteur d'avant), elle est chargée quelques secondes après.
+        let resumeFile = Paths.resumeFile(for: game)
+        let hasResume = !game.system.isVita && FileManager.default.fileExists(atPath: resumeFile.path)
+        let resumedAtBoot = engine.prepareBoot(resume: hasResume ? resumeFile.path : nil)
         // Jeu en plusieurs disques (GameCube) : le moteur les reçoit tous, et passe au suivant quand le jeu le demande.
         let booted = game.discs.count > 1 ? engine.boot(discs: game.discs.map(\.path), jit: PTJITIsActive())
                                           : engine.boot(path: bootPath, jit: PTJITIsActive())
@@ -1064,7 +1071,16 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     // Reprise automatique (PS2, GameCube, Wii ; la PS Vita n'a pas de sauvegarde rapide) : chargée
                     // quelques secondes après le démarrage, console allumée, derrière l'écran de chargement. Chargée
                     // tout de suite, la PS2 restait sur un écran noir avec le son (son affichage venait d'ouvrir).
-                    if !game.system.isVita, FileManager.default.fileExists(atPath: Paths.resumeFile(for: game).path) {
+                    if resumedAtBoot {
+                        if engine.resumeLoaded == false {
+                            PTLogLine("\(name) : reprise automatique illisible, jeu démarré du début")
+                            showToast(tr("Reprise impossible : le jeu démarre du début"))
+                        } else {
+                            PTLogLine("\(name) : démarré directement sur la reprise automatique")
+                            showToast(tr("Partie reprise"))
+                        }
+                        DispatchQueue.main.async { self.state = .running }
+                    } else if hasResume {
                         resumeAt = clock.now + (game.system == .ps2 ? 4 : 2)
                         setLoadingDetail(tr("Reprise de la partie…"))
                     } else {

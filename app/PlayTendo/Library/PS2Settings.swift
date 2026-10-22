@@ -38,6 +38,11 @@ enum PS2Settings {
     }
 
     static let resolutionKey = "resolutionPS2"
+    /// Démarrage rapide : le jeu démarre sans le logo et le son de la PS2 (Réglages › PS2). Activé par défaut ; quelques
+    /// rares jeux veulent le vrai démarrage de la console.
+    static let fastBootKey = "demarrageRapidePS2"
+
+    static var fastBoot: Bool { UserDefaults.standard.object(forKey: fastBootKey) as? Bool ?? true }
     static let smoothingKey = "lissagePS2"
     static let formatKey = "formatPS2"
 
