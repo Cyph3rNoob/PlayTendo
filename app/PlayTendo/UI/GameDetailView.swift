@@ -46,6 +46,7 @@ struct GameDetailView: View {
             .background(alignment: .top) { backdrop }
             closeButton
         }
+        .overlay(alignment: .topLeading) { favoriteButton }
 #if os(macOS)
         // Taille fixe : une feuille Mac prend sinon la taille de son contenu (plus haute que l'écran, bouton de
         // fermeture hors d'atteinte).
@@ -287,6 +288,22 @@ struct GameDetailView: View {
                 dismiss()
             }
         }
+    }
+
+    /// Étoile : favori ou non (en tête de sa console, filtre ★ de la bibliothèque).
+    private var favoriteButton: some View {
+        let favorite = metadata.isFavorite(game)
+        return Button { metadata.toggleFavorite(game) } label: {
+            Image(systemName: favorite ? "star.fill" : "star")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(favorite ? LibraryView.favoriteColor : Neon.text)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(Neon.panel.opacity(0.9)))
+                .overlay(Circle().stroke((favorite ? LibraryView.favoriteColor : Neon.text).opacity(0.3), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(favorite ? tr("Retirer des favoris") : tr("Ajouter aux favoris"))
+        .padding(14)
     }
 
     private var closeButton: some View {

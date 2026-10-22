@@ -14,6 +14,10 @@ struct LibraryView: View {
     @State private var playing: Game?
     @State private var search = ""
     @State private var filter: GameSystem?
+    /// Filtre ★ : seulement les favoris (toutes consoles).
+    @State private var favoritesOnly = false
+    /// Ordre des jeux dans chaque console (les favoris restent en tête).
+    @AppStorage(LibrarySort.key) private var sortRaw = LibrarySort.name.rawValue
     @State private var gameToDelete: Game?
     /// Fiche ouverte (toucher une boîte) ; ce qu'elle demande une fois refermée : jouer ou supprimer.
     @State private var detailGame: Game?
@@ -41,9 +45,12 @@ struct LibraryView: View {
                         EmptyLibraryView { importing = true }
                             .padding(.top, 30)
                     } else {
-                        searchField
+                        HStack(spacing: 10) {
+                            searchField
+                            sortMenu
+                        }
                         filterChips
-                        if filter == nil, search.isEmpty {
+                        if filter == nil, !favoritesOnly, search.isEmpty {
                             let recent = metadata.recentGames(in: library.games)
                             if !recent.isEmpty { continueRow(recent) }
                         }
@@ -340,6 +347,30 @@ struct LibraryView: View {
                                                          startPoint: .leading, endPoint: .trailing), lineWidth: 1))
     }
 
+    private var sort: LibrarySort { LibrarySort(rawValue: sortRaw) ?? .name }
+
+    /// Ordre des jeux : par nom, par dernière partie ou par ajout.
+    private var sortMenu: some View {
+        Menu {
+            Picker(tr("Trier"), selection: $sortRaw) {
+                ForEach(LibrarySort.allCases) { option in
+                    Label(option.label, systemImage: option.icon).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Neon.cyan)
+                .frame(width: 44, height: 44)
+                .background(Chamfer(cut: 10).fill(Neon.text.opacity(0.05)))
+                .overlay(Chamfer(cut: 10).stroke(Neon.cyan.opacity(0.6), lineWidth: 1))
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .accessibilityLabel(tr("Trier"))
+    }
+
     private var presentSystems: [GameSystem] {
         let present = Set(library.games.map(\.system.libraryGroup))
         return GameSystem.libraryGroups.filter(present.contains)
@@ -348,11 +379,22 @@ struct LibraryView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(label: tr("TOUT"), color: Neon.cyan, onColor: Neon.onAccent, selected: filter == nil) { filter = nil }
+                FilterChip(label: tr("TOUT"), color: Neon.cyan, onColor: Neon.onAccent,
+                           selected: filter == nil && !favoritesOnly) {
+                    filter = nil
+                    favoritesOnly = false
+                }
+                if library.games.contains(where: metadata.isFavorite) {
+                    FilterChip(label: tr("★ FAVORIS"), color: Self.favoriteColor, onColor: .black, selected: favoritesOnly) {
+                        favoritesOnly.toggle()
+                        filter = nil
+                    }
+                }
                 ForEach(presentSystems) { system in
                     FilterChip(label: system.badgeName, note: system.isExperimental ? tr("EXPÉRIMENTAL") : nil,
                                color: system.neon, selected: filter == system) {
                         filter = filter == system ? nil : system
+                        favoritesOnly = false
                     }
                 }
             }
@@ -401,6 +443,13 @@ struct LibraryView: View {
                                             Text(summary)
                                         }
 #endif
+                                        Button { metadata.toggleFavorite(game) } label: {
+                                            if metadata.isFavorite(game) {
+                                                Label(tr("Retirer des favoris"), systemImage: "star.slash")
+                                            } else {
+                                                Label(tr("Ajouter aux favoris"), systemImage: "star")
+                                            }
+                                        }
                                         Button { metadata.retryCover(for: game) } label: {
                                             Label(tr("Actualiser la jaquette"), systemImage: "arrow.clockwise")
                                         }
@@ -430,10 +479,32 @@ struct LibraryView: View {
 
     /// Jeux d'une console, triés par titre affiché, filtrés par la recherche.
     /// Jeux d'une catégorie (GB/C : Game Boy et Game Boy Color ensemble).
+    static let favoriteColor = Color(red: 1, green: 0.8, blue: 0.2)
+
+    /// Jeux d'une console, filtrés (recherche, favoris) et rangés : favoris en tête, puis l'ordre choisi.
     private func filteredGames(for system: GameSystem) -> [Game] {
+        let favorites = metadata.favorites
+        let order = sort
         let games = system.groupMembers.flatMap { library.games(for: $0) }
+            .filter { !favoritesOnly || favorites.contains($0.key) }
             .map { ($0, metadata.display(for: $0)) }
-            .sorted { $0.1.sortKey.localizedStandardCompare($1.1.sortKey) == .orderedAscending }
+            .sorted { lhs, rhs in
+                let lhsFavorite = favorites.contains(lhs.0.key)
+                if lhsFavorite != favorites.contains(rhs.0.key) { return lhsFavorite }
+                switch order {
+                case .recent:
+                    let left = metadata.lastPlayed[lhs.0.key] ?? 0
+                    let right = metadata.lastPlayed[rhs.0.key] ?? 0
+                    if left != right { return left > right }
+                case .added:
+                    let left = Self.addedDate(lhs.0)
+                    let right = Self.addedDate(rhs.0)
+                    if left != right { return left > right }
+                case .name:
+                    break
+                }
+                return lhs.1.sortKey.localizedStandardCompare(rhs.1.sortKey) == .orderedAscending
+            }
         let query = search.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return games.map(\.0) }
         return games.filter { game, display in
@@ -446,6 +517,43 @@ struct LibraryView: View {
 
 private extension GameDisplay {
     var sortKey: String { subtitle.map { "\(title) \($0)" } ?? title }
+}
+
+/// Ordre des jeux dans la bibliothèque (bouton à côté de la recherche).
+enum LibrarySort: String, CaseIterable, Identifiable {
+    case name, recent, added
+
+    static let key = "triBibliotheque"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .name: tr("Nom")
+        case .recent: tr("Dernière partie")
+        case .added: tr("Ajout récent")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .name: "textformat"
+        case .recent: "clock"
+        case .added: "plus.square.on.square"
+        }
+    }
+}
+
+extension LibraryView {
+    /// Date d'ajout d'un jeu (création de son fichier dans Jeux), gardée en mémoire : le tri ne relit pas le disque.
+    nonisolated(unsafe) private static var addedDates: [String: Date] = [:]
+
+    fileprivate static func addedDate(_ game: Game) -> Date {
+        if let date = addedDates[game.id] { return date }
+        let date = (try? game.url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+        addedDates[game.id] = date
+        return date
+    }
 }
 
 // MARK: - Éléments
@@ -496,11 +604,19 @@ private struct GameCard: View {
             CoverArt(game: game, title: display.title)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(display.title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Neon.text)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    if metadata.isFavorite(game) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(LibraryView.favoriteColor)
+                            .accessibilityLabel(tr("Favori"))
+                    }
+                    Text(display.title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Neon.text)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
                 if let subtitle = display.subtitle {
                     Text(subtitle)
                         .font(.system(size: 12, weight: .medium))

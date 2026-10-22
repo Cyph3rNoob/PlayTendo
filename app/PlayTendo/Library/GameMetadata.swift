@@ -20,6 +20,8 @@ final class GameMetadata: ObservableObject {
     /// Change quand la jaquette d'un jeu arrive (clé du jeu → compteur) : seule sa carte la recharge.
     @Published private(set) var coverRevisions: [String: Int] = [:]
     @Published private(set) var lastPlayed: [String: Double] = [:]
+    /// Jeux favoris (clés des jeux) : en tête de leur console, filtre ★ de la bibliothèque.
+    @Published private(set) var favorites: Set<String> = []
     @Published private(set) var details: [String: GameDetails] = [:]
 
     private var running = false
@@ -33,6 +35,7 @@ final class GameMetadata: ObservableObject {
     private static let detailsFile = Paths.support
         .appendingPathComponent("Bibliotheque/fiches.json")
     private static let lastPlayedKey = "dernieresParties"
+    private static let favoritesKey = "favoris"
     private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
     private static let screenScraperTriedKey = "jaquettesScreenScraperEssayees"
     /// Jaquettes déjà téléchargées mises en boîte 3D (plates) ou débarrassées de leurs bords transparents (2026-10-22).
@@ -55,6 +58,7 @@ final class GameMetadata: ObservableObject {
         }
 #endif
         lastPlayed = UserDefaults.standard.dictionary(forKey: Self.lastPlayedKey) as? [String: Double] ?? [:]
+        favorites = Set(UserDefaults.standard.stringArray(forKey: Self.favoritesKey) ?? [])
         if let data = try? Data(contentsOf: Self.detailsFile),
            let saved = try? JSONDecoder().decode([String: GameDetails].self, from: data) {
             details = saved
@@ -116,8 +120,10 @@ final class GameMetadata: ObservableObject {
         for key in missing {
             infos[key] = nil
             lastPlayed[key] = nil
+            favorites.remove(key)
         }
         save()
+        UserDefaults.standard.set(Array(favorites), forKey: Self.favoritesKey)
         UserDefaults.standard.set(lastPlayed, forKey: Self.lastPlayedKey)
         PTLogLine("Bibliothèque : \(missing.count) fiche(s) de jeux disparus oubliée(s)")
     }
@@ -162,6 +168,13 @@ final class GameMetadata: ObservableObject {
     }
 
     // MARK: Mise à jour
+
+    func isFavorite(_ game: Game) -> Bool { favorites.contains(game.key) }
+
+    func toggleFavorite(_ game: Game) {
+        if favorites.remove(game.key) == nil { favorites.insert(game.key) }
+        UserDefaults.standard.set(Array(favorites), forKey: Self.favoritesKey)
+    }
 
     func markPlayed(_ game: Game) {
         lastPlayed[game.key] = Date().timeIntervalSince1970
