@@ -326,6 +326,8 @@ struct LibraryView: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Neon.cyan)
             TextField("", text: $search, prompt: Text(tr("RECHERCHER UN JEU")).foregroundStyle(Neon.dim))
+                // Sans le cadre gris des champs de macOS : la barre néon seule, comme sur iPhone.
+                .textFieldStyle(.plain)
                 .font(Neon.mono(14, weight: .medium))
                 .foregroundStyle(Neon.text)
 #if os(iOS)
