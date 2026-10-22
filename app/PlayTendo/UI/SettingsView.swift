@@ -414,9 +414,9 @@ struct SettingsView: View {
             }
         } footer: {
 #if os(iOS)
-            Text(tr("Avec une manette, maintiens la gâchette L2 pour reculer d'une trentaine de secondes au plus (NES, Super Nintendo, Game Boy, GBA)."))
+            Text(tr("Menu pause › Retour arrière : la partie recule (une trentaine de secondes au plus) jusqu'à ce que tu touches l'écran. Avec une manette, la gâchette L2 maintenue fait pareil (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
 #else
-            Text(tr("Maintiens Espace (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) pour reculer d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
+            Text(tr("Menu pause › Retour arrière, ou Espace maintenu (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) : la partie recule d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
 #endif
         }
     }

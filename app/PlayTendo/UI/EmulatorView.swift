@@ -86,7 +86,10 @@ struct EmulatorView: View {
             // Manette : la gâchette L2 recule sur les consoles qui n'en ont pas (NES, Super Nintendo, Game Boy, GBA).
             let rewindTrigger = session.rewindAvailable && [.nes, .snes, .gb, .gbc, .gba].contains(game.system)
             gamepad.onButton = { [session] button, pressed in
-                if rewindTrigger && button == .l2 {
+                // Retour en arrière lancé du menu pause : un bouton l'arrête (sans aller au jeu).
+                if session.isRewindingFromMenu {
+                    if pressed { session.stopRewind() }
+                } else if rewindTrigger && button == .l2 {
                     session.setRewinding(pressed)
                 } else {
                     session.setButton(button, pressed: pressed)
@@ -140,7 +143,8 @@ struct EmulatorView: View {
                           onTouchDown: { gamepad.deactivate() })
 #else
             MacInput(layout: layout, scheme: controls, session: session,
-                     onMenu: { showingMenu ? closeMenu() : openMenu() })
+                     onMenu: { showingMenu ? closeMenu() : openMenu() },
+                     onKeyboard: { session.stopRewind() })
 #endif
             if session.state == .loading {
                 // Étape longue (installation PS Vita, reprise d'une partie) : fond noir, le démarrage de la console
@@ -182,6 +186,9 @@ struct EmulatorView: View {
                     withAnimation(.easeOut(duration: 0.3)) { loadingIsSlow = true }
                 }
             }
+            if session.isRewindingFromMenu && !showingMenu {
+                rewindOverlay(bounds: bounds, layout: layout)
+            }
             if showingMenu {
                 pauseMenu(landscape: landscape)
                     .transition(.opacity)
@@ -193,6 +200,40 @@ struct EmulatorView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: showingMenu)
         .animation(.easeInOut(duration: 0.2), value: session.toast)
+    }
+
+    /// Retour en arrière lancé depuis le menu pause : bandeau en haut ; la partie recule jusqu'à ce qu'on touche
+    /// l'écran (ou un bouton de la manette, une touche du clavier).
+    private func rewindOverlay(bounds: CGRect, layout: ControlLayout) -> some View {
+        ZStack {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { session.stopRewind() }
+            VStack(spacing: 4) {
+                Label(session.rewindReachedStart ? tr("Impossible de reculer plus loin") : tr("Retour en arrière"),
+                      systemImage: "backward.fill")
+                    .font(Neon.mono(13, weight: .semibold))
+                    .foregroundStyle(Neon.cyan)
+                Text(rewindHint)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Neon.text)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Chamfer(cut: 8).fill(Neon.panel.opacity(0.95)))
+            .overlay(Chamfer(cut: 8).stroke(Neon.cyan.opacity(0.7), lineWidth: 1))
+            .neonGlow(Neon.cyan, radius: 6)
+            .allowsHitTesting(false)
+            .position(x: bounds.midX, y: max(layout.gameRect.minY, 20) + 40)
+        }
+    }
+
+    private var rewindHint: String {
+#if os(macOS)
+        tr("Clique ou appuie sur une touche pour reprendre")
+#else
+        gamepad.isConnected ? tr("Appuie sur un bouton pour reprendre") : tr("Touche l'écran pour reprendre")
+#endif
     }
 
     /// Place des écrans et des boutons selon l'orientation, la manette et les réglages.
@@ -290,6 +331,7 @@ struct EmulatorView: View {
 
     private func openMenu() {
         guard !showingMenu, session.state == .running else { return }
+        session.stopRewind()
         session.clearInput()
         session.pause()
         showingMenu = true
@@ -614,7 +656,8 @@ private struct PauseMenu: View {
 
     // MARK: Contenus (communs au portrait et aux onglets)
 
-    /// Sauvegarder, Charger, Avance rapide : à la même place pour toutes les consoles (éteints sur PS Vita).
+    /// Sauvegarder, Charger, Retour arrière, Avance rapide : à la même place pour toutes les consoles (éteints quand le
+    /// moteur ne les a pas : PS Vita ; retour en arrière seulement NES, SNES, Game Boy, GBA, N64 et PS1).
     @ViewBuilder private var quickActions: some View {
         HStack(spacing: 8) {
             QuickButton(title: tr("Sauvegarder"), icon: "square.and.arrow.down", enabled: hasEngineExtras) {
@@ -623,6 +666,10 @@ private struct PauseMenu: View {
             }
             QuickButton(title: tr("Charger"), icon: "clock.arrow.circlepath", enabled: hasEngineExtras && session.hasSaveState) {
                 session.loadState()
+                onResume()
+            }
+            QuickButton(title: tr("Retour arrière"), icon: "backward.fill", enabled: session.rewindAvailable) {
+                session.startRewind()
                 onResume()
             }
             QuickButton(title: session.isFastForwarding ? tr("Vitesse normale") : tr("Avance rapide ×3"),
@@ -941,7 +988,7 @@ private struct TabRow: View {
     }
 }
 
-/// Sauvegarder, Charger, Avance rapide : trois petits boutons côte à côte, à la même place sur toutes les consoles
+/// Sauvegarder, Charger, Retour arrière, Avance rapide : quatre petits boutons côte à côte, à la même place sur toutes les consoles
 /// (éteints quand le moteur ne les a pas).
 private struct QuickButton: View {
     let title: String
@@ -954,15 +1001,16 @@ private struct QuickButton: View {
             VStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 17, weight: .semibold))
+                // Un seul mot (« Sauvegarder ») : réduit plutôt que coupé en deux lignes.
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .lineLimit(title.contains(" ") ? 2 : 1)
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(Neon.text)
             .frame(maxWidth: .infinity, minHeight: 58)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 3)
             .background(Chamfer(cut: 9).fill(Neon.text.opacity(0.07)))
             .overlay(Chamfer(cut: 9).stroke(Neon.text.opacity(0.25), lineWidth: 1))
         }

@@ -31,6 +31,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var hasSaveState: Bool
     @Published private(set) var diskInfo: DiskInfo?
     @Published private(set) var isFastForwarding = false
+    /// Retour en arrière lancé depuis le menu pause : la partie recule jusqu'à ce qu'on touche l'écran.
+    @Published private(set) var isRewindingFromMenu = false
+    /// Plus de photo à reprendre : la partie reste à la plus ancienne.
+    @Published private(set) var rewindReachedStart = false
     @Published var toast: String?
     /// Étape longue en cours pendant le chargement (installation du firmware ou d'un jeu PS Vita), montrée sous la roue.
     @Published private(set) var loadingDetail: String?
@@ -67,7 +71,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     // Uniquement manipulés sur le thread d'émulation.
     private var fastForward = false
-    /// Retour en arrière tenu (bouton ⏪, gâchette L2, Espace sur Mac), sous `condition`.
+    /// Retour en arrière demandé (menu pause, gâchette L2, Espace sur Mac), sous `condition`.
     private var rewindRequested = false
     /// Partie en train de reculer : son coupé (lu par le moteur, sur son thread).
     private var rewindingNow = false
@@ -312,14 +316,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     /// Consoles qui peuvent reculer : sauvegarde rapide petite et rapide (pas la DS, la 3DS, la PSP, ni les moteurs
-    /// autonomes PS2, GameCube, Wii, PS Vita). Sur iPhone, on ne recule qu'avec la gâchette L2 d'une manette : pas la
-    /// N64 ni la PS1, qui s'en servent (inutile d'y garder des photos).
+    /// autonomes PS2, GameCube, Wii, PS Vita).
     static func supportsRewind(_ system: GameSystem) -> Bool {
-#if os(iOS)
-        [.nes, .snes, .gb, .gbc, .gba].contains(system)
-#else
         [.nes, .snes, .gb, .gbc, .gba, .n64, .psx].contains(system)
-#endif
     }
 
     /// Retour en arrière possible pour ce jeu (console qui sait, réglage activé).
@@ -331,6 +330,20 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         rewindRequested = on
         condition.signal()
         condition.unlock()
+    }
+
+    /// Menu pause › Retour arrière : la partie recule (une fois le menu fermé) jusqu'à `stopRewind`.
+    func startRewind() {
+        rewindReachedStart = false
+        isRewindingFromMenu = true
+        setRewinding(true)
+    }
+
+    /// Fin du retour en arrière lancé depuis le menu : la partie reprend de là.
+    func stopRewind() {
+        guard isRewindingFromMenu else { return }
+        isRewindingFromMenu = false
+        setRewinding(false)
     }
 
     func toggleFastForward() {
@@ -526,6 +539,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var rewindBuffer = RewindBuffer()
         var rewindFrame = 0
         var rewindHold = 0
+        var rewindExhausted = false
         var clockReset = false
         var wasPaused = false
         // Mesure de vitesse (journal toutes les 10 s si le jeu n'arrive pas à suivre : son haché, ralentis).
@@ -582,10 +596,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 } else if let state = rewindBuffer.popLast() {
                     if core.loadState(state) { core.runFrame() }
                     rewindHold = max(0, rewindBuffer.interval / 2 - 1)
+                } else if !rewindExhausted {
+                    // Plus loin impossible : la partie reste à la plus ancienne photo (annoncé à l'écran).
+                    rewindExhausted = true
+                    DispatchQueue.main.async { self.rewindReachedStart = true }
                 }
             } else {
                 rewindingNow = false
                 rewindHold = 0
+                rewindExhausted = false
                 let steps = fastForward ? 3 : 1
                 for _ in 0..<steps { core.runFrame() }
                 // Photo de la partie pour pouvoir reculer (toutes les `interval` images).
