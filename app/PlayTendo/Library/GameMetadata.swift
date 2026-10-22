@@ -31,6 +31,8 @@ final class GameMetadata: ObservableObject {
     private static let lastPlayedKey = "dernieresParties"
     private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
     private static let screenScraperTriedKey = "jaquettesScreenScraperEssayees"
+    /// Jaquettes déjà téléchargées mises en boîte 3D (plates) ou débarrassées de leurs bords transparents (2026-10-22).
+    private static let boxesKey = "jaquettesEnBoites3D"
 #if PLAYTENDO_VITA
     /// Jaquettes PS Vita cherchées (2026-10-12) : avant, l'icône du jeu était rangée comme jaquette, sous le titre de
     /// la fiche (« GRAVITY RUSH »). Effacées une fois ; les jeux sont reconnus de nouveau sous leur nouveau nom.
@@ -224,6 +226,7 @@ final class GameMetadata: ObservableObject {
     // MARK: Jaquettes
 
     private func downloadCovers(for games: [Game]) async {
+        await convertExistingCovers(for: games)
         let week: Double = 7 * 24 * 3600
         let now = Date().timeIntervalSince1970
         // Source nouvelle (SteamGridDB, puis ScreenScraper) : les jeux restés sans jaquette sont recherchés de
@@ -300,8 +303,9 @@ final class GameMetadata: ObservableObject {
         var outcome = CoverOutcome(result: .missing)
         if ScreenScraper.isAvailable {
             switch await ScreenScraper.cover(officialName: name, system: system, file: file) {
-            case .found(let data, let description):
-                guard write(data, name: name, system: system) else { return CoverOutcome(result: .offline) }
+            case .found(let data, let description, let is3D):
+                let box = is3D ? BoxArt.trimmed(data) : BoxArt.make(from: data, system: system, title: spineTitle(name))
+                guard write(box ?? data, name: name, system: system) else { return CoverOutcome(result: .offline) }
                 PTLogLine("Jaquette téléchargée sur ScreenScraper (\(description)) : \(name)")
                 return CoverOutcome(result: .saved, screenScraperAnswered: true)
             case .missing:
@@ -323,7 +327,8 @@ final class GameMetadata: ObservableObject {
                 guard let http = response as? HTTPURLResponse else { outcome.result = .offline; return outcome }
                 if http.statusCode == 404 { continue }
                 guard http.statusCode == 200, ImageCoding.isImage(data),
-                      write(data, name: name, system: system) else { outcome.result = .offline; return outcome }
+                      write(boxed(data, name: name, system: system), name: name, system: system)
+                else { outcome.result = .offline; return outcome }
                 PTLogLine("Jaquette téléchargée chez libretro : \(candidate)")
                 outcome.result = .saved
                 return outcome
@@ -335,7 +340,8 @@ final class GameMetadata: ObservableObject {
         // Source de secours, si l'app a été compilée avec la clé SteamGridDB.
         switch await SteamGridDB.cover(for: name) {
         case .found(let data, let gameName):
-            guard write(data, name: name, system: system) else { outcome.result = .offline; return outcome }
+            guard write(boxed(data, name: name, system: system), name: name, system: system)
+            else { outcome.result = .offline; return outcome }
             PTLogLine("Jaquette téléchargée sur SteamGridDB (« \(gameName) ») : \(name)")
             outcome.result = .saved
             return outcome
@@ -349,6 +355,45 @@ final class GameMetadata: ObservableObject {
             + (SteamGridDB.isAvailable ? ["SteamGridDB"] : [])
         PTLogLine("Pas de jaquette (\(sources.joined(separator: ", "))) pour : \(name)")
         return outcome
+    }
+
+    /// Jaquette plate mise en boîte 3D (BoxArt), comme celles de ScreenScraper.
+    nonisolated private static func boxed(_ data: Data, name: String, system: GameSystem) -> Data {
+        BoxArt.make(from: data, system: system, title: spineTitle(name)) ?? data
+    }
+
+    /// Titre écrit sur la tranche : sans région ni version (« Legend of Zelda, The - … » → « The Legend of Zelda … »).
+    nonisolated private static func spineTitle(_ name: String) -> String { SteamGridDB.searchTitle(name) }
+
+    /// Une fois : les jaquettes déjà là deviennent des boîtes 3D (plates) ou perdent leurs bords transparents (boîtes de
+    /// ScreenScraper), pour que toutes celles d'une console aient la même forme.
+    private func convertExistingCovers(for games: [Game]) async {
+        guard !UserDefaults.standard.bool(forKey: Self.boxesKey) else { return }
+        // Tous les fichiers du dossier Jaquettes (pas seulement les jeux de cette mise à jour) ; les icônes PS Vita,
+        // rangées dans un sous-dossier, restent telles quelles.
+        let (converted, total) = await Task.detached(priority: .utility) { () -> (Int, Int) in
+            var converted = 0
+            var total = 0
+            for system in GameSystem.allCases {
+                let folder = Self.coverFolder(for: system)
+                let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+                for file in files where file.pathExtension == "png" {
+                    total += 1
+                    guard let data = try? Data(contentsOf: file) else { continue }
+                    let title = Self.spineTitle(file.deletingPathExtension().lastPathComponent)
+                    let box = BoxArt.isFlat(data) ? BoxArt.make(from: data, system: system, title: title)
+                                                  : BoxArt.trimmed(data)
+                    if let box, (try? box.write(to: file, options: .atomic)) != nil {
+                        converted += 1
+                        CoverImages.forget(file)
+                    }
+                }
+            }
+            return (converted, total)
+        }.value
+        for game in games { coverRevisions[game.key, default: 0] += 1 }
+        UserDefaults.standard.set(true, forKey: Self.boxesKey)
+        PTLogLine("Jaquettes mises en boîte 3D : \(converted) sur \(total)")
     }
 
     nonisolated private static func write(_ data: Data, name: String, system: GameSystem) -> Bool {

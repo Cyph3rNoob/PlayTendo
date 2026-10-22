@@ -7,8 +7,8 @@ import Foundation
 /// 10 000 demandes et 1 000 jeux introuvables par jour, téléchargements lents (images demandées réduites).
 enum ScreenScraper {
     enum Result: Sendable {
-        /// Image PNG prête à enregistrer, et ce qu'elle est (« boîte 3D », région).
-        case found(Data, description: String)
+        /// Image PNG, ce qu'elle est (« boîte 3D », région), et si elle est déjà en 3D.
+        case found(Data, description: String, is3D: Bool)
         /// ScreenScraper a répondu : il n'a pas ce jeu, ou pas de boîte pour lui.
         case missing
         /// Pas de réponse utilisable (réseau, serveur fermé, limite du jour) : on réessaiera plus tard.
@@ -100,8 +100,8 @@ enum ScreenScraper {
         guard let url = components.url else { return .missing }
         switch await download(url) {
         case .ok(let data):
-            let kind = media.type == "box-3D" ? "boîte 3D" : "boîte 2D"
-            return .found(data, description: "\(kind), \(media.region ?? "?")")
+            let is3D = media.type == "box-3D"
+            return .found(data, description: "\(is3D ? "boîte 3D" : "boîte 2D"), \(media.region ?? "?")", is3D: is3D)
         case .missing: return .missing
         case .offline: return .offline
         }

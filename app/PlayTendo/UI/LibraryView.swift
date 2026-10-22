@@ -500,9 +500,10 @@ private struct GameCard: View {
     }
 }
 
-/// Jaquette du jeu seule, sans cadre (les boîtes 3D de ScreenScraper ont un fond transparent), à sa propre forme :
-/// une boîte couchée (N64, Super Nintendo européenne) prend moins de hauteur qu'une boîte debout, sans vide au-dessus.
-/// Sans jaquette : une jaquette générée, en portrait, dans un cadre aux couleurs de la console.
+/// Jaquette du jeu seule, sans cadre (boîte 3D sur fond transparent), dans une place à la forme des boîtes de sa
+/// console (BoxArt.aspect : couchée pour la N64, haute et étroite pour la PS Vita…) : toutes les boîtes d'une rangée ont
+/// la même hauteur et reposent sur la même ligne. Sans jaquette : une jaquette générée, dans un cadre aux couleurs de
+/// la console.
 private struct CoverArt: View {
     @EnvironmentObject private var metadata: GameMetadata
     let game: Game
@@ -514,20 +515,24 @@ private struct CoverArt: View {
         let file = metadata.coverFile(for: game)
         // Déjà en mémoire : affichée tout de suite, la carte garde sa taille en défilant.
         let shown = cover ?? file.flatMap { CoverImages.cached($0) }
+        let aspect = BoxArt.aspect(for: game.system)
         Group {
             if let shown {
-                Image(platformImage: shown)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .shadow(color: .black.opacity(0.45), radius: 6, y: 4)
-                    .frame(maxWidth: .infinity)
+                Color.clear
+                    .aspectRatio(aspect, contentMode: .fit)
+                    .overlay(alignment: .bottom) {
+                        Image(platformImage: shown)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .shadow(color: .black.opacity(0.45), radius: 6, y: 4)
+                    }
                     .transition(.opacity)
             } else if file != nil {
-                // Jaquette en cours de lecture : place en portrait, vide.
-                Color.clear.aspectRatio(3 / 4, contentMode: .fit)
+                // Jaquette en cours de lecture : sa place, vide.
+                Color.clear.aspectRatio(aspect, contentMode: .fit)
             } else {
                 GeneratedCover(system: game.system, title: title)
-                    .aspectRatio(3 / 4, contentMode: .fit)
+                    .aspectRatio(aspect, contentMode: .fit)
                     .overlay(alignment: .topLeading) {
                         SystemBadge(system: game.system, size: 9).padding(9)
                     }
