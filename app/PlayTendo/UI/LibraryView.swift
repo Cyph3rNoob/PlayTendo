@@ -14,8 +14,6 @@ struct LibraryView: View {
     @State private var playing: Game?
     @State private var search = ""
     @State private var filter: GameSystem?
-    /// Largeur des rangées de jaquettes (taille des cartes des boîtes couchées).
-    @State private var gridWidth: CGFloat = 0
     @State private var gameToDelete: Game?
     /// Langue changée dans les Réglages : le contenu de la bibliothèque est refait aussitôt dans la nouvelle langue.
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
@@ -364,17 +362,6 @@ struct LibraryView: View {
 
     // MARK: Jeux
 
-    /// Colonnes d'une console. Boîtes couchées (N64, Super Nintendo) : une fois et demie la largeur d'une carte
-    /// ordinaire (calculée comme la grille ordinaire la donnerait), sinon elles paraissent petites.
-    private func gridColumn(for system: GameSystem) -> GridItem {
-        let ordinary = GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14, alignment: .top)
-        guard BoxArt.aspect(for: system) > 1, gridWidth > 0 else { return ordinary }
-        let columns = max(1, ((gridWidth + 14) / (150 + 14)).rounded(.down))
-        let card = min(220, (gridWidth - 14 * (columns - 1)) / columns)
-        let wide = min(gridWidth, (card * 1.5).rounded())
-        return GridItem(.adaptive(minimum: wide, maximum: wide), spacing: 14, alignment: .top)
-    }
-
     private var sections: some View {
         LazyVStack(alignment: .leading, spacing: 28) {
             ForEach(filter.map { [$0] } ?? GameSystem.libraryGroups) { system in
@@ -382,7 +369,7 @@ struct LibraryView: View {
                 if !games.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         NeonSectionTitle(text: system.libraryTitle, color: system.neon, count: games.count)
-                        LazyVGrid(columns: [gridColumn(for: system)],
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14, alignment: .top)],
                                   spacing: 20) {
                             ForEach(games) { game in
                                 Button { play(game) } label: { GameCard(game: game) }
@@ -414,7 +401,6 @@ struct LibraryView: View {
                     .padding(.top, 30)
             }
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
     }
 
     private var sectionsAreEmpty: Bool {
