@@ -8,6 +8,9 @@ import SwiftUI
 struct GameScreen {
     let frameBuffer: FrameBuffer
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
+    /// Jeu en pause : l'écran n'est plus redessiné 60 fois par seconde (il garde la dernière image), seulement quand
+    /// un réglage change.
+    var paused = false
     /// Lissage des bords (FXAA) avant l'agrandissement (PS1).
     var smoothing = false
     /// Consoles 2D : mode du filtre (FilterSettings.shaderMode) ; 0 = pixels nets.
@@ -34,22 +37,25 @@ struct GameScreen {
         return view
     }
 
-    private func update(_ renderer: GameRenderer) {
+    private func update(_ view: MTKView, _ renderer: GameRenderer) {
         renderer.source = source
         renderer.smoothing = smoothing
         renderer.filter = filter
+        view.isPaused = paused
+        // En pause, une image redessinée à la demande si un réglage a changé (rien n'est fait sinon).
+        if paused { view.draw() }
     }
 }
 
 #if os(iOS)
 extension GameScreen: UIViewRepresentable {
     func makeUIView(context: Context) -> MTKView { makeView(context.coordinator) }
-    func updateUIView(_ view: MTKView, context: Context) { update(context.coordinator) }
+    func updateUIView(_ view: MTKView, context: Context) { update(view, context.coordinator) }
 }
 #else
 extension GameScreen: NSViewRepresentable {
     func makeNSView(context: Context) -> MTKView { makeView(context.coordinator) }
-    func updateNSView(_ view: MTKView, context: Context) { update(context.coordinator) }
+    func updateNSView(_ view: MTKView, context: Context) { update(view, context.coordinator) }
 }
 
 /// Vue Metal qui laisse passer la souris à ce qui est dessous.

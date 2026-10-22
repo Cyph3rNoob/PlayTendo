@@ -215,7 +215,7 @@ struct EmulatorView: View {
             }
         } else {
             ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
-                GameScreen(frameBuffer: session.frameBuffer, source: screen.source,
+                GameScreen(frameBuffer: session.frameBuffer, source: screen.source, paused: session.state == .paused,
                            smoothing: game.system == .psx && ps1Smoothing == PS1Settings.Smoothing.on.rawValue,
                            filter: FilterSettings.systems.contains(game.system)
                                ? FilterSettings.shaderMode(FilterSettings.Filter(rawValue: screenFilter) ?? .sharp,
@@ -285,10 +285,13 @@ struct EmulatorView: View {
         session.clearInput()
         session.pause()
         showingMenu = true
+        // Menu pause : l'écran peut s'éteindre comme d'habitude (il restait allumé tant que la partie était ouverte).
+        ScreenAwake.release(.playing)
     }
 
     private func closeMenu() {
         showingMenu = false
+        ScreenAwake.hold(.playing)
         session.resume()
     }
 

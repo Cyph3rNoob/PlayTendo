@@ -137,7 +137,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         pauseRequested = true
         condition.unlock()
         state = .paused
-        perform { [self] in persistSaveRAM() }
+        perform { [self] in
+            persistSaveRAM()
+            audio?.pause()
+        }
     }
 
     func resume() {
@@ -147,6 +150,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         condition.signal()
         condition.unlock()
         state = .running
+        perform { [self] in audio?.start() }
     }
 
     func stop(then completion: @escaping () -> Void) {

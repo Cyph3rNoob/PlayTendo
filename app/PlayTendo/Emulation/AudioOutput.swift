@@ -66,6 +66,11 @@ final class AudioOutput {
         }
     }
 
+    /// Jeu en pause : le son est coupé (il ne tourne plus à vide), repris par `start`.
+    func pause() {
+        engine.pause()
+    }
+
     func stop() {
         engine.stop()
     }
