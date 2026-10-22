@@ -45,14 +45,24 @@ Documents.
 
 Il faut un Mac avec puce Apple et Xcode.
 
+Les moteurs compilés ne sont pas dans le dépôt (trop lourds) : on les refait une fois, puis on compile l'app.
+
 ```bash
-zsh scripts/fetch_sources.sh   # télécharge les moteurs aux versions stables
-zsh scripts/build_app.sh       # app iPhone → PlayTendo.ipa
-zsh scripts/build_mac.sh       # app Mac → PlayTendo-Mac/PlayTendo.dmg
+zsh scripts/fetch_sources.sh        # télécharge les moteurs aux versions stables
+zsh scripts/build_libarchive.sh     # archives .zip/.7z/.rar (iPhone, simulateur, Mac)
+zsh scripts/build_cores.sh          # moteurs libretro pour l'iPhone → cores/ios
+zsh scripts/make_sim_cores.sh       # les mêmes pour le simulateur → cores/sim
+zsh scripts/build_cores_macos.sh    # moteurs libretro pour le Mac → cores/mac
+zsh scripts/build_azahar.sh         # 3DS (+ « mac » pour le Mac)
+zsh scripts/build_ps2.sh ios        # PS2 (aussi « sim », « mac »)
+zsh scripts/build_dolphin.sh ios    # GameCube/Wii (aussi « sim », « mac »)
+zsh scripts/build_vita3k.sh         # PS Vita (+ « mac » pour le Mac)
+zsh scripts/build_app.sh            # app iPhone → PlayTendo.ipa
+zsh scripts/build_mac.sh            # app Mac → PlayTendo-Mac/PlayTendo.dmg
 ```
 
-Les moteurs déjà compilés sont dans `cores/`. Pour en refaire un : `scripts/build_cores.sh` (moteurs libretro),
-`build_ps2.sh`, `build_dolphin.sh`, `build_azahar.sh`, `build_vita3k.sh` (iPhone) et `build_cores_macos.sh` (Mac).
+La première fois, les moteurs PS2, GameCube/Wii et PS Vita prennent 20 à 30 minutes chacun ; ensuite, seul ce qui
+change est recompilé.
 
 Les clés des services de jaquettes vont dans `secrets/` : `screenscraper_devid` et `screenscraper_devpassword`
 (ScreenScraper, boîtes 3D, source principale), `steamgriddb.key` (SteamGridDB, secours). Ce dossier n'est jamais
@@ -63,7 +73,7 @@ envoyé sur GitHub ; les clés sont masquées dans l'app à la compilation.
 | Dossier | Contenu |
 |---|---|
 | `app/` | Projet Xcode et code de l'app (Swift, Objective-C) : un seul projet pour iPhone et Mac |
-| `cores/` | Moteurs compilés : `ios/`, `sim/` (simulateur), `mac/`, et leurs fichiers (`assets/`) |
+| `cores/` | Moteurs compilés `ios/`, `sim/` (simulateur), `mac/` (fabriqués par les scripts, hors du dépôt) et leurs fichiers (`assets/`) |
 | `ps2/`, `dolphin/`, `vita/`, `ds/` | Code qui relie PlayTendo aux moteurs PS2, GameCube/Wii, PS Vita et DS |
 | `libs/` | libarchive (ouverture des .zip, .7z, .rar) |
 | `scripts/` | Compilation, retouches des moteurs (`patch_*.py`) et bancs d'essai (`test/`) |

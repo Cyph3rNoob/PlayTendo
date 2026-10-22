@@ -119,8 +119,20 @@ final class GameLibrary: ObservableObject {
         pattern: #"\s*[\(\[](?:disc|disk|disque|cd)\s*(\d+)(?:\s*(?:of|sur|/)\s*\d+)?[\)\]]"#,
         options: [.caseInsensitive])
 
-    /// Jeux en plusieurs disques rangés dans le même dossier (« Metal Gear Solid - The Twin Snakes (Europe) (Disc 1) »
-    /// et « (Disc 2) ») : un seul jeu, lancé sur son premier disque, les autres choisis depuis le menu pause.
+    /// Dossier d'un disque, sans son numéro : chaque archive importée a son propre dossier (« Resident Evil 2 (France)
+    /// (Disc 1) », « … (Disc 2) »), les disques d'un même jeu se retrouvent ainsi ensemble.
+    nonisolated private static func discFolderKey(_ url: URL) -> String {
+        let folder = url.deletingLastPathComponent().standardizedFileURL
+        let name = folder.lastPathComponent
+        let range = NSRange(name.startIndex..., in: name)
+        guard discTag.firstMatch(in: name, range: range) != nil else { return folder.path }
+        let bare = discTag.stringByReplacingMatches(in: name, range: range, withTemplate: "").lowercased()
+        return folder.deletingLastPathComponent().path + "/" + bare
+    }
+
+    /// Jeux en plusieurs disques (« Metal Gear Solid - The Twin Snakes (Europe) (Disc 1) » et « (Disc 2) »), rangés dans le
+    /// même dossier ou dans des dossiers qui ne diffèrent que par le disque : un seul jeu, lancé sur son premier disque,
+    /// les autres choisis depuis le menu pause.
     /// GameCube : le moteur passe aussi tout seul au disque suivant quand le jeu le demande.
     nonisolated private static func groupDiscs(_ games: [Game]) -> [Game] {
         var result: [Game] = []
@@ -136,7 +148,7 @@ final class GameLibrary: ObservableObject {
                 continue
             }
             let base = discTag.stringByReplacingMatches(in: name, range: range, withTemplate: "").lowercased()
-            let key = "\(game.system.rawValue)|\(game.url.deletingLastPathComponent().standardizedFileURL.path)|\(base)"
+            let key = "\(game.system.rawValue)|\(discFolderKey(game.url))|\(base)"
             groups[key, default: []].append((number, game))
         }
         for discs in groups.values {
@@ -860,8 +872,8 @@ final class GameLibrary: ObservableObject {
         for file in Self.files(of: game) {
             try? FileManager.default.removeItem(at: file)
         }
-        // Dossier du jeu devenu vide (jeu tiré d'une archive, jeu PS Vita extrait d'une console…).
-        Self.removeEmptyFolders(containing: game.url)
+        // Dossiers du jeu devenus vides (jeu tiré d'une archive, un dossier par disque, jeu PS Vita extrait…).
+        for file in [game.url] + game.discs { Self.removeEmptyFolders(containing: file) }
         games.removeAll { $0.id == game.id }
     }
 

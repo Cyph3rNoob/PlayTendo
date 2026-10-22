@@ -20,3 +20,11 @@ cores/ios/VitaCore.framework/
 cores/mac/VitaCore.framework/
 # Sons de démarrage proposés (WAV) : refaits par scripts/make_boot_sounds.py
 art/sons-proposes/
+# Moteurs compilés et bibliothèques fabriquées (refaits par scripts/build_*.sh, voir README) : hors du dépôt, chaque
+# recompilation y ajoutait une copie complète de plusieurs dizaines de Mo.
+cores/ios/
+cores/sim/
+cores/mac/
+libs/libarchive/ios/
+libs/libarchive/sim/
+libs/libarchive/mac/
