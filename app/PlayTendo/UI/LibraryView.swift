@@ -15,6 +15,13 @@ struct LibraryView: View {
     @State private var search = ""
     @State private var filter: GameSystem?
     @State private var gameToDelete: Game?
+    /// Fiche ouverte (toucher une boîte) ; ce qu'elle demande une fois refermée : jouer ou supprimer.
+    @State private var detailGame: Game?
+    @State private var afterDetail: DetailAction?
+
+    private enum DetailAction {
+        case play(Game), delete(Game)
+    }
     /// Langue changée dans les Réglages : le contenu de la bibliothèque est refait aussitôt dans la nouvelle langue.
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
     /// Thème changé dans les Réglages : même chose.
@@ -99,6 +106,20 @@ struct LibraryView: View {
 #endif
         .sheet(isPresented: $showingAbout) {
             AboutView()
+        }
+        .sheet(item: $detailGame, onDismiss: {
+            // Jeu lancé (ou suppression demandée) une fois la fiche refermée : deux fenêtres ne s'ouvrent pas à la fois.
+            switch afterDetail {
+            case .play(let game): play(game)
+            case .delete(let game): gameToDelete = game
+            case nil: break
+            }
+            afterDetail = nil
+        }) { game in
+            GameDetailView(game: game,
+                           onPlay: { afterDetail = .play(game) },
+                           onDelete: { afterDetail = .delete(game) })
+                .environmentObject(metadata)
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -372,7 +393,7 @@ struct LibraryView: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14, alignment: .top)],
                                   spacing: 20) {
                             ForEach(games) { game in
-                                Button { play(game) } label: { GameCard(game: game) }
+                                Button { detailGame = game } label: { GameCard(game: game) }
                                     .buttonStyle(CardPressStyle())
                                     .contextMenu {
 #if PLAYTENDO_VITA
@@ -556,7 +577,7 @@ private struct CoverArt: View {
 }
 
 /// Jaquette de remplacement : dégradé de la console, grille et nom en Orbitron.
-private struct GeneratedCover: View {
+struct GeneratedCover: View {
     let system: GameSystem
     let title: String
 

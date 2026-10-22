@@ -281,6 +281,14 @@ enum Paths {
         return folder.appendingPathComponent(fileName(for: game) + ".state")
     }
 
+    /// Reprise automatique : partie gardée en quittant le jeu, reprise au lancement suivant (à part de la sauvegarde
+    /// rapide du menu pause, qu'elle n'écrase jamais).
+    static func resumeFile(for game: Game) -> URL {
+        let folder = states.appendingPathComponent(game.system.folderName, isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.appendingPathComponent(fileName(for: game) + ".reprise.state")
+    }
+
     /// « Lisez-moi.txt » à la racine de Documents (« Read Me.txt » quand l'app est en anglais : l'autre est retiré),
     /// réécrit s'il a changé. Appelé au lancement et quand la langue change.
     static func writeReadme() {

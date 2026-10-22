@@ -20,6 +20,7 @@ final class GameMetadata: ObservableObject {
     /// Change quand la jaquette d'un jeu arrive (clé du jeu → compteur) : seule sa carte la recharge.
     @Published private(set) var coverRevisions: [String: Int] = [:]
     @Published private(set) var lastPlayed: [String: Double] = [:]
+    @Published private(set) var details: [String: GameDetails] = [:]
 
     private var running = false
     private var queued: [Game]?
@@ -28,6 +29,9 @@ final class GameMetadata: ObservableObject {
 
     private static let infosFile = Paths.support
         .appendingPathComponent("Bibliotheque/infos.json")
+    /// Fiches des jeux (ScreenScraper), par console et nom officiel : partagées par les fichiers du même jeu.
+    private static let detailsFile = Paths.support
+        .appendingPathComponent("Bibliotheque/fiches.json")
     private static let lastPlayedKey = "dernieresParties"
     private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
     private static let screenScraperTriedKey = "jaquettesScreenScraperEssayees"
@@ -51,7 +55,48 @@ final class GameMetadata: ObservableObject {
         }
 #endif
         lastPlayed = UserDefaults.standard.dictionary(forKey: Self.lastPlayedKey) as? [String: Double] ?? [:]
+        if let data = try? Data(contentsOf: Self.detailsFile),
+           let saved = try? JSONDecoder().decode([String: GameDetails].self, from: data) {
+            details = saved
+        }
         forgetMissingGames()
+    }
+
+    // MARK: Fiches
+
+    private static func detailsKey(name: String, system: GameSystem) -> String { "\(system.rawValue)/\(name)" }
+
+    /// Fiche du jeu, si elle est déjà connue.
+    func details(for game: Game) -> GameDetails? {
+        guard let name = officialName(for: game) else { return nil }
+        return details[Self.detailsKey(name: name, system: game.system)]
+    }
+
+    enum DetailsState { case ready, missing, offline }
+
+    /// Fiche du jeu : déjà là, ou demandée à ScreenScraper (fiche ouverte avant que sa jaquette vienne de lui).
+    func loadDetails(for game: Game) async -> DetailsState {
+        if details(for: game) != nil { return .ready }
+        guard let name = officialName(for: game), ScreenScraper.isAvailable else { return .missing }
+        let system = game.system
+        let file = game.url
+        let result = await Task.detached(priority: .userInitiated) {
+            await ScreenScraper.details(officialName: name, system: system, file: file)
+        }.value
+        switch result {
+        case .found(let found):
+            storeDetails(found, name: name, system: system)
+            return .ready
+        case .missing: return .missing
+        case .offline: return .offline
+        }
+    }
+
+    private func storeDetails(_ found: GameDetails, name: String, system: GameSystem) {
+        details[Self.detailsKey(name: name, system: system)] = found
+        let url = Self.detailsFile
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(details).write(to: url, options: .atomic)
     }
 
     /// Les fiches et dates de partie des jeux qui ne sont plus dans Jeux (supprimés, déplacés, renommés) sont oubliées.
@@ -270,6 +315,7 @@ final class GameMetadata: ObservableObject {
             for (index, outcome) in results {
                 let item = wanted[index]
                 if outcome.screenScraperAnswered { infos[item.key]?.screenScraperTried = true }
+                if let found = outcome.details { storeDetails(found, name: item.name, system: item.system) }
                 switch outcome.result {
                 case .saved:
                     CoverImages.forget(Self.coverURL(name: item.name, system: item.system))
@@ -293,6 +339,8 @@ final class GameMetadata: ObservableObject {
         var result: CoverResult
         /// ScreenScraper a répondu (boîte trouvée ou jeu introuvable chez lui) : inutile de le redemander.
         var screenScraperAnswered = false
+        /// Fiche du jeu, venue avec la réponse de ScreenScraper.
+        var details: GameDetails?
     }
 
     /// Cherche la jaquette : boîte 3D chez ScreenScraper d'abord ; sinon chez libretro sous le nom exact puis sous les
@@ -303,13 +351,14 @@ final class GameMetadata: ObservableObject {
         var outcome = CoverOutcome(result: .missing)
         if ScreenScraper.isAvailable {
             switch await ScreenScraper.cover(officialName: name, system: system, file: file) {
-            case .found(let data, let description, let is3D):
+            case .found(let data, let description, let is3D, let details):
                 let box = is3D ? BoxArt.trimmed(data) : BoxArt.make(from: data, system: system, title: spineTitle(name))
                 guard write(box ?? data, name: name, system: system) else { return CoverOutcome(result: .offline) }
                 PTLogLine("Jaquette téléchargée sur ScreenScraper (\(description)) : \(name)")
-                return CoverOutcome(result: .saved, screenScraperAnswered: true)
-            case .missing:
+                return CoverOutcome(result: .saved, screenScraperAnswered: true, details: details)
+            case .missing(let details):
                 outcome.screenScraperAnswered = true
+                outcome.details = details
                 if onlyScreenScraper { PTLogLine("Pas de boîte chez ScreenScraper, jaquette gardée : \(name)") }
             case .offline:
                 if onlyScreenScraper { return CoverOutcome(result: .offline) }

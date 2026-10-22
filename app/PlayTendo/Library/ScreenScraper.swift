@@ -7,11 +7,18 @@ import Foundation
 /// 10 000 demandes et 1 000 jeux introuvables par jour, téléchargements lents (images demandées réduites).
 enum ScreenScraper {
     enum Result: Sendable {
-        /// Image PNG, ce qu'elle est (« boîte 3D », région), et si elle est déjà en 3D.
-        case found(Data, description: String, is3D: Bool)
-        /// ScreenScraper a répondu : il n'a pas ce jeu, ou pas de boîte pour lui.
-        case missing
+        /// Image PNG, ce qu'elle est (« boîte 3D », région), si elle est déjà en 3D, et la fiche du jeu.
+        case found(Data, description: String, is3D: Bool, details: GameDetails?)
+        /// ScreenScraper a répondu : il n'a pas ce jeu, ou pas de boîte pour lui (la fiche, s'il a le jeu).
+        case missing(details: GameDetails?)
         /// Pas de réponse utilisable (réseau, serveur fermé, limite du jour) : on réessaiera plus tard.
+        case offline
+    }
+
+    /// Fiche d'un jeu seule (ouverte avant que sa jaquette soit venue de ScreenScraper).
+    enum DetailsResult: Sendable {
+        case found(GameDetails)
+        case missing
         case offline
     }
 
@@ -60,11 +67,48 @@ enum ScreenScraper {
     /// (celui des bases No-Intro et Redump, que ScreenScraper connaît), sa taille et son empreinte, puis à défaut par
     /// une recherche sur son titre.
     static func cover(officialName: String, system: GameSystem, file: URL) async -> Result {
-        guard let credentials, !disabled, let systemID = systemID(system) else { return .missing }
-        if let pause = UserDefaults.standard.object(forKey: pauseKey) as? Date, pause > Date() { return .offline }
-
         await gate.enter()
         defer { Task { await gate.leave() } }
+
+        let game: GameInfo
+        switch await findGame(officialName: officialName, system: system, file: file) {
+        case .ok(let found): game = found
+        case .missing: return .missing(details: nil)
+        case .offline: return .offline
+        }
+        let details = game.details(regions: preferredRegions(officialName))
+        guard let media = bestBox(in: game.medias ?? [], officialName: officialName),
+              var components = URLComponents(string: media.url) else { return .missing(details: details) }
+        components.queryItems = (components.queryItems ?? []).filter { $0.name != "maxwidth" }
+            + [URLQueryItem(name: "maxwidth", value: "\(imageWidth)")]
+        guard let url = components.url else { return .missing(details: details) }
+        switch await download(url) {
+        case .ok(let data):
+            let is3D = media.type == "box-3D"
+            return .found(data, description: "\(is3D ? "boîte 3D" : "boîte 2D"), \(media.region ?? "?")", is3D: is3D,
+                          details: details)
+        case .missing: return .missing(details: details)
+        case .offline: return .offline
+        }
+    }
+
+    /// Fiche du jeu seule (résumé, sortie, éditeur, joueurs, genres, note).
+    static func details(officialName: String, system: GameSystem, file: URL) async -> DetailsResult {
+        await gate.enter()
+        defer { Task { await gate.leave() } }
+
+        switch await findGame(officialName: officialName, system: system, file: file) {
+        case .ok(let game): return .found(game.details(regions: preferredRegions(officialName)))
+        case .missing: return .missing
+        case .offline: return .offline
+        }
+    }
+
+    /// Le jeu chez ScreenScraper : par son nom officiel (celui des bases No-Intro et Redump, que ScreenScraper connaît),
+    /// sa taille et son empreinte, puis à défaut par une recherche sur son titre. À appeler en tenant `gate`.
+    private static func findGame(officialName: String, system: GameSystem, file: URL) async -> Fetch<GameInfo> {
+        guard let credentials, !disabled, let systemID = systemID(system) else { return .missing }
+        if let pause = UserDefaults.standard.object(forKey: pauseKey) as? Date, pause > Date() { return .offline }
 
         var parameters = baseParameters(credentials) + [
             URLQueryItem(name: "systemeid", value: "\(systemID)"),
@@ -79,32 +123,14 @@ enum ScreenScraper {
             }
         }
 
-        var game: GameInfo?
         switch await request(GameInfoResponse.self, endpoint: "jeuInfos.php", parameters: parameters) {
-        case .ok(let response): game = response.response.jeu
-        case .missing: game = nil
+        case .ok(let response):
+            if let game = response.response.jeu { return .ok(game) }
+        case .missing: break
         case .offline: return .offline
         }
-        if game == nil {
-            // Fichier inconnu de ScreenScraper (copie modifiée, jeu PS Vita) : recherche sur le titre.
-            switch await search(title: SteamGridDB.searchTitle(officialName), systemID: systemID, credentials: credentials) {
-            case .ok(let found): game = found
-            case .missing: return .missing
-            case .offline: return .offline
-            }
-        }
-        guard let game, let media = bestBox(in: game.medias ?? [], officialName: officialName),
-              var components = URLComponents(string: media.url) else { return .missing }
-        components.queryItems = (components.queryItems ?? []).filter { $0.name != "maxwidth" }
-            + [URLQueryItem(name: "maxwidth", value: "\(imageWidth)")]
-        guard let url = components.url else { return .missing }
-        switch await download(url) {
-        case .ok(let data):
-            let is3D = media.type == "box-3D"
-            return .found(data, description: "\(is3D ? "boîte 3D" : "boîte 2D"), \(media.region ?? "?")", is3D: is3D)
-        case .missing: return .missing
-        case .offline: return .offline
-        }
+        // Fichier inconnu de ScreenScraper (copie modifiée, jeu PS Vita) : recherche sur le titre.
+        return await search(title: SteamGridDB.searchTitle(officialName), systemID: systemID, credentials: credentials)
     }
 
     /// Nom du fichier tel que les bases le connaissent : nom officiel + extension du fichier (« Super Mario World
@@ -197,10 +223,74 @@ enum ScreenScraper {
         let id: String?
         let noms: [Name]?
         let medias: [Media]?
+        let synopsis: [Text]?
+        let dates: [Dated]?
+        let editeur: Value?
+        let developpeur: Value?
+        let joueurs: Value?
+        let note: Value?
+        let genres: [Genre]?
+
+        private enum Keys: String, CodingKey {
+            case id, noms, medias, synopsis, dates, editeur, developpeur, joueurs, note, genres
+        }
+
+        /// Chaque champ lu à part : un champ dans une forme inattendue est ignoré, la jaquette reste trouvée.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: Keys.self)
+            id = try? container.decodeIfPresent(String.self, forKey: .id)
+            noms = try? container.decodeIfPresent([Name].self, forKey: .noms)
+            medias = try? container.decodeIfPresent([Media].self, forKey: .medias)
+            synopsis = try? container.decodeIfPresent([Text].self, forKey: .synopsis)
+            dates = try? container.decodeIfPresent([Dated].self, forKey: .dates)
+            editeur = try? container.decodeIfPresent(Value.self, forKey: .editeur)
+            developpeur = try? container.decodeIfPresent(Value.self, forKey: .developpeur)
+            joueurs = try? container.decodeIfPresent(Value.self, forKey: .joueurs)
+            note = try? container.decodeIfPresent(Value.self, forKey: .note)
+            genres = try? container.decodeIfPresent([Genre].self, forKey: .genres)
+        }
+
+        /// Fiche du jeu : textes en français et en anglais, date de sortie de la région du jeu (sinon la plus ancienne).
+        func details(regions: [String]) -> GameDetails {
+            var texts: [String: String] = [:]
+            for item in synopsis ?? [] where ["fr", "en"].contains(item.langue ?? "") && !item.text.isEmpty {
+                texts[item.langue!] = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            var genreNames: [String: [String]] = [:]
+            for genre in genres ?? [] {
+                for name in genre.noms ?? [] where ["fr", "en"].contains(name.langue ?? "") {
+                    genreNames[name.langue!, default: []].append(name.text)
+                }
+            }
+            let dated = (dates ?? []).filter { !$0.text.isEmpty }
+            let release = regions.lazy.compactMap { region in dated.first { $0.region == region } }.first
+                ?? dated.min { $0.text < $1.text }
+            return GameDetails(synopsis: texts, genres: genreNames, released: release?.text,
+                               publisher: editeur?.text.nilIfEmpty, developer: developpeur?.text.nilIfEmpty,
+                               players: joueurs?.text.nilIfEmpty, rating: note.flatMap { Int($0.text) })
+        }
     }
 
     private struct Name: Decodable {
         let text: String
+    }
+
+    private struct Text: Decodable {
+        let langue: String?
+        let text: String
+    }
+
+    private struct Dated: Decodable {
+        let region: String?
+        let text: String
+    }
+
+    private struct Value: Decodable {
+        let text: String
+    }
+
+    private struct Genre: Decodable {
+        let noms: [Text]?
     }
 
     private struct Media: Decodable {
@@ -316,5 +406,28 @@ enum ScreenScraper {
                 waiting.removeFirst().resume()
             }
         }
+    }
+}
+
+/// Fiche d'un jeu (ScreenScraper), gardée par GameMetadata.
+struct GameDetails: Codable, Equatable, Sendable {
+    /// Résumé par langue (« fr », « en »).
+    var synopsis: [String: String]
+    /// Genres par langue.
+    var genres: [String: [String]]
+    /// Date de sortie (« 1997-03-01 », ou seulement l'année).
+    var released: String?
+    var publisher: String?
+    var developer: String?
+    /// Nombre de joueurs (« 1-4 »).
+    var players: String?
+    /// Note sur 20.
+    var rating: Int?
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

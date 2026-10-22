@@ -74,6 +74,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     /// fait tourner au moins une image, elle est donc rechargée après les premières (essais limités).
     private var pendingReloadState: Data?
     private var pendingReloadAttempts = 0
+    /// La partie en attente (`pendingReloadState`) est la reprise automatique du lancement, pas un rechargement.
+    private var resuming = false
 
 #if os(macOS)
     /// Partie en cours (thread principal) : arrêtée proprement avant que l'app se ferme (MacAppDelegate).
@@ -272,6 +274,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Reprise automatique : la partie au moment de quitter, compressée comme une sauvegarde rapide.
+    private func writeResume(_ state: Data?) {
+        guard let state else { return }
+        let packed = Self.packState(state)
+        if (try? packed.write(to: Paths.resumeFile(for: game), options: .atomic)) != nil {
+            PTLogLine("Reprise automatique gardée (\(packed.count / 1024) Ko)")
+        } else {
+            PTLogLine("Reprise automatique : écriture impossible")
+        }
+    }
+
     /// Les sauvegardes rapides (jusqu'à 75 Mo pour la PSP, presque entièrement vides) sont
     /// compressées en LZFSE et précédées de « PTZ1 ». Les anciennes, brutes, se lisent toujours.
     private static let compressedStateMagic = Data("PTZ1".utf8)
@@ -442,6 +455,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             return
         }
 
+        // Reprise automatique : la partie laissée en quittant, rechargée après les premières images (comme après un
+        // rechargement du moteur : certains moteurs refusent une sauvegarde rapide avant d'avoir tourné).
+        if let file = try? Data(contentsOf: Paths.resumeFile(for: game)), let state = Self.unpackState(file) {
+            pendingReloadState = state
+            pendingReloadAttempts = 0
+            resuming = true
+        }
+
         let audio = AudioOutput(sampleRate: core.sampleRate, ring: ring)
         audio.start()
         self.audio = audio
@@ -523,12 +544,24 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 pendingReloadAttempts += 1
                 if core.loadState(state) {
                     pendingReloadState = nil
-                    PTLogLine("Rechargement du moteur : partie reprise après \(pendingReloadAttempts) image(s)")
-                    showToast(tr("Image appliquée"))
+                    if resuming {
+                        resuming = false
+                        PTLogLine("Reprise automatique : partie reprise après \(pendingReloadAttempts) image(s)")
+                        showToast(tr("Partie reprise"))
+                    } else {
+                        PTLogLine("Rechargement du moteur : partie reprise après \(pendingReloadAttempts) image(s)")
+                        showToast(tr("Image appliquée"))
+                    }
                 } else if pendingReloadAttempts >= 120 {
                     pendingReloadState = nil
-                    PTLogLine("Rechargement du moteur : la partie n'a pas pu être reprise")
-                    showToast(tr("Partie non reprise (sauvegarde rapide toujours disponible)"))
+                    if resuming {
+                        resuming = false
+                        PTLogLine("Reprise automatique : partie illisible, jeu démarré du début")
+                        showToast(tr("Reprise impossible : le jeu démarre du début"))
+                    } else {
+                        PTLogLine("Rechargement du moteur : la partie n'a pas pu être reprise")
+                        showToast(tr("Partie non reprise (sauvegarde rapide toujours disponible)"))
+                    }
                 }
             }
 
@@ -582,6 +615,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
         persistSaveRAM()
         saveThumbnail()
+        // Reprise pas encore appliquée (jeu quitté tout de suite) : l'ancienne reste.
+        if !(resuming && pendingReloadState != nil) { writeResume(core.saveState()) }
         core.unloadGame()
         audio.stop()
         self.audio = nil
@@ -649,6 +684,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             // Reprise de la partie après les premières images (voir pendingReloadState).
             pendingReloadState = state
             pendingReloadAttempts = 0
+            resuming = false
             if state == nil { showToast(tr("Image appliquée")) }
             return core
         } catch {
@@ -1025,6 +1061,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     if jit { showToast(tr("Mode turbo (JIT) actif")) }
 #endif
                     DispatchQueue.main.async { self.state = .running }
+                    // Reprise automatique (PS2, GameCube, Wii ; la PS Vita n'a pas de sauvegarde rapide).
+                    let resume = Paths.resumeFile(for: game)
+                    if !game.system.isVita, FileManager.default.fileExists(atPath: resume.path) {
+                        if engine.loadState(fromPath: resume.path) {
+                            PTLogLine("\(name) : reprise automatique chargée")
+                            showToast(tr("Partie reprise"))
+                        } else {
+                            PTLogLine("\(name) : reprise automatique illisible (\(engine.lastError() ?? "raison inconnue")), jeu démarré du début")
+                            showToast(tr("Reprise impossible : le jeu démarre du début"))
+                        }
+                    }
                 } else if engineState == .stopped && (seenActivity || clock.now - bootStart > 20) {
                     failure = engine.lastError().map(trMessage) ?? tr("La console n'a pas pu démarrer le jeu.")
                     break
@@ -1057,7 +1104,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
         }
 
-        if started && failure == nil { saveEngineThumbnail(engine) }
+        if started && failure == nil {
+            saveEngineThumbnail(engine)
+            if !game.system.isVita {
+                let resume = Paths.resumeFile(for: game)
+                if engine.saveState(toPath: resume.path) {
+                    PTLogLine("\(name) : reprise automatique gardée")
+                } else {
+                    PTLogLine("\(name) : reprise automatique impossible (\(engine.lastError() ?? "raison inconnue"))")
+                }
+            }
+        }
         engine.stop()
         let stopDeadline = clock.now + 15
         while engine.engineState != .stopped && clock.now < stopDeadline {
