@@ -193,11 +193,11 @@ struct AboutView: View {
                         }
                     }
 #if os(iOS)
-                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails, et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikDebug (app à part)."))
+                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikDebug (app à part)."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 #else
-                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : libretro-thumbnails, et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL)."))
+                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL)."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 #endif

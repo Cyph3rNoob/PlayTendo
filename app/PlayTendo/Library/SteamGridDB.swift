@@ -1,6 +1,4 @@
-import CryptoKit
 import Foundation
-import Security
 
 /// Source de secours des jaquettes : SteamGridDB (images faites par sa communauté, pour Steam), interrogée quand
 /// libretro n'a rien. Sa clé d'accès est embarquée masquée dans l'app (PTSecrets, scripts/make_secrets.py) et ne part
@@ -75,8 +73,21 @@ enum SteamGridDB {
         case ok(Value), missing, offline
     }
 
-    /// Session de l'API : sans cache ni cookies, certificat vérifié par `PinnedTrust`.
-    private static let session = URLSession(configuration: .ephemeral, delegate: PinnedTrust(), delegateQueue: nil)
+    /// Session de l'API : sans cache ni cookies, certificat épinglé (`PinnedTrust`) : un serveur intermédiaire
+    /// installé pour espionner les échanges (avec son propre certificat racine) est refusé, la clé ne lui est jamais
+    /// envoyée. Racines publiques que Cloudflare (hébergeur de SteamGridDB) utilise.
+    private static let session = URLSession(configuration: .ephemeral, delegate: PinnedTrust(service: "SteamGridDB", pins: [
+        "lK8IrGu+Yr3bnuiDnxi5kSkGkcCzXbJlG1jZi2pL6jg=", // GTS Root R1
+        "tWqG3lJFDJFwGdbr5vqzUVNHUfrLfXVQabzJcAMpKAQ=", // GTS Root R2
+        "cGD/gaVoHDGGoq4fgudPEejOz7QIgWiJuexwqVKO0n8=", // GTS Root R3
+        "YSoUL4CBzo5aJ/ES9gSZTsavsgtHsiLLnTG+BKUdork=", // GTS Root R4 (chaîne actuelle, 2026-10-11)
+        "Pd4y/8Rwm7Gj/3bTVEH0rn/gXuKK5dYXp1vTbu5r9co=", // GlobalSign Root CA (signe GTS Root R4)
+        PinnedTrust.isrgRootX1, PinnedTrust.isrgRootX2,  // Let's Encrypt
+        "Hy8S1Obqzk27SZrHbHRALdY2JCu6Dfob7H4xSeHlDFE=", // SSL.com Root Certification Authority ECC
+        "3Ih5Szl7yUenUxOk1rFJyZFbhmX4GDHH+feTff87TFM=", // SSL.com Root Certification Authority RSA
+        "DfKSu5l3Mdq5eX76p6abH+wW0tz0SnLzXgYuxXtS7aA=", // SSL.com TLS ECC Root CA 2022
+        "RfPd63uYzm1+Fe1Uh9qtBun/kl4LgkngHee3WAs6C4M=", // SSL.com TLS RSA Root CA 2022
+    ]), delegateQueue: nil)
 
     private static func fetch<Value: Decodable>(_ type: Value.Type, from url: URL) async -> Fetch<Value> {
         guard let key = PTSteamGridDBKey() else { return .missing }
@@ -99,45 +110,6 @@ enum SteamGridDB {
             return .ok(value)
         } catch {
             return .offline
-        }
-    }
-
-    /// Épinglage : en plus de la vérification normale d'iOS, la chaîne du certificat doit mener à l'une des autorités
-    /// racines publiques que Cloudflare (hébergeur de SteamGridDB) utilise. Un serveur intermédiaire installé pour
-    /// espionner les échanges (avec son propre certificat racine) est refusé : la clé ne lui est jamais envoyée.
-    private final class PinnedTrust: NSObject, URLSessionDelegate {
-        /// SHA-256 de la clé publique (SecKeyCopyExternalRepresentation) des racines, calculé sur leurs certificats.
-        private static let pins: Set<String> = [
-            "lK8IrGu+Yr3bnuiDnxi5kSkGkcCzXbJlG1jZi2pL6jg=", // GTS Root R1
-            "tWqG3lJFDJFwGdbr5vqzUVNHUfrLfXVQabzJcAMpKAQ=", // GTS Root R2
-            "cGD/gaVoHDGGoq4fgudPEejOz7QIgWiJuexwqVKO0n8=", // GTS Root R3
-            "YSoUL4CBzo5aJ/ES9gSZTsavsgtHsiLLnTG+BKUdork=", // GTS Root R4 (chaîne actuelle, 2026-10-11)
-            "Pd4y/8Rwm7Gj/3bTVEH0rn/gXuKK5dYXp1vTbu5r9co=", // GlobalSign Root CA (signe GTS Root R4)
-            "9Fk6HgfMnM7/vtnBHcUhg1b3gU2bIpSd50XmKZkMbGA=", // ISRG Root X1 (Let's Encrypt)
-            "+QHt0j1IgBr88CsiSG197KRsbAlprQDohcvoe1Za45Y=", // ISRG Root X2 (Let's Encrypt)
-            "Hy8S1Obqzk27SZrHbHRALdY2JCu6Dfob7H4xSeHlDFE=", // SSL.com Root Certification Authority ECC
-            "3Ih5Szl7yUenUxOk1rFJyZFbhmX4GDHH+feTff87TFM=", // SSL.com Root Certification Authority RSA
-            "DfKSu5l3Mdq5eX76p6abH+wW0tz0SnLzXgYuxXtS7aA=", // SSL.com TLS ECC Root CA 2022
-            "RfPd63uYzm1+Fe1Uh9qtBun/kl4LgkngHee3WAs6C4M=", // SSL.com TLS RSA Root CA 2022
-        ]
-
-        func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge)
-            async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
-            guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-                  let trust = challenge.protectionSpace.serverTrust else { return (.cancelAuthenticationChallenge, nil) }
-            guard SecTrustEvaluateWithError(trust, nil),
-                  let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
-                  chain.contains(where: Self.isPinned) else {
-                PTLogLine("SteamGridDB : certificat du serveur non reconnu, connexion refusée (clé non envoyée)")
-                return (.cancelAuthenticationChallenge, nil)
-            }
-            return (.useCredential, URLCredential(trust: trust))
-        }
-
-        private static func isPinned(_ certificate: SecCertificate) -> Bool {
-            guard let key = SecCertificateCopyKey(certificate),
-                  let raw = SecKeyCopyExternalRepresentation(key, nil) as Data? else { return false }
-            return pins.contains(Data(SHA256.hash(data: raw)).base64EncodedString())
         }
     }
 

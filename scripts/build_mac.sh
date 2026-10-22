@@ -42,6 +42,11 @@ if [ -s "$ROOT/secrets/steamgriddb.key" ]; then
 else
   echo ">>> Pas de clé SteamGridDB (secrets/steamgriddb.key) : jaquettes de secours désactivées"
 fi
+if [ -s "$ROOT/secrets/screenscraper_devid" ] && [ -s "$ROOT/secrets/screenscraper_devpassword" ]; then
+  echo ">>> Identifiants ScreenScraper embarqués, masqués (boîtes 3D des jaquettes)"
+else
+  echo ">>> Pas d'identifiants ScreenScraper (secrets/screenscraper_devid, …devpassword) : jaquettes libretro et SteamGridDB seulement"
+fi
 echo ">>> Compilation de l'app Mac…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target "PlayTendo Mac" -configuration Release \
     SYMROOT="$BUILD" OBJROOT="$BUILD/obj" "${VITA_SETTINGS[@]}" build > "$LOG" 2>&1; then

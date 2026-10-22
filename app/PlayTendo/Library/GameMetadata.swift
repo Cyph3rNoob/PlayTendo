@@ -2,7 +2,7 @@ import ImageIO
 import SwiftUI
 
 /// Ce que l'app sait de chaque jeu au-delà du fichier : son nom officiel (reconnu dans la base),
-/// sa jaquette (téléchargée chez libretro) et la date de la dernière partie.
+/// sa jaquette (boîte 3D de ScreenScraper, sinon libretro, sinon SteamGridDB) et la date de la dernière partie.
 @MainActor
 final class GameMetadata: ObservableObject {
     struct Info: Codable, Equatable {
@@ -11,6 +11,9 @@ final class GameMetadata: ObservableObject {
         var modified: Double
         /// Dernière recherche de jaquette restée sans résultat (on réessaie au bout d'une semaine).
         var coverMissing: Double?
+        /// ScreenScraper a déjà répondu pour ce jeu (boîte trouvée ou introuvable) : une jaquette venue d'ailleurs
+        /// n'est plus remplacée.
+        var screenScraperTried: Bool?
     }
 
     @Published private(set) var infos: [String: Info] = [:]
@@ -27,6 +30,7 @@ final class GameMetadata: ObservableObject {
         .appendingPathComponent("Bibliotheque/infos.json")
     private static let lastPlayedKey = "dernieresParties"
     private static let steamGridTriedKey = "jaquettesSteamGridDBEssayees"
+    private static let screenScraperTriedKey = "jaquettesScreenScraperEssayees"
 #if PLAYTENDO_VITA
     /// Jaquettes PS Vita cherchées (2026-10-12) : avant, l'icône du jeu était rangée comme jaquette, sous le titre de
     /// la fiche (« GRAVITY RUSH »). Effacées une fois ; les jeux sont reconnus de nouveau sous leur nouveau nom.
@@ -125,6 +129,7 @@ final class GameMetadata: ObservableObject {
             CoverImages.forget(file)
         }
         infos[game.key]?.coverMissing = nil
+        infos[game.key]?.screenScraperTried = nil
         coverRevisions[game.key, default: 0] += 1
         update([game], force: true)
     }
@@ -185,7 +190,8 @@ final class GameMetadata: ObservableObject {
                 name = Self.identify(game)
 #endif
                 PTLogLine("Jeu reconnu : \(game.url.lastPathComponent) → \(name ?? "inconnu")")
-                found[game.key] = Info(name: name, size: size, modified: modified, coverMissing: nil)
+                found[game.key] = Info(name: name, size: size, modified: modified, coverMissing: nil,
+                                       screenScraperTried: nil)
             }
             await self.merge(found)
             await self.downloadCovers(for: games)
@@ -220,42 +226,58 @@ final class GameMetadata: ObservableObject {
     private func downloadCovers(for games: [Game]) async {
         let week: Double = 7 * 24 * 3600
         let now = Date().timeIntervalSince1970
-        // Source de secours nouvelle : les jeux restés sans jaquette sont recherchés de nouveau, une fois.
-        if SteamGridDB.isAvailable, !UserDefaults.standard.bool(forKey: Self.steamGridTriedKey) {
-            for key in infos.keys where infos[key]?.coverMissing != nil {
-                infos[key]?.coverMissing = nil
+        // Source nouvelle (SteamGridDB, puis ScreenScraper) : les jeux restés sans jaquette sont recherchés de
+        // nouveau, une fois.
+        for (available, key) in [(SteamGridDB.isAvailable, Self.steamGridTriedKey),
+                                 (ScreenScraper.isAvailable, Self.screenScraperTriedKey)]
+            where available && !UserDefaults.standard.bool(forKey: key) {
+            for gameKey in infos.keys where infos[gameKey]?.coverMissing != nil {
+                infos[gameKey]?.coverMissing = nil
             }
-            UserDefaults.standard.set(true, forKey: Self.steamGridTriedKey)
+            UserDefaults.standard.set(true, forKey: key)
         }
-        var wanted: [(key: String, name: String, system: GameSystem)] = []
+        // Jeux sans jaquette ; et, ScreenScraper étant prioritaire, ceux dont la jaquette vient d'une autre source et
+        // qu'il n'a pas encore vus (`replacing` : seul ScreenScraper est interrogé, l'ancienne jaquette reste sinon).
+        var wanted: [(key: String, name: String, system: GameSystem, file: URL, replacing: Bool)] = []
         var seen = Set<String>()
         for game in games {
             guard let info = infos[game.key], let name = info.name,
-                  !FileManager.default.fileExists(atPath: Self.coverURL(name: name, system: game.system).path),
-                  now - (info.coverMissing ?? 0) > week, seen.insert("\(game.system.rawValue)/\(name)").inserted else { continue }
-            wanted.append((game.key, name, game.system))
+                  seen.insert("\(game.system.rawValue)/\(name)").inserted else { continue }
+            let hasCover = FileManager.default.fileExists(atPath: Self.coverURL(name: name, system: game.system).path)
+            if !hasCover, now - (info.coverMissing ?? 0) > week {
+                wanted.append((game.key, name, game.system, game.url, false))
+            } else if hasCover, ScreenScraper.isAvailable, info.screenScraperTried != true {
+                wanted.append((game.key, name, game.system, game.url, true))
+            }
         }
-        // Trois téléchargements à la fois.
+        // Trois recherches à la fois (ScreenScraper, lui, en traite une à la fois).
         for batch in stride(from: 0, to: wanted.count, by: 3) {
             let slice = wanted[batch..<min(batch + 3, wanted.count)]
-            let results = await withTaskGroup(of: (String, CoverResult).self) { group in
-                for item in slice {
-                    group.addTask { (item.key, await Self.fetchCover(name: item.name, system: item.system)) }
+            let results = await withTaskGroup(of: (Int, CoverOutcome).self) { group in
+                for (index, item) in zip(slice.indices, slice) {
+                    group.addTask {
+                        (index, await Self.fetchCover(name: item.name, system: item.system, file: item.file,
+                                                      onlyScreenScraper: item.replacing))
+                    }
                 }
-                var results: [(String, CoverResult)] = []
+                var results: [(Int, CoverOutcome)] = []
                 for await result in group { results.append(result) }
                 return results
             }
-            for (key, result) in results {
-                switch result {
+            for (index, outcome) in results {
+                let item = wanted[index]
+                if outcome.screenScraperAnswered { infos[item.key]?.screenScraperTried = true }
+                switch outcome.result {
                 case .saved:
+                    CoverImages.forget(Self.coverURL(name: item.name, system: item.system))
                     // Tous les fichiers du même jeu (même nom officiel) profitent de la jaquette.
-                    let name = infos[key]?.name
-                    for game in games where infos[game.key]?.name == name {
+                    for game in games where infos[game.key]?.name == item.name {
                         coverRevisions[game.key, default: 0] += 1
                     }
-                case .missing: infos[key]?.coverMissing = now
-                case .offline: break                          // on réessaiera au prochain lancement
+                case .missing:
+                    if !item.replacing { infos[item.key]?.coverMissing = now }
+                case .offline:
+                    break                          // on réessaiera au prochain lancement
                 }
             }
             save()
@@ -264,8 +286,33 @@ final class GameMetadata: ObservableObject {
 
     private enum CoverResult: Sendable { case saved, missing, offline }
 
-    /// Cherche la jaquette sous le nom exact, puis sous les noms des autres régions.
-    nonisolated private static func fetchCover(name: String, system: GameSystem) async -> CoverResult {
+    private struct CoverOutcome: Sendable {
+        var result: CoverResult
+        /// ScreenScraper a répondu (boîte trouvée ou jeu introuvable chez lui) : inutile de le redemander.
+        var screenScraperAnswered = false
+    }
+
+    /// Cherche la jaquette : boîte 3D chez ScreenScraper d'abord ; sinon chez libretro sous le nom exact puis sous les
+    /// noms des autres régions ; sinon chez SteamGridDB. `onlyScreenScraper` : le jeu a déjà une jaquette d'ailleurs,
+    /// seul ScreenScraper peut la remplacer.
+    nonisolated private static func fetchCover(name: String, system: GameSystem, file: URL,
+                                               onlyScreenScraper: Bool) async -> CoverOutcome {
+        var outcome = CoverOutcome(result: .missing)
+        if ScreenScraper.isAvailable {
+            switch await ScreenScraper.cover(officialName: name, system: system, file: file) {
+            case .found(let data, let description):
+                guard write(data, name: name, system: system) else { return CoverOutcome(result: .offline) }
+                PTLogLine("Jaquette téléchargée sur ScreenScraper (\(description)) : \(name)")
+                return CoverOutcome(result: .saved, screenScraperAnswered: true)
+            case .missing:
+                outcome.screenScraperAnswered = true
+                if onlyScreenScraper { PTLogLine("Pas de boîte chez ScreenScraper, jaquette gardée : \(name)") }
+            case .offline:
+                if onlyScreenScraper { return CoverOutcome(result: .offline) }
+            }
+        }
+        if onlyScreenScraper { return outcome }
+
         let candidates = [name] + (GameDatabase.shared(for: system)?.alternatives(to: name).prefix(3) ?? [])
         for candidate in candidates {
             guard let url = remoteCoverURL(name: candidate, system: system) else { continue }
@@ -273,33 +320,41 @@ final class GameMetadata: ObservableObject {
             request.setValue("PlayTendo", forHTTPHeaderField: "User-Agent")
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse else { return .offline }
+                guard let http = response as? HTTPURLResponse else { outcome.result = .offline; return outcome }
                 if http.statusCode == 404 { continue }
-                guard http.statusCode == 200, ImageCoding.isImage(data) else { return .offline }
-                let file = coverURL(name: name, system: system)
-                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: file, options: .atomic)
-                PTLogLine("Jaquette téléchargée : \(candidate)")
-                return .saved
+                guard http.statusCode == 200, ImageCoding.isImage(data),
+                      write(data, name: name, system: system) else { outcome.result = .offline; return outcome }
+                PTLogLine("Jaquette téléchargée chez libretro : \(candidate)")
+                outcome.result = .saved
+                return outcome
             } catch {
-                return .offline
+                outcome.result = .offline
+                return outcome
             }
         }
         // Source de secours, si l'app a été compilée avec la clé SteamGridDB.
         switch await SteamGridDB.cover(for: name) {
         case .found(let data, let gameName):
-            let file = coverURL(name: name, system: system)
-            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            guard (try? data.write(to: file, options: .atomic)) != nil else { return .offline }
+            guard write(data, name: name, system: system) else { outcome.result = .offline; return outcome }
             PTLogLine("Jaquette téléchargée sur SteamGridDB (« \(gameName) ») : \(name)")
-            return .saved
+            outcome.result = .saved
+            return outcome
         case .offline:
-            return .offline
+            outcome.result = .offline
+            return outcome
         case .missing:
             break
         }
-        PTLogLine("Pas de jaquette chez libretro\(SteamGridDB.isAvailable ? " ni SteamGridDB" : "") pour : \(name)")
-        return .missing
+        let sources = (ScreenScraper.isAvailable ? ["ScreenScraper"] : []) + ["libretro"]
+            + (SteamGridDB.isAvailable ? ["SteamGridDB"] : [])
+        PTLogLine("Pas de jaquette (\(sources.joined(separator: ", "))) pour : \(name)")
+        return outcome
+    }
+
+    nonisolated private static func write(_ data: Data, name: String, system: GameSystem) -> Bool {
+        let file = coverURL(name: name, system: system)
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        return (try? data.write(to: file, options: .atomic)) != nil
     }
 
     /// Adresse de la jaquette chez libretro : certains caractères du nom y sont remplacés par « _ ».

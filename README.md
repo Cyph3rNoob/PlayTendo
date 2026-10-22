@@ -54,8 +54,9 @@ zsh scripts/build_mac.sh       # app Mac → PlayTendo-Mac/PlayTendo.dmg
 Les moteurs déjà compilés sont dans `cores/`. Pour en refaire un : `scripts/build_cores.sh` (moteurs libretro),
 `build_ps2.sh`, `build_dolphin.sh`, `build_azahar.sh`, `build_vita3k.sh` (iPhone) et `build_cores_macos.sh` (Mac).
 
-La clé SteamGridDB (jaquettes de secours) va dans `secrets/steamgriddb.key`. Ce dossier n'est jamais envoyé sur
-GitHub ; la clé est masquée dans l'app à la compilation.
+Les clés des services de jaquettes vont dans `secrets/` : `screenscraper_devid` et `screenscraper_devpassword`
+(ScreenScraper, boîtes 3D, source principale), `steamgriddb.key` (SteamGridDB, secours). Ce dossier n'est jamais
+envoyé sur GitHub ; les clés sont masquées dans l'app à la compilation.
 
 ## Organisation
 
