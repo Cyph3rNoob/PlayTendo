@@ -2,8 +2,8 @@ import CoreText
 import SwiftUI
 
 /// Thème de l'interface (Réglages › Thème), appliqué tout de suite : Néon (cyberpunk, d'origine), Rétro 8-bit (gris
-/// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel) ou Minimal sombre (noir pur pour
-/// l'écran OLED, texte blanc, un accent bleu, coins arrondis). L'image des jeux, leurs boutons tactiles et l'animation
+/// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel) ou Minimal sombre (bleu nuit avec
+/// des vagues de lumière immobiles, texte blanc, un accent bleu, coins arrondis). L'image des jeux, leurs boutons tactiles et l'animation
 /// de démarrage ne changent pas.
 enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     case neon
@@ -59,13 +59,13 @@ enum Neon {
         Color(red: red, green: green, blue: blue)
     }
 
-    static var background: Color { pick(rgb(0.016, 0.016, 0.047), rgb(0.78, 0.78, 0.75), .black) }
+    static var background: Color { pick(rgb(0.016, 0.016, 0.047), rgb(0.78, 0.78, 0.75), rgb(0.039, 0.051, 0.082)) }
     static var cyan: Color { pick(rgb(0.0, 0.94, 1.0), rgb(0.10, 0.18, 0.52), rgb(0.04, 0.52, 1.0)) }
     static var magenta: Color { pick(rgb(1.0, 0.17, 0.84), rgb(0.80, 0.08, 0.12), rgb(0.40, 0.70, 1.0)) }
     static var violet: Color { pick(rgb(0.54, 0.30, 1.0), rgb(0.40, 0.20, 0.55), rgb(0.55, 0.62, 1.0)) }
     static var text: Color { pick(rgb(0.90, 0.95, 1.0), rgb(0.08, 0.08, 0.10), rgb(0.96, 0.96, 0.97)) }
     static var dim: Color { pick(rgb(0.50, 0.56, 0.68), rgb(0.30, 0.30, 0.32), rgb(0.56, 0.56, 0.60)) }
-    static var panel: Color { pick(rgb(0.05, 0.06, 0.13), rgb(0.90, 0.90, 0.87), rgb(0.11, 0.11, 0.12)) }
+    static var panel: Color { pick(rgb(0.05, 0.06, 0.13), rgb(0.90, 0.90, 0.87), rgb(0.10, 0.115, 0.16)) }
     /// Texte posé sur la couleur principale (bouton « Reprendre », pastille choisie).
     static var onAccent: Color { pick(.black, .white, .white) }
     /// Texte posé sur la couleur d'une console (étiquettes « N64 »…).
@@ -200,7 +200,7 @@ struct Chamfer: InsettableShape {
 }
 
 /// Fond de l'app selon le thème. Néon : nuit violette, halos cyan et magenta, grille en perspective et lignes de
-/// balayage. Rétro : gris clair à motif de pixels. Minimal : noir pur.
+/// balayage. Rétro : gris clair à motif de pixels. Minimal : bleu nuit, vagues de lumière en bas.
 struct CyberBackground: View {
     @AppStorage(AppTheme.key) private var theme = AppTheme.neon
 
@@ -220,7 +220,9 @@ struct CyberBackground: View {
                 Neon.background
                 PixelPattern()
             case .minimal:
-                Color.black
+                LinearGradient(colors: [Neon.background, Color(red: 0.063, green: 0.086, blue: 0.16)],
+                               startPoint: .top, endPoint: .bottom)
+                LightWaves()
             }
         }
         .ignoresSafeArea()
@@ -242,6 +244,41 @@ private struct PixelPattern: View {
                 y += 8
             }
             context.fill(dots, with: .color(.black.opacity(0.06)))
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Vagues de lumière du thème Minimal : quatre couches ondulées bleues et violettes en bas de l'écran, liseré clair
+/// sur chaque crête. Immobiles : dessinées une fois (redessinées seulement si la taille change), sans dépense de
+/// batterie.
+private struct LightWaves: View {
+    /// Haut de la couche (part de la hauteur), amplitude (part de la hauteur), ondes sur la largeur, décalage, couleur.
+    private static let layers: [(top: CGFloat, amplitude: CGFloat, waves: CGFloat, phase: CGFloat, color: Color)] = [
+        (0.56, 0.037, 1.0, 0, Color(red: 0.04, green: 0.52, blue: 1.0).opacity(0.10)),
+        (0.66, 0.044, 0.9, 2, Color(red: 0.51, green: 0.43, blue: 1.0).opacity(0.12)),
+        (0.76, 0.033, 1.2, 4, Color(red: 0.04, green: 0.52, blue: 1.0).opacity(0.16)),
+        (0.86, 0.030, 1.1, 1, Color(red: 0.16, green: 0.24, blue: 0.51).opacity(0.45)),
+    ]
+
+    var body: some View {
+        Canvas { context, size in
+            for layer in Self.layers {
+                var crest = Path()
+                var x: CGFloat = 0
+                while x <= size.width + 4 {
+                    let angle = x / max(size.width, 1) * layer.waves * 2 * .pi + layer.phase
+                    let point = CGPoint(x: x, y: size.height * (layer.top + layer.amplitude * sin(angle)))
+                    if x == 0 { crest.move(to: point) } else { crest.addLine(to: point) }
+                    x += 4
+                }
+                var fill = crest
+                fill.addLine(to: CGPoint(x: size.width + 4, y: size.height))
+                fill.addLine(to: CGPoint(x: 0, y: size.height))
+                fill.closeSubpath()
+                context.fill(fill, with: .color(layer.color))
+                context.stroke(crest, with: .color(Color(red: 0.55, green: 0.70, blue: 1.0).opacity(0.25)), lineWidth: 1)
+            }
         }
         .allowsHitTesting(false)
     }
