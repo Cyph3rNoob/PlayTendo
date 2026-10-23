@@ -549,7 +549,9 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         }
         if (_hw.context_reset) _hw.context_reset();
     }
+    // Joueurs 1 et 2 (deuxième manette).
     _api.set_controller_port_device(0, _controllerDevice ?: RETRO_DEVICE_JOYPAD);
+    _api.set_controller_port_device(1, _controllerDevice ?: RETRO_DEVICE_JOYPAD);
     PTLogLine([NSString stringWithFormat:@"Jeu chargé : %u×%u, %.3f images/s, son %.0f Hz",
                av.geometry.base_width, av.geometry.base_height, _framesPerSecond, _sampleRate]);
     return YES;

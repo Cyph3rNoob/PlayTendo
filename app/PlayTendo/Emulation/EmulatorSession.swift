@@ -414,7 +414,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     func setButton(_ button: PTButton, pressed: Bool, port: UInt32 = 0) {
         if let external {
-            external.setButton(button.rawValue, pressed: pressed)
+            external.setButton(button.rawValue, pressed: pressed, player: Int(port))
             return
         }
         core?.setButton(button, pressed: pressed, port: port)
@@ -422,10 +422,20 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     func setAnalog(stick: UInt32, x: Float, y: Float, port: UInt32 = 0) {
         if let external {
-            external.setStick(Int32(stick), x: max(-1, min(1, x)), y: max(-1, min(1, y)))
+            external.setStick(Int32(stick), x: max(-1, min(1, x)), y: max(-1, min(1, y)), player: Int(port))
             return
         }
         core?.setAnalogStick(stick, x: Self.axis(x), y: Self.axis(y), port: port)
+    }
+
+    /// Deuxième manette branchée ou retirée (GameCube, Wii : manette ou Wiimote du joueur 2).
+    func setSecondPlayer(_ connected: Bool) {
+        external?.setSecondPlayer(connected)
+    }
+
+    /// Message bref par-dessus le jeu (manette 2 branchée…).
+    func announce(_ text: String) {
+        showToast(text)
     }
 
     /// Position normalisée (0…1) dans l'image du jeu. Wiimote : le pointeur reste où le doigt l'a laissé.
@@ -445,9 +455,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     func clearInput() {
         if let external {
-            for button in 0..<16 { external.setButton(button, pressed: false) }
-            external.setStick(0, x: 0, y: 0)
-            external.setStick(1, x: 0, y: 0)
+            for player in 0..<2 {
+                for button in 0..<16 { external.setButton(button, pressed: false, player: player) }
+                external.setStick(0, x: 0, y: 0, player: player)
+                external.setStick(1, x: 0, y: 0, player: player)
+            }
 #if PLAYTENDO_VITA
             (external as? PTVitaEngine)?.touchAt(x: 0, y: 0, pressed: false)
 #endif

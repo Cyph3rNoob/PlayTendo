@@ -47,6 +47,10 @@ void PTPS2SetTurbo(bool enabled);
 /// Bouton de la manette, avec les numéros RetroPad de PlayTendo (PTButton) : B = Croix, A = Rond,
 /// Y = Carré, X = Triangle, L/R = L1/R1.
 void PTPS2SetButton(int retroPadButton, bool pressed);
+/// Joueur 2 (deuxième manette) : mêmes boutons et sticks, `player` = 1 (0 = PTPS2SetButton / PTPS2SetStick).
+/// Facultatives : absentes des moteurs d'avant.
+void PTPS2SetPadButton(int player, int retroPadButton, bool pressed);
+void PTPS2SetPadStick(int player, int stick, float x, float y);
 /// Stick 0 (gauche) ou 1 (droit), de -1 à 1 (y positif vers le bas).
 void PTPS2SetStick(int stick, float x, float y);
 

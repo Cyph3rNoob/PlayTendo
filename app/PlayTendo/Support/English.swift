@@ -187,6 +187,8 @@ enum English {
         "Réinitialiser": "Reset",
         "Terminé": "Done",
         "Modifier les boutons": "Edit buttons",
+        "Manette 2 : joueur 2": "Controller 2: player 2",
+        "Manette 2 retirée": "Controller 2 disconnected",
         "Vibrations de la manette": "Controller vibration",
         "N64 : Rumble Pak au lieu du Controller Pak": "N64: Rumble Pak instead of Controller Pak",
         "Vibrations : N64 (avec le Rumble Pak, qui prend la place du Controller Pak où certains jeux sauvegardent ; pris au prochain lancement), PS1, PS2, GameCube, Wii, et cartouches Game Boy et GBA à vibreur. Avec une manette qui sait vibrer (PlayStation, Xbox récentes).": "Vibration: N64 (with the Rumble Pak, which takes the place of the Controller Pak some games save to; applied at the next launch), PS1, PS2, GameCube, Wii, and Game Boy and GBA cartridges with a rumble motor. With a controller that can vibrate (PlayStation, recent Xbox).",

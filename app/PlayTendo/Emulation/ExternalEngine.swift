@@ -29,6 +29,11 @@ protocol ExternalEngine: AnyObject {
     /// Bouton RetroPad (PTButton).
     func setButton(_ button: Int, pressed: Bool)
     func setStick(_ stick: Int32, x: Float, y: Float)
+    /// Joueur 2 (`player` = 1, deuxième manette) ; 0 : comme ci-dessus.
+    func setButton(_ button: Int, pressed: Bool, player: Int)
+    func setStick(_ stick: Int32, x: Float, y: Float, player: Int)
+    /// Deuxième manette branchée ou retirée (Dolphin branche alors la manette ou la Wiimote du joueur 2).
+    func setSecondPlayer(_ connected: Bool)
     /// Sauvegarde et chargement rapides : bloquants, hors du thread principal.
     func saveState(toPath path: String) -> Bool
     func loadState(fromPath path: String) -> Bool
@@ -66,6 +71,10 @@ extension ExternalEngine {
     var resumeLoaded: Bool? { nil }
     func applyCheats(_ cheats: [Cheat], system: GameSystem) {}
     var performance: EnginePerformance? { nil }
+    /// Moteurs à un seul joueur (PS Vita) : la deuxième manette joue aussi le joueur 1.
+    func setButton(_ button: Int, pressed: Bool, player: Int) { setButton(button, pressed: pressed) }
+    func setStick(_ stick: Int32, x: Float, y: Float, player: Int) { setStick(stick, x: x, y: y) }
+    func setSecondPlayer(_ connected: Bool) {}
 }
 
 extension PTPS2Engine: ExternalEngine {

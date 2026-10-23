@@ -33,6 +33,8 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     __typeof__(&PTPS2GetBootStateResult) _bootStateResult;
     __typeof__(&PTPS2SetCheats) _setCheats;
     __typeof__(&PTPS2GetPerformance) _getPerformance;
+    __typeof__(&PTPS2SetPadButton) _setPadButton;
+    __typeof__(&PTPS2SetPadStick) _setPadStick;
 }
 
 + (PTPS2Engine *)loadedEngine {
@@ -64,6 +66,8 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     engine->_bootStateResult = (__typeof__(&PTPS2GetBootStateResult))dlsym(handle, "PTPS2GetBootStateResult");
     engine->_setCheats = (__typeof__(&PTPS2SetCheats))dlsym(handle, "PTPS2SetCheats");
     engine->_getPerformance = (__typeof__(&PTPS2GetPerformance))dlsym(handle, "PTPS2GetPerformance");
+    engine->_setPadButton = (__typeof__(&PTPS2SetPadButton))dlsym(handle, "PTPS2SetPadButton");
+    engine->_setPadStick = (__typeof__(&PTPS2SetPadStick))dlsym(handle, "PTPS2SetPadStick");
     __typeof__(&PTPS2SetVibrationHandler) setVibration = dlsym(handle, "PTPS2SetVibrationHandler");
     if (setVibration) setVibration(PTPS2Vibration);
 
@@ -141,6 +145,22 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
 
 - (BOOL)loadStateFromPath:(NSString *)path {
     return _fn.PTPS2LoadState(path.fileSystemRepresentation);
+}
+
+- (void)setButton:(NSInteger)button pressed:(BOOL)pressed player:(NSInteger)player {
+    if (player == 0) {
+        [self setButton:button pressed:pressed];
+    } else if (_setPadButton) {
+        _setPadButton((int)player, (int)button, pressed);
+    }
+}
+
+- (void)setStick:(int)stick x:(float)x y:(float)y player:(NSInteger)player {
+    if (player == 0) {
+        [self setStick:stick x:x y:y];
+    } else if (_setPadStick) {
+        _setPadStick((int)player, stick, x, y);
+    }
 }
 
 - (BOOL)getFPS:(double *)fps speed:(double *)speed {

@@ -103,17 +103,21 @@ struct EmulatorView: View {
         .onAppear {
             // Manette : la gâchette L2 recule sur les consoles qui n'en ont pas (NES, Super Nintendo, Game Boy, GBA).
             let rewindTrigger = session.rewindAvailable && [.nes, .snes, .gb, .gbc, .gba].contains(game.system)
-            gamepad.onButton = { [session] button, pressed in
+            gamepad.onButton = { [session] player, button, pressed in
                 // Retour en arrière lancé du menu pause : un bouton l'arrête (sans aller au jeu).
                 if session.isRewindingFromMenu {
                     if pressed { session.stopRewind() }
-                } else if rewindTrigger && button == .l2 {
+                } else if rewindTrigger && player == 0 && button == .l2 {
                     session.setRewinding(pressed)
                 } else {
-                    session.setButton(button, pressed: pressed)
+                    session.setButton(button, pressed: pressed, port: UInt32(player))
                 }
             }
-            gamepad.onAnalog = { [session] stick, x, y in session.setAnalog(stick: stick, x: x, y: y) }
+            gamepad.onAnalog = { [session] player, stick, x, y in
+                session.setAnalog(stick: stick, x: x, y: y, port: UInt32(player))
+            }
+            // Deuxième manette : joueur 2 sur les consoles de salon, joueur 1 aussi sur les portables.
+            gamepad.secondControllerIsPlayer2 = game.system.supportsTwoPlayers
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
             gamepad.stickMovesDPad = !controls.hasAnalogStick
             gamepad.nintendoLetters = controls.nintendoLetters
@@ -126,10 +130,16 @@ struct EmulatorView: View {
 #endif
             session.setWiimote(controls.isWiimote)
             session.start()
+            if game.system.supportsTwoPlayers && gamepad.hasSecondController { session.setSecondPlayer(true) }
         }
         .onDisappear {
             ScreenAwake.release(.playing)
             gamepad.stopListeningToRumble()
+        }
+        .onChange(of: gamepad.hasSecondController) { _, connected in
+            guard game.system.supportsTwoPlayers else { return }
+            session.setSecondPlayer(connected)
+            session.announce(connected ? tr("Manette 2 : joueur 2") : tr("Manette 2 retirée"))
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active && session.state == .running { openMenu() }
@@ -392,6 +402,8 @@ struct EmulatorView: View {
         customLandscape = .load(key: customKey(landscape: true))
         session.clearInput()
         session.setWiimote(controller == .wiimote)
+        // Wii : la télécommande du joueur 2 n'est branchée qu'en mode Wiimote.
+        if gamepad.hasSecondController { session.setSecondPlayer(true) }
         gamepad.nintendoLetters = controls.nintendoLetters
         gamepad.mapping = GamepadMapping.load(for: controls)
     }

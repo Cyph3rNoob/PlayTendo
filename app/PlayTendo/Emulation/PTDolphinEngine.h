@@ -35,6 +35,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setCheatsActionReplay:(NSString *)actionReplay gecko:(NSString *)gecko;
 /// Images par seconde du jeu et vitesse (%). NO hors partie ou avec un moteur d'avant.
 - (BOOL)getFPS:(double *)fps speed:(double *)speed;
+/// Joueur 2 (`player` = 1) ; 0 : comme setButton / setStick. Sans effet avec un moteur d'avant.
+- (void)setButton:(NSInteger)button pressed:(BOOL)pressed player:(NSInteger)player;
+- (void)setStick:(int)stick x:(float)x y:(float)y player:(NSInteger)player;
+/// Deuxième manette branchée ou retirée.
+- (void)setSecondPlayer:(BOOL)connected;
 /// Disque en cours (à partir de 0) d'un jeu démarré avec plusieurs disques, sinon -1.
 @property (nonatomic, readonly) NSInteger discIndex;
 /// Met le disque `index` (à partir de 0) du jeu en cours. NO si impossible.

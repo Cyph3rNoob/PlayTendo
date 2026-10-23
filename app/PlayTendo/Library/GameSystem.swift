@@ -98,6 +98,10 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// Consoles de salon : une deuxième manette y joue le joueur 2 (sur les consoles portables, elle joue aussi le
+    /// joueur 1).
+    var supportsTwoPlayers: Bool { [.nes, .snes, .n64, .psx, .ps2, .gameCube, .wii].contains(self) }
+
     /// Console encore peu stable, signalée « EXPÉRIMENTAL » (filtre de la bibliothèque, À propos, présentation).
     var isExperimental: Bool { isVita }
 

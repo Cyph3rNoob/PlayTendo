@@ -36,6 +36,11 @@ void PTDolphinSetWidescreen(bool enabled);
 void PTDolphinSetCheats(const char *actionReplay, const char *gecko);
 /// Vibrations des manettes GameCube et de la Wiimote : `handler` reçoit la manette (0 : joueur 1) et la force (0 à 1).
 void PTDolphinSetRumbleHandler(void (*handler)(int pad, double strength));
+/// Joueur 2 (`player` = 1) : mêmes boutons et sticks que PTDolphinSetButton / PTDolphinSetStick.
+void PTDolphinSetPadButton(int player, int retroPadButton, bool pressed);
+void PTDolphinSetPadStick(int player, int stick, float x, float y);
+/// Deuxième manette branchée ou retirée : manette GameCube 2 (et Wiimote 2 en mode Wiimote).
+void PTDolphinSetSecondPlayer(bool connected);
 /// Images par seconde du jeu et vitesse (%) ; faux hors partie.
 bool PTDolphinGetPerformance(double *fps, double *speed);
 /// Disque en cours (à partir de 0) d'un jeu démarré par PTDolphinBootDiscs, sinon -1.

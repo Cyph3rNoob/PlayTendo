@@ -52,6 +52,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setCheats:(NSString *)pnach;
 /// Images par seconde du jeu et vitesse (%). NO hors partie ou avec un moteur d'avant.
 - (BOOL)getFPS:(double *)fps speed:(double *)speed;
+/// Joueur 2 (`player` = 1) ; 0 : comme setButton / setStick. Sans effet avec un moteur d'avant.
+- (void)setButton:(NSInteger)button pressed:(BOOL)pressed player:(NSInteger)player;
+- (void)setStick:(int)stick x:(float)x y:(float)y player:(NSInteger)player;
 /// Format de l'image du jeu (largeur / hauteur), 0 si inconnu.
 @property (nonatomic, readonly) float aspectRatio;
 /// Image du jeu en cours (640×480), pour la vignette « Continuer ». Bloquant, hors du thread principal.

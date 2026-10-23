@@ -36,6 +36,9 @@ static void PTDolphinRumble(int pad, double strength) {
     __typeof__(&PTDolphinSetWidescreen) _setWidescreen;
     __typeof__(&PTDolphinSetCheats) _setCheats;
     __typeof__(&PTDolphinGetPerformance) _getPerformance;
+    __typeof__(&PTDolphinSetPadButton) _setPadButton;
+    __typeof__(&PTDolphinSetPadStick) _setPadStick;
+    __typeof__(&PTDolphinSetSecondPlayer) _setSecondPlayer;
 }
 
 + (PTDolphinEngine *)loadedEngine {
@@ -70,6 +73,9 @@ static void PTDolphinRumble(int pad, double strength) {
     engine->_setWidescreen = (__typeof__(&PTDolphinSetWidescreen))dlsym(handle, "PTDolphinSetWidescreen");
     engine->_setCheats = (__typeof__(&PTDolphinSetCheats))dlsym(handle, "PTDolphinSetCheats");
     engine->_getPerformance = (__typeof__(&PTDolphinGetPerformance))dlsym(handle, "PTDolphinGetPerformance");
+    engine->_setPadButton = (__typeof__(&PTDolphinSetPadButton))dlsym(handle, "PTDolphinSetPadButton");
+    engine->_setPadStick = (__typeof__(&PTDolphinSetPadStick))dlsym(handle, "PTDolphinSetPadStick");
+    engine->_setSecondPlayer = (__typeof__(&PTDolphinSetSecondPlayer))dlsym(handle, "PTDolphinSetSecondPlayer");
     __typeof__(&PTDolphinSetRumbleHandler) setRumble = dlsym(handle, "PTDolphinSetRumbleHandler");
     if (setRumble) setRumble(PTDolphinRumble);
 
@@ -119,6 +125,26 @@ static void PTDolphinRumble(int pad, double strength) {
 
 - (BOOL)getFPS:(double *)fps speed:(double *)speed {
     return _getPerformance ? _getPerformance(fps, speed) : NO;
+}
+
+- (void)setButton:(NSInteger)button pressed:(BOOL)pressed player:(NSInteger)player {
+    if (player == 0) {
+        [self setButton:button pressed:pressed];
+    } else if (_setPadButton) {
+        _setPadButton((int)player, (int)button, pressed);
+    }
+}
+
+- (void)setStick:(int)stick x:(float)x y:(float)y player:(NSInteger)player {
+    if (player == 0) {
+        [self setStick:stick x:x y:y];
+    } else if (_setPadStick) {
+        _setPadStick((int)player, stick, x, y);
+    }
+}
+
+- (void)setSecondPlayer:(BOOL)connected {
+    if (_setSecondPlayer) _setSecondPlayer(connected);
 }
 
 - (void)setCheatsActionReplay:(NSString *)actionReplay gecko:(NSString *)gecko {

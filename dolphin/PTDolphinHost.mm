@@ -44,6 +44,7 @@
 #include "Core/BootManager.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/Config/WiimoteSettings.h"
 #include "Core/Config/UISettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
@@ -52,6 +53,8 @@
 #include "Core/GeckoCodeConfig.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/GCPad.h"
+#include "Core/HW/SI/SI.h"
+#include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -167,16 +170,18 @@ static void PTDolphinWriteLoggerConfig()
                           "Audio = True\nEXI = True\nIOS = True\nSI = True\n");
 }
 
-/// Profils tactiles de DolphiniOS (Sys/Profiles/…/Touchscreen.ini) : manette GameCube 1 et télécommande Wii 1
-/// lues sur les « appareils » tactiles iOS/0 et iOS/4, que PlayTendo remplit (PTDolphinSetButton/Stick/Pointer).
+/// Profils tactiles de DolphiniOS (Sys/Profiles/…/Touchscreen.ini) : manettes GameCube 1 et 2 et télécommandes Wii 1
+/// et 2 lues sur les « appareils » tactiles iOS/0, iOS/1, iOS/4 et iOS/5, que PlayTendo remplit (PTDolphinSetButton/Stick/Pointer).
 /// Wiimote : sans les capteurs de mouvement de l'iPhone (DolphiniOS les lit, pas PlayTendo) — branchés mais
 /// jamais remplis, ils diraient au jeu que la télécommande tombe et figeraient le pointeur.
-static void PTDolphinImportProfile(InputConfig* config, bool wiimote)
+static void PTDolphinImportProfile(InputConfig* config, bool wiimote, int player)
 {
-  ControllerEmu::EmulatedController* controller = config->GetController(0);
+  ControllerEmu::EmulatedController* controller = config->GetController(player);
   Common::IniFile ini;
   ini.Load(config->GetSysProfileDirectoryPath() + "Touchscreen.ini");
   Common::IniFile::Section* profile = ini.GetOrCreateSection("Profile");
+  // Joueur 2 : son propre appareil tactile (iOS/1 pour la manette GameCube, iOS/5 pour la Wiimote).
+  profile->Set("Device", "iOS/" + std::to_string((wiimote ? 4 : 0) + player) + "/Touchscreen");
   if (wiimote)
   {
     std::vector<std::string> motion;
@@ -273,8 +278,11 @@ PTDOLPHIN_EXPORT void* PTDolphinSetup(const char* userDir, const char* gcSaveDir
     WindowSystemInfo wsi;
     wsi.type = WindowSystemType::iOS;
     UICommon::InitControllers(wsi);
-    PTDolphinImportProfile(Pad::GetConfig(), false);
-    PTDolphinImportProfile(Wiimote::GetConfig(), true);
+    for (int player = 0; player < 2; ++player)
+    {
+      PTDolphinImportProfile(Pad::GetConfig(), false, player);
+      PTDolphinImportProfile(Wiimote::GetConfig(), true, player);
+    }
 
     // N'envoie rien (statistiques désactivées) mais doit être fait avant tout jeu Wii (DolphiniOS).
 #if TARGET_OS_IOS
@@ -516,20 +524,21 @@ PTDOLPHIN_EXPORT void PTDolphinSetTurbo(bool enabled)
 // MARK: - Commandes
 
 // Les boutons arrivent avec les numéros RetroPad de PlayTendo (par position, comme ses manettes) : ceux enfoncés
-// sont gardés ici, puis traduits pour la manette GameCube 1 (appareil tactile iOS/0) ou pour la Wiimote 1 avec
-// son Nunchuk (iOS/4). Un même bouton de la console peut venir de deux boutons RetroPad.
+// sont gardés ici, puis traduits pour la manette GameCube du joueur (appareils tactiles iOS/0, iOS/1) ou pour sa
+// Wiimote avec son Nunchuk (iOS/4, iOS/5). Un même bouton de la console peut venir de deux boutons RetroPad.
 static constexpr int kPad = 0;
 static constexpr int kWiimote = 4;
+static constexpr int kPlayers = 2;
 static std::mutex s_inputMutex;
-static uint32_t s_pressed = 0;  // un bit par bouton RetroPad
+static uint32_t s_pressed[kPlayers] = {};  // un bit par bouton RetroPad
 static bool s_wiimoteMode = false;
-static bool s_pointerStickActive = false;
+static bool s_pointerStickActive[kPlayers] = {};
 
-static bool PTDolphinHeld(std::initializer_list<int> buttons)
+static bool PTDolphinHeld(int player, std::initializer_list<int> buttons)
 {
   for (int button : buttons)
   {
-    if (s_pressed & (1u << button))
+    if (s_pressed[player] & (1u << button))
       return true;
   }
   return false;
@@ -537,45 +546,47 @@ static bool PTDolphinHeld(std::initializer_list<int> buttons)
 
 /// Manette GameCube : bas = A (le gros bouton vert), gauche = B, droite = X, haut = Y ; R1 = Z ; L1/L2 =
 /// gâchette L, R2 = gâchette R (pressées à fond).
-static void PTDolphinApplyPad()
+static void PTDolphinApplyPad(int player)
 {
   StateManager* state = StateManager::GetInstance();
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_A, PTDolphinHeld({0}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_B, PTDolphinHeld({1}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_X, PTDolphinHeld({8}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_Y, PTDolphinHeld({9}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_START, PTDolphinHeld({3}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_Z, PTDolphinHeld({11}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_UP, PTDolphinHeld({4}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_DOWN, PTDolphinHeld({5}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_LEFT, PTDolphinHeld({6}));
-  state->SetButtonPressed(kPad, ButtonType::BUTTON_RIGHT, PTDolphinHeld({7}));
-  state->SetAxisValue(kPad, ButtonType::TRIGGER_L, PTDolphinHeld({10, 12}) ? 1.0f : 0.0f);
-  state->SetAxisValue(kPad, ButtonType::TRIGGER_R, PTDolphinHeld({13}) ? 1.0f : 0.0f);
+  const int pad = kPad + player;
+  state->SetButtonPressed(pad, ButtonType::BUTTON_A, PTDolphinHeld(player, {0}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_B, PTDolphinHeld(player, {1}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_X, PTDolphinHeld(player, {8}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_Y, PTDolphinHeld(player, {9}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_START, PTDolphinHeld(player, {3}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_Z, PTDolphinHeld(player, {11}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_UP, PTDolphinHeld(player, {4}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_DOWN, PTDolphinHeld(player, {5}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_LEFT, PTDolphinHeld(player, {6}));
+  state->SetButtonPressed(pad, ButtonType::BUTTON_RIGHT, PTDolphinHeld(player, {7}));
+  state->SetAxisValue(pad, ButtonType::TRIGGER_L, PTDolphinHeld(player, {10, 12}) ? 1.0f : 0.0f);
+  state->SetAxisValue(pad, ButtonType::TRIGGER_R, PTDolphinHeld(player, {13}) ? 1.0f : 0.0f);
 }
 
 /// Wiimote + Nunchuk : bas = A, droite et R2 = B (la gâchette), gauche = 1, haut = 2, Start = +, Select = −,
 /// R3 = Home ; L1 = C et L2 = Z (Nunchuk) ; R1 = secouer la télécommande.
-static void PTDolphinApplyWiimote()
+static void PTDolphinApplyWiimote(int player)
 {
   StateManager* state = StateManager::GetInstance();
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_A, PTDolphinHeld({0}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_B, PTDolphinHeld({8, 13}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_1, PTDolphinHeld({1}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_2, PTDolphinHeld({9}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_PLUS, PTDolphinHeld({3}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_MINUS, PTDolphinHeld({2}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_BUTTON_HOME, PTDolphinHeld({15}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_UP, PTDolphinHeld({4}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_DOWN, PTDolphinHeld({5}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_LEFT, PTDolphinHeld({6}));
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_RIGHT, PTDolphinHeld({7}));
-  state->SetButtonPressed(kWiimote, ButtonType::NUNCHUK_BUTTON_C, PTDolphinHeld({10}));
-  state->SetButtonPressed(kWiimote, ButtonType::NUNCHUK_BUTTON_Z, PTDolphinHeld({12}));
-  const bool shake = PTDolphinHeld({11});
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_SHAKE_X, shake);
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_SHAKE_Y, shake);
-  state->SetButtonPressed(kWiimote, ButtonType::WIIMOTE_SHAKE_Z, shake);
+  const int remote = kWiimote + player;
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_A, PTDolphinHeld(player, {0}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_B, PTDolphinHeld(player, {8, 13}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_1, PTDolphinHeld(player, {1}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_2, PTDolphinHeld(player, {9}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_PLUS, PTDolphinHeld(player, {3}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_MINUS, PTDolphinHeld(player, {2}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_BUTTON_HOME, PTDolphinHeld(player, {15}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_UP, PTDolphinHeld(player, {4}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_DOWN, PTDolphinHeld(player, {5}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_LEFT, PTDolphinHeld(player, {6}));
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_RIGHT, PTDolphinHeld(player, {7}));
+  state->SetButtonPressed(remote, ButtonType::NUNCHUK_BUTTON_C, PTDolphinHeld(player, {10}));
+  state->SetButtonPressed(remote, ButtonType::NUNCHUK_BUTTON_Z, PTDolphinHeld(player, {12}));
+  const bool shake = PTDolphinHeld(player, {11});
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_SHAKE_X, shake);
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_SHAKE_Y, shake);
+  state->SetButtonPressed(remote, ButtonType::WIIMOTE_SHAKE_Z, shake);
 }
 
 /// Une valeur par direction (négative vers le haut et la gauche), comme les sticks tactiles de DolphiniOS.
@@ -589,26 +600,30 @@ static void PTDolphinSetAxes(int controller, ButtonType up, ButtonType down, But
   state->SetAxisValue(controller, right, std::max(x, 0.0f));
 }
 
-static void PTDolphinSetPointerAxes(float x, float y)
+static void PTDolphinSetPointerAxes(int player, float x, float y)
 {
-  PTDolphinSetAxes(kWiimote, ButtonType::WIIMOTE_IR_UP, ButtonType::WIIMOTE_IR_DOWN, ButtonType::WIIMOTE_IR_LEFT,
-                   ButtonType::WIIMOTE_IR_RIGHT, std::clamp(x, -1.0f, 1.0f), std::clamp(y, -1.0f, 1.0f));
+  PTDolphinSetAxes(kWiimote + player, ButtonType::WIIMOTE_IR_UP, ButtonType::WIIMOTE_IR_DOWN,
+                   ButtonType::WIIMOTE_IR_LEFT, ButtonType::WIIMOTE_IR_RIGHT, std::clamp(x, -1.0f, 1.0f),
+                   std::clamp(y, -1.0f, 1.0f));
 }
 
-/// Relâche tout, sur les deux manettes (le pointeur revient au centre).
+/// Relâche tout, sur les manettes des deux joueurs (le pointeur revient au centre).
 static void PTDolphinReleaseAll()
 {
-  s_pressed = 0;
-  s_pointerStickActive = false;
-  PTDolphinApplyPad();
-  PTDolphinApplyWiimote();
-  PTDolphinSetAxes(kPad, ButtonType::STICK_MAIN_UP, ButtonType::STICK_MAIN_DOWN, ButtonType::STICK_MAIN_LEFT,
-                   ButtonType::STICK_MAIN_RIGHT, 0, 0);
-  PTDolphinSetAxes(kPad, ButtonType::STICK_C_UP, ButtonType::STICK_C_DOWN, ButtonType::STICK_C_LEFT,
-                   ButtonType::STICK_C_RIGHT, 0, 0);
-  PTDolphinSetAxes(kWiimote, ButtonType::NUNCHUK_STICK_UP, ButtonType::NUNCHUK_STICK_DOWN,
-                   ButtonType::NUNCHUK_STICK_LEFT, ButtonType::NUNCHUK_STICK_RIGHT, 0, 0);
-  PTDolphinSetPointerAxes(0, 0);
+  for (int player = 0; player < kPlayers; ++player)
+  {
+    s_pressed[player] = 0;
+    s_pointerStickActive[player] = false;
+    PTDolphinApplyPad(player);
+    PTDolphinApplyWiimote(player);
+    PTDolphinSetAxes(kPad + player, ButtonType::STICK_MAIN_UP, ButtonType::STICK_MAIN_DOWN,
+                     ButtonType::STICK_MAIN_LEFT, ButtonType::STICK_MAIN_RIGHT, 0, 0);
+    PTDolphinSetAxes(kPad + player, ButtonType::STICK_C_UP, ButtonType::STICK_C_DOWN, ButtonType::STICK_C_LEFT,
+                     ButtonType::STICK_C_RIGHT, 0, 0);
+    PTDolphinSetAxes(kWiimote + player, ButtonType::NUNCHUK_STICK_UP, ButtonType::NUNCHUK_STICK_DOWN,
+                     ButtonType::NUNCHUK_STICK_LEFT, ButtonType::NUNCHUK_STICK_RIGHT, 0, 0);
+    PTDolphinSetPointerAxes(player, 0, 0);
+  }
 }
 
 PTDOLPHIN_EXPORT void PTDolphinSetWiimote(bool enabled)
@@ -618,37 +633,46 @@ PTDOLPHIN_EXPORT void PTDolphinSetWiimote(bool enabled)
   PTDolphinReleaseAll();
 }
 
-PTDOLPHIN_EXPORT void PTDolphinSetButton(int retroPadButton, bool pressed)
+/// Bouton RetroPad du joueur `player` (0 ou 1).
+PTDOLPHIN_EXPORT void PTDolphinSetPadButton(int player, int retroPadButton, bool pressed)
 {
-  if (retroPadButton < 0 || retroPadButton >= 16)
+  if (player < 0 || player >= kPlayers || retroPadButton < 0 || retroPadButton >= 16)
     return;
   std::lock_guard<std::mutex> lock(s_inputMutex);
   if (pressed)
-    s_pressed |= 1u << retroPadButton;
+    s_pressed[player] |= 1u << retroPadButton;
   else
-    s_pressed &= ~(1u << retroPadButton);
+    s_pressed[player] &= ~(1u << retroPadButton);
   if (s_wiimoteMode)
-    PTDolphinApplyWiimote();
+    PTDolphinApplyWiimote(player);
   else
-    PTDolphinApplyPad();
+    PTDolphinApplyPad(player);
 }
 
-PTDOLPHIN_EXPORT void PTDolphinSetStick(int stick, float x, float y)
+PTDOLPHIN_EXPORT void PTDolphinSetButton(int retroPadButton, bool pressed)
 {
+  PTDolphinSetPadButton(0, retroPadButton, pressed);
+}
+
+/// Stick 0 (gauche) ou 1 (droit) du joueur `player`.
+PTDOLPHIN_EXPORT void PTDolphinSetPadStick(int player, int stick, float x, float y)
+{
+  if (player < 0 || player >= kPlayers)
+    return;
   std::lock_guard<std::mutex> lock(s_inputMutex);
   if (!s_wiimoteMode)
   {
     if (stick == 0)
-      PTDolphinSetAxes(kPad, ButtonType::STICK_MAIN_UP, ButtonType::STICK_MAIN_DOWN, ButtonType::STICK_MAIN_LEFT,
-                       ButtonType::STICK_MAIN_RIGHT, x, y);
+      PTDolphinSetAxes(kPad + player, ButtonType::STICK_MAIN_UP, ButtonType::STICK_MAIN_DOWN,
+                       ButtonType::STICK_MAIN_LEFT, ButtonType::STICK_MAIN_RIGHT, x, y);
     else
-      PTDolphinSetAxes(kPad, ButtonType::STICK_C_UP, ButtonType::STICK_C_DOWN, ButtonType::STICK_C_LEFT,
+      PTDolphinSetAxes(kPad + player, ButtonType::STICK_C_UP, ButtonType::STICK_C_DOWN, ButtonType::STICK_C_LEFT,
                        ButtonType::STICK_C_RIGHT, x, y);
     return;
   }
   if (stick == 0)
   {
-    PTDolphinSetAxes(kWiimote, ButtonType::NUNCHUK_STICK_UP, ButtonType::NUNCHUK_STICK_DOWN,
+    PTDolphinSetAxes(kWiimote + player, ButtonType::NUNCHUK_STICK_UP, ButtonType::NUNCHUK_STICK_DOWN,
                      ButtonType::NUNCHUK_STICK_LEFT, ButtonType::NUNCHUK_STICK_RIGHT, x, y);
     return;
   }
@@ -656,20 +680,45 @@ PTDOLPHIN_EXPORT void PTDolphinSetStick(int stick, float x, float y)
   // centre, pour ne pas gêner la visée au doigt.
   if (std::hypot(x, y) > 0.15f)
   {
-    s_pointerStickActive = true;
-    PTDolphinSetPointerAxes(x, y);
+    s_pointerStickActive[player] = true;
+    PTDolphinSetPointerAxes(player, x, y);
   }
-  else if (s_pointerStickActive)
+  else if (s_pointerStickActive[player])
   {
-    s_pointerStickActive = false;
-    PTDolphinSetPointerAxes(0, 0);
+    s_pointerStickActive[player] = false;
+    PTDolphinSetPointerAxes(player, 0, 0);
   }
+}
+
+PTDOLPHIN_EXPORT void PTDolphinSetStick(int stick, float x, float y)
+{
+  PTDolphinSetPadStick(0, stick, x, y);
 }
 
 PTDOLPHIN_EXPORT void PTDolphinSetPointer(float x, float y)
 {
   std::lock_guard<std::mutex> lock(s_inputMutex);
-  PTDolphinSetPointerAxes(x, y);
+  PTDolphinSetPointerAxes(0, x, y);
+}
+
+/// Deuxième manette branchée ou retirée : manette GameCube 2 (port 2) et, en mode Wiimote, télécommande 2, pour ce
+/// jeu et les suivants. Sans deuxième manette, rien n'est branché pour le joueur 2 (un jeu Wii afficherait son
+/// pointeur au milieu de l'écran).
+PTDOLPHIN_EXPORT void PTDolphinSetSecondPlayer(bool connected)
+{
+  DOLHostQueueRunSync(^{
+    const auto pad = connected ? SerialInterface::SIDEVICE_GC_CONTROLLER : SerialInterface::SIDEVICE_NONE;
+    const bool remote = connected && s_wiimoteMode;
+    if (Config::Get(Config::GetInfoForSIDevice(1)) != pad)
+    {
+      Config::SetBase(Config::GetInfoForSIDevice(1), pad);
+      auto& system = Core::System::GetInstance();
+      if (Core::IsRunning(system))
+        system.GetSerialInterface().ChangeDevice(pad, 1);
+    }
+    // Dolphin branche ou débranche la télécommande de lui-même quand ce réglage change (Wiimote::RefreshConfig).
+    Config::SetBase(Config::GetInfoForWiimoteSource(1), remote ? WiimoteSource::Emulated : WiimoteSource::None);
+  });
 }
 
 // MARK: - Image

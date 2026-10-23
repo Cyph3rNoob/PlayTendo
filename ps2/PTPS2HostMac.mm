@@ -167,6 +167,7 @@ static void PTPS2ApplyFixedSettings(INISettingsInterface* si, const char* biosDi
     si->SetStringValue("Folders", "MemoryCards", memcardDir);
     si->SetStringValue("Folders", "Logs", "logs");
     si->SetBoolValue("EmuCore", "EnableCheats", true); // codes de triche écrits par PlayTendo (PTPS2SetCheats)
+    si->SetStringValue("Pad2", "Type", "DualShock2");   // joueur 2 (PTPS2SetPadButton)
     // Recompilateurs ARM64 (le cœur prend sa mémoire exécutable avec MAP_JIT, permis à l'app signée localement).
     si->SetIntValue("EmuCore/CPU", "CoreType", 2);
     si->SetBoolValue("EmuCore/CPU", "UseArm64Dynarec", true);
@@ -805,6 +806,65 @@ PTPS2_EXPORT void PTPS2SetStick(int stick, float x, float y)
         pad->Set(PadDualshock2::Inputs::PAD_R_DOWN, down);
         pad->Set(PadDualshock2::Inputs::PAD_R_UP, up);
     }
+}
+
+/// Joueur 2 : deuxième manette DualShock 2 (port 2, toujours branchée : `Pad2/Type`), boutons et sticks posés
+/// directement sur elle. Le joueur 1 passe par PTPS2SetButton / PTPS2SetStick.
+static PadDualshock2* PTPS2SecondPad()
+{
+    PadBase* pad = Pad::GetPad(1, 0);
+    return pad && pad->GetType() == Pad::ControllerType::DualShock2 ? static_cast<PadDualshock2*>(pad) : nullptr;
+}
+
+PTPS2_EXPORT void PTPS2SetPadButton(int player, int retroPadButton, bool pressed)
+{
+    if (player == 0)
+    {
+        PTPS2SetButton(retroPadButton, pressed);
+        return;
+    }
+    static const u32 map[16] = {
+        PadDualshock2::Inputs::PAD_CROSS,    // B
+        PadDualshock2::Inputs::PAD_SQUARE,   // Y
+        PadDualshock2::Inputs::PAD_SELECT,   // Select
+        PadDualshock2::Inputs::PAD_START,    // Start
+        PadDualshock2::Inputs::PAD_UP,       // Haut
+        PadDualshock2::Inputs::PAD_DOWN,     // Bas
+        PadDualshock2::Inputs::PAD_LEFT,     // Gauche
+        PadDualshock2::Inputs::PAD_RIGHT,    // Droite
+        PadDualshock2::Inputs::PAD_CIRCLE,   // A
+        PadDualshock2::Inputs::PAD_TRIANGLE, // X
+        PadDualshock2::Inputs::PAD_L1,       // L
+        PadDualshock2::Inputs::PAD_R1,       // R
+        PadDualshock2::Inputs::PAD_L2,
+        PadDualshock2::Inputs::PAD_R2,
+        PadDualshock2::Inputs::PAD_L3,
+        PadDualshock2::Inputs::PAD_R3,
+    };
+    if (player != 1 || retroPadButton < 0 || retroPadButton >= 16)
+        return;
+    if (auto* pad = PTPS2SecondPad())
+        pad->Set(map[retroPadButton], pressed ? 1.0f : 0.0f);
+}
+
+PTPS2_EXPORT void PTPS2SetPadStick(int player, int stick, float x, float y)
+{
+    if (player == 0)
+    {
+        PTPS2SetStick(stick, x, y);
+        return;
+    }
+    auto* pad = player == 1 ? PTPS2SecondPad() : nullptr;
+    if (!pad)
+        return;
+    const float right = x > 0 ? x : 0.0f;
+    const float left = x < 0 ? -x : 0.0f;
+    const float down = y > 0 ? y : 0.0f;
+    const float up = y < 0 ? -y : 0.0f;
+    pad->Set(stick == 0 ? PadDualshock2::Inputs::PAD_L_RIGHT : PadDualshock2::Inputs::PAD_R_RIGHT, right);
+    pad->Set(stick == 0 ? PadDualshock2::Inputs::PAD_L_LEFT : PadDualshock2::Inputs::PAD_R_LEFT, left);
+    pad->Set(stick == 0 ? PadDualshock2::Inputs::PAD_L_DOWN : PadDualshock2::Inputs::PAD_R_DOWN, down);
+    pad->Set(stick == 0 ? PadDualshock2::Inputs::PAD_L_UP : PadDualshock2::Inputs::PAD_R_UP, up);
 }
 
 // MARK: - Sauvegardes rapides
