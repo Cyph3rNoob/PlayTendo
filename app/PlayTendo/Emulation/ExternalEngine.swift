@@ -5,6 +5,16 @@ enum ExternalEngineState {
     case stopped, starting, running, paused
 }
 
+/// Mesures du moteur pour l'affichage des performances : images par seconde et vitesse (%) quand il les donne,
+/// sinon le nombre d'images produites depuis le démarrage (l'app en tire les images par seconde, et la vitesse
+/// d'après la cadence normale de la console).
+struct EnginePerformance {
+    var fps: Double?
+    var speed: Double?
+    var frames: UInt64?
+    var nominalFPS: Double?
+}
+
 /// Moteur qui cadence, dessine et joue le son lui-même (PS2, GameCube/Wii, PS Vita) : la session le pilote seulement
 /// (`EmulatorSession.runExternal`). Chargé à la première partie, gardé jusqu'à la fermeture de l'app.
 protocol ExternalEngine: AnyObject {
@@ -43,6 +53,8 @@ protocol ExternalEngine: AnyObject {
     var resumeLoaded: Bool? { get }
     /// Codes de triche du jeu en cours (PS2, GameCube, Wii), appliqués tout de suite. Jeu démarré.
     func applyCheats(_ cheats: [Cheat], system: GameSystem)
+    /// Mesures pour l'affichage des performances (nil : le moteur n'en donne pas).
+    var performance: EnginePerformance? { get }
 }
 
 /// Moteurs sans changement de disque : le premier disque seulement.
@@ -53,6 +65,7 @@ extension ExternalEngine {
     func prepareBoot(resume: String?) -> Bool { false }
     var resumeLoaded: Bool? { nil }
     func applyCheats(_ cheats: [Cheat], system: GameSystem) {}
+    var performance: EnginePerformance? { nil }
 }
 
 extension PTPS2Engine: ExternalEngine {
@@ -66,6 +79,11 @@ extension PTPS2Engine: ExternalEngine {
     }
 
     func boot(path: String, jit: Bool) -> Bool { bootGame(atPath: path) }
+
+    var performance: EnginePerformance? {
+        var fps = 0.0, speed = 0.0
+        return getFPS(&fps, speed: &speed) ? EnginePerformance(fps: fps, speed: speed) : nil
+    }
 
     /// Codes de triche : fichier .pnach du jeu (gardé par le moteur pour ses prochains lancements).
     func applyCheats(_ cheats: [Cheat], system: GameSystem) {
@@ -96,6 +114,11 @@ extension PTPS2Engine: ExternalEngine {
 }
 
 extension PTDolphinEngine: ExternalEngine {
+    var performance: EnginePerformance? {
+        var fps = 0.0, speed = 0.0
+        return getFPS(&fps, speed: &speed) ? EnginePerformance(fps: fps, speed: speed) : nil
+    }
+
     /// Codes de triche Action Replay et Gecko, remplacés tout de suite.
     func applyCheats(_ cheats: [Cheat], system: GameSystem) {
         let codes = Cheats.dolphin(for: cheats, system: system)
@@ -154,6 +177,11 @@ extension PTDolphinEngine: ExternalEngine {
 
 #if PLAYTENDO_VITA
 extension PTVitaEngine: ExternalEngine {
+    /// Vita3K ne mesure pas lui-même : l'app compte les images affichées (30 ou 60 par seconde selon le jeu).
+    var performance: EnginePerformance? {
+        displayedFrames >= 0 ? EnginePerformance(frames: UInt64(displayedFrames)) : nil
+    }
+
     var engineState: ExternalEngineState {
         switch state {
         case PTVitaStateRunning: .running

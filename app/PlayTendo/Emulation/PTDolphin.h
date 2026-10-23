@@ -34,6 +34,8 @@ void PTDolphinSetWidescreen(bool enabled);
 /// Codes de triche du jeu en cours : Action Replay et Gecko, codes séparés par une ligne vide, une instruction par
 /// ligne. Remplacent les codes actifs, tout de suite. À appeler jeu démarré.
 void PTDolphinSetCheats(const char *actionReplay, const char *gecko);
+/// Images par seconde du jeu et vitesse (%) ; faux hors partie.
+bool PTDolphinGetPerformance(double *fps, double *speed);
 /// Disque en cours (à partir de 0) d'un jeu démarré par PTDolphinBootDiscs, sinon -1.
 int PTDolphinGetDisc(void);
 /// Met le disque `index` du jeu démarré par PTDolphinBootDiscs (couvercle ouvert, disque inséré une seconde après).

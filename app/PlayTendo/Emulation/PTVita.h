@@ -51,6 +51,8 @@ bool PTVitaBoot(const char *titleID);
 /// Résolution interne (multiple de 960×544) du prochain jeu lancé : Vita3K ne la lit qu'au démarrage.
 void PTVitaSetResolution(float multiplier);
 PTVitaState PTVitaGetState(void);
+/// Images affichées depuis le démarrage du jeu (facultative : absente des moteurs d'avant).
+unsigned long long PTVitaGetFrameCount(void);
 void PTVitaSetPaused(bool paused);
 /// Demande l'arrêt du jeu ; l'état repasse à « arrêté » quand c'est fait.
 void PTVitaStop(void);

@@ -635,6 +635,12 @@ PTVITA_EXPORT PTVitaState PTVitaGetState(void) {
     return static_cast<PTVitaState>(s_state.load());
 }
 
+/// Images affichées depuis le démarrage (compteur de SceDisplay, jamais remis à zéro ici) : PlayTendo en tire les
+/// images par seconde de son affichage des performances.
+PTVITA_EXPORT unsigned long long PTVitaGetFrameCount(void) {
+    return s_emuenv ? static_cast<unsigned long long>(s_emuenv->frame_count) : 0;
+}
+
 PTVITA_EXPORT void PTVitaSetPaused(bool paused) {
     s_pauseRequested.store(paused);
     if (!s_session || !s_session->is_running())

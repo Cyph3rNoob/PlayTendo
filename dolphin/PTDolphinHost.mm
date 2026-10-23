@@ -63,6 +63,7 @@
 #include "InputCommon/InputConfig.h"
 #include "UICommon/UICommon.h"
 #include "VideoCommon/FrameDumper.h"
+#include "VideoCommon/PerformanceMetrics.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
@@ -782,6 +783,18 @@ PTDOLPHIN_EXPORT void PTDolphinSetCheats(const char* actionReplay, const char* g
     Gecko::SetActiveCodes(geckoCodes, config.GetGameID(), config.GetRevision());
     NSLog(@"[PlayTendo] Codes de triche : %zu Action Replay, %zu Gecko", arCodes.size(), geckoCodes.size());
   });
+}
+
+/// Affichage des performances de PlayTendo : images par seconde du jeu et vitesse en %. Faux hors partie.
+PTDOLPHIN_EXPORT bool PTDolphinGetPerformance(double* fps, double* speed)
+{
+  if (Core::GetState(Core::System::GetInstance()) != Core::State::Running)
+    return false;
+  if (fps)
+    *fps = g_perf_metrics.GetFPS();
+  if (speed)
+    *speed = g_perf_metrics.GetSpeed() * 100.0;
+  return true;
 }
 
 PTDOLPHIN_EXPORT bool PTDolphinCaptureScreen(const char* path)

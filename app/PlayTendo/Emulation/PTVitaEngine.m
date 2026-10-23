@@ -26,6 +26,8 @@ static void PTVitaReportProgress(float progress, void *context) {
 @implementation PTVitaEngine {
     PTVitaFunctions _fn;
     BOOL _touching;
+    /// Facultative (moteurs compilés avant elle).
+    __typeof__(&PTVitaGetFrameCount) _frameCount;
 }
 
 + (PTVitaEngine *)loadedEngine {
@@ -49,6 +51,7 @@ static void PTVitaReportProgress(float progress, void *context) {
     if (!engine->_fn.name) return [self failWithMessage:@"Moteur PS Vita incomplet : " #name " manquant" error:error];
     PT_VITA_FUNCTIONS(PT_LOOKUP)
 #undef PT_LOOKUP
+    engine->_frameCount = (__typeof__(&PTVitaGetFrameCount))dlsym(handle, "PTVitaGetFrameCount");
 
     // Les fichiers fixes du moteur (shaders, icônes) sont rangés dans son framework (dans Resources sur Mac).
     NSString *assets = path.stringByDeletingLastPathComponent;
@@ -70,6 +73,10 @@ static void PTVitaReportProgress(float progress, void *context) {
 + (id)failWithMessage:(NSString *)message error:(NSError **)error {
     if (error) *error = [NSError errorWithDomain:@"PlayTendo" code:2 userInfo:@{NSLocalizedDescriptionKey: message}];
     return nil;
+}
+
+- (long long)displayedFrames {
+    return _frameCount ? (long long)_frameCount() : -1;
 }
 
 - (PTVitaState)state {

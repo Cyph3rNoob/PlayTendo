@@ -26,6 +26,7 @@ static NSString *loadFailure;
     __typeof__(&PTPS2SetBootOptions) _setBootOptions;
     __typeof__(&PTPS2GetBootStateResult) _bootStateResult;
     __typeof__(&PTPS2SetCheats) _setCheats;
+    __typeof__(&PTPS2GetPerformance) _getPerformance;
 }
 
 + (PTPS2Engine *)loadedEngine {
@@ -56,6 +57,7 @@ static NSString *loadFailure;
     engine->_setBootOptions = (__typeof__(&PTPS2SetBootOptions))dlsym(handle, "PTPS2SetBootOptions");
     engine->_bootStateResult = (__typeof__(&PTPS2GetBootStateResult))dlsym(handle, "PTPS2GetBootStateResult");
     engine->_setCheats = (__typeof__(&PTPS2SetCheats))dlsym(handle, "PTPS2SetCheats");
+    engine->_getPerformance = (__typeof__(&PTPS2GetPerformance))dlsym(handle, "PTPS2GetPerformance");
 
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);
@@ -131,6 +133,14 @@ static NSString *loadFailure;
 
 - (BOOL)loadStateFromPath:(NSString *)path {
     return _fn.PTPS2LoadState(path.fileSystemRepresentation);
+}
+
+- (BOOL)getFPS:(double *)fps speed:(double *)speed {
+    float f = 0, s = 0;
+    if (!_getPerformance || !_getPerformance(&f, &s)) return NO;
+    *fps = f;
+    *speed = s;
+    return YES;
 }
 
 - (void)setCheats:(NSString *)pnach {

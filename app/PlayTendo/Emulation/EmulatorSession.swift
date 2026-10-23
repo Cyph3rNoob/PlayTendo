@@ -84,6 +84,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private var cheatList: [Cheat]
     private var cheatsSent = false
     private var cheatFrames = 0
+    /// Affichage des performances : images produites par le moteur libretro (écrites par le thread d'émulation).
+    private let framesLock = NSLock()
+    private var producedFrames: UInt64 = 0
     /// N64 : moteur à recharger à la reprise (réglages d'image lus seulement au démarrage d'un jeu).
     private var coreReloadRequested = false
     /// Partie à reprendre après un rechargement du moteur : Mupen64Plus refuse une sauvegarde rapide avant d'avoir
@@ -199,6 +202,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             cheatsSent = false
             cheatFrames = 0
         }
+    }
+
+    /// Affichage des performances : mesures du moteur en cours (nil avant le démarrage).
+    func performanceSample() -> EnginePerformance? {
+        if let external { return external.performance }
+        guard let core else { return nil }
+        return EnginePerformance(frames: framesLock.withLock { producedFrames }, nominalFPS: core.framesPerSecond)
     }
 
     /// Codes de triche changés (ajout, interrupteur, suppression) : gardés, et appliqués tout de suite.
@@ -639,6 +649,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 rewindExhausted = false
                 let steps = fastForward ? 3 : 1
                 for _ in 0..<steps { core.runFrame() }
+                framesLock.withLock { producedFrames &+= UInt64(steps) }
                 // Codes de triche : envoyés après la première image (le moteur a fini de démarrer). La PSP ne sait quel
                 // est son jeu qu'une fois démarrée : 5 s (elle relit d'elle-même les codes déjà envoyés une autre fois).
                 if !cheatsSent {

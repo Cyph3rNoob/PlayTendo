@@ -27,6 +27,8 @@ struct EmulatorView: View {
     @State private var customLandscape: ControlCustomization
     /// Mode édition des boutons (menu pause › Commandes › Modifier les boutons), jeu en pause.
     @State private var editingControls = false
+    /// Affichage des performances (Réglages, menu pause › Image).
+    @AppStorage(PerformanceSettings.key) private var showPerformance = false
 
     init(game: Game, onClose: (() -> Void)? = nil) {
         self.game = game
@@ -168,6 +170,14 @@ struct EmulatorView: View {
                      onMenu: { showingMenu ? closeMenu() : openMenu() },
                      onKeyboard: { session.stopRewind() })
 #endif
+            if showPerformance && session.state != .loading && !editingControls {
+                let origin = performanceOrigin(layout)
+                PerformanceOverlay(session: session, paused: session.state == .paused)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.leading, origin.x)
+                    .padding(.top, origin.y)
+                    .allowsHitTesting(false)
+            }
             if session.state == .loading {
                 // Étape longue (installation PS Vita, reprise d'une partie) : fond noir, le démarrage de la console
                 // ne se voit pas.
@@ -255,6 +265,16 @@ struct EmulatorView: View {
         tr("Clique ou appuie sur une touche pour reprendre")
 #else
         gamepad.isConnected ? tr("Appuie sur un bouton pour reprendre") : tr("Touche l'écran pour reprendre")
+#endif
+    }
+
+    /// Affichage des performances : en haut à gauche de l'image, hors de l'encoche.
+    private func performanceOrigin(_ layout: ControlLayout) -> CGPoint {
+#if os(iOS)
+        let safe = Self.safeAreaInsets()
+        return CGPoint(x: max(layout.gameRect.minX, safe.left) + 6, y: max(layout.gameRect.minY, safe.top) + 6)
+#else
+        return CGPoint(x: layout.gameRect.minX + 6, y: layout.gameRect.minY + 6)
 #endif
     }
 
@@ -533,6 +553,7 @@ private struct PauseMenu: View {
 
     @State private var tab: MenuTab = .game
     @State private var showingCheats = false
+    @AppStorage(PerformanceSettings.key) private var showPerformance = false
 
     var body: some View {
         ZStack {
@@ -772,6 +793,11 @@ private struct PauseMenu: View {
                          selection: filter.wrappedValue) { value in
                 pick { filter.wrappedValue = value }
             }
+        }
+        NeonSegments(title: tr("PERFORMANCES"), detail: nil,
+                     options: [(0, tr("Masquées")), (1, tr("Affichées"))],
+                     selection: showPerformance ? 1 : 0) { value in
+            pick { showPerformance = value == 1 }
         }
 #if os(macOS)
         let fullScreen = MacWindow.isFullScreen

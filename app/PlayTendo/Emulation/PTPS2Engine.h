@@ -50,6 +50,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setImageUpscale:(NSInteger)upscale smoothing:(BOOL)smoothing widescreen:(BOOL)widescreen;
 /// Codes de triche du jeu en cours (texte .pnach ; vide : aucun). Sans effet avec un moteur d'avant ce réglage.
 - (void)setCheats:(NSString *)pnach;
+/// Images par seconde du jeu et vitesse (%). NO hors partie ou avec un moteur d'avant.
+- (BOOL)getFPS:(double *)fps speed:(double *)speed;
 /// Format de l'image du jeu (largeur / hauteur), 0 si inconnu.
 @property (nonatomic, readonly) float aspectRatio;
 /// Image du jeu en cours (640×480), pour la vignette « Continuer ». Bloquant, hors du thread principal.

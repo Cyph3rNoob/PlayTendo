@@ -33,6 +33,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setWidescreen:(BOOL)enabled;
 /// Codes de triche du jeu en cours (voir PTDolphinSetCheats). Sans effet avec un moteur d'avant ce réglage.
 - (void)setCheatsActionReplay:(NSString *)actionReplay gecko:(NSString *)gecko;
+/// Images par seconde du jeu et vitesse (%). NO hors partie ou avec un moteur d'avant.
+- (BOOL)getFPS:(double *)fps speed:(double *)speed;
 /// Disque en cours (à partir de 0) d'un jeu démarré avec plusieurs disques, sinon -1.
 @property (nonatomic, readonly) NSInteger discIndex;
 /// Met le disque `index` (à partir de 0) du jeu en cours. NO si impossible.

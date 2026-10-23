@@ -20,6 +20,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Vue où le jeu est dessiné (une seule pour toute la vie de l'app).
 @property (nonatomic, readonly) PTPlatformView *renderView;
 @property (nonatomic, readonly) PTVitaState state;
+/// Images affichées depuis le démarrage du jeu ; -1 avec un moteur d'avant.
+@property (nonatomic, readonly) long long displayedFrames;
 
 /// Firmware (PSVUPDAT.PUP) installé.
 @property (nonatomic, readonly) BOOL hasFirmware;

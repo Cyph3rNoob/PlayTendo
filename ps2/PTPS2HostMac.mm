@@ -47,6 +47,7 @@
 #include "pcsx2/SIO/Pad/Pad.h"
 #include "pcsx2/SIO/Pad/PadDualshock2.h"
 #include "pcsx2/SIO/Sio.h"
+#include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/VMManager.h"
 #include "pcsx2/ps2/BiosTools.h"
 
@@ -904,6 +905,19 @@ PTPS2_EXPORT void PTPS2SetCheats(const char* pnach)
             FileSystem::WriteStringToFile(path.c_str(), text);
         VMManager::ReloadPatches(true, false, false, false);
     }, false);
+}
+
+/// Affichage des performances de PlayTendo : images par seconde du jeu (sa propre cadence quand PCSX2 la connaît,
+/// sinon celle de l'écran) et vitesse en %. Faux hors partie.
+PTPS2_EXPORT bool PTPS2GetPerformance(float* fps, float* speed)
+{
+    if (!VMManager::HasValidVM())
+        return false;
+    if (fps)
+        *fps = PerformanceMetrics::IsInternalFPSValid() ? PerformanceMetrics::GetInternalFPS() : PerformanceMetrics::GetFPS();
+    if (speed)
+        *speed = PerformanceMetrics::GetSpeed();
+    return true;
 }
 
 PTPS2_EXPORT float PTPS2GetAspectRatio(void)
