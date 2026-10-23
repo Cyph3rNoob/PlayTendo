@@ -534,6 +534,15 @@ PTPS2_EXPORT bool PTPS2GetPerformance(float* fps, float* speed)
     return true;
 }
 
+/// Vibrations des manettes PS2 : PlayTendo les reçoit (manette, force des deux moteurs de 0 à 1) et fait vibrer la
+/// sienne. Retouche 9 de patch_armsx2.py.
+extern void (*g_playtendo_pad_vibration)(unsigned int pad, float large, float small);
+
+PTPS2_EXPORT void PTPS2SetVibrationHandler(void (*handler)(unsigned int pad, float large, float small))
+{
+    g_playtendo_pad_vibration = handler;
+}
+
 PTPS2_EXPORT float PTPS2GetAspectRatio(void)
 {
     if (!VMManager::HasValidVM())

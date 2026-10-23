@@ -52,6 +52,8 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 /// Vrai si le moteur dessine en 3D avec OpenGL ES.
 /// Le moteur peut se servir de la réserve JIT de l'app (à régler avant le chargement du jeu).
 @property (nonatomic) BOOL allowsJIT;
+/// Manette branchée sur le port 1 (RETRO_DEVICE_…) ; 0 : manette simple. PS1 : DualShock (vibrations, sticks).
+@property (nonatomic) unsigned controllerDevice;
 /// Le moteur dessine avec Vulkan (3DS, par MoltenVK) plutôt qu'OpenGL ES (à régler avant le chargement du jeu).
 @property (nonatomic) BOOL prefersVulkan;
 

@@ -25,6 +25,9 @@ Appelé par build_ps2.sh. Une retouche déjà faite est sautée : relancer le sc
 8. ARMSX2Bridge.mm : reprise automatique de PlayTendo (`g_playtendo_boot_state`, posée par PTPS2SetBootOptions)
    chargée dans ARMSX2IOSCompleteGameBoot, avant la première image, comme la « reprise de la dernière sauvegarde »
    d'ARMSX2 : ni logo ni son de démarrage. Résultat dans `g_playtendo_boot_state_result`. 2026-10-22.
+9. InputManager.cpp : les vibrations des manettes PS2 (DualShock 2) passent aussi par `g_playtendo_pad_vibration`
+   (posé par PTPS2SetVibrationHandler) : PlayTendo fait vibrer sa manette. Sans cela elles se perdaient (iPhone :
+   la file de vibrations d'ARMSX2 ne connaît que ses manettes SDL ; Mac : aucun moteur de vibration lié). 2026-10-23.
 """
 import os
 import sys
@@ -292,3 +295,16 @@ void ARMSX2IOSCompleteGameBoot(const std::string& game, bool loadLastSaveState)
         return;
 """),
 ])
+
+patch("pcsx2/Input/InputManager.cpp", [
+    ("""void InputManager::SetPadVibrationIntensity(u32 pad_index, float large_or_single_motor_intensity, float small_motor_intensity)
+{
+""", """// PlayTendo : vibrations des manettes données à l'app (PTPS2SetVibrationHandler), qui fait vibrer la sienne.
+void (*g_playtendo_pad_vibration)(unsigned int pad, float large, float small) = nullptr;
+
+void InputManager::SetPadVibrationIntensity(u32 pad_index, float large_or_single_motor_intensity, float small_motor_intensity)
+{
+	if (g_playtendo_pad_vibration && pad_index < Pad::NUM_CONTROLLER_PORTS)
+		g_playtendo_pad_vibration(pad_index, large_or_single_motor_intensity, small_motor_intensity);
+"""),
+], base=ROOT)

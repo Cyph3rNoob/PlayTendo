@@ -1,4 +1,5 @@
 #import "PTDolphinEngine.h"
+#import "PTRumble.h"
 #import <dlfcn.h>
 
 // Fonctions du moteur, trouvées par dlsym (déclarées dans PTDolphin.h).
@@ -18,6 +19,11 @@ static PTDolphinEngine *loadedEngine;
 /// Échec après le chargement du moteur (dlopen réussi) : il ne se répare pas en cours de route. Les essais suivants
 /// renvoient la même erreur au lieu de refaire une préparation à moitié faite.
 static NSString *loadFailure;
+
+/// Vibrations des manettes GameCube et de la Wiimote → manette de l'app (GamepadManager).
+static void PTDolphinRumble(int pad, double strength) {
+    PTRumbleSet((unsigned int)MAX(pad, 0), (float)strength, 0);
+}
 
 @implementation PTDolphinEngine {
     PTDolphinFunctions _fn;
@@ -64,6 +70,8 @@ static NSString *loadFailure;
     engine->_setWidescreen = (__typeof__(&PTDolphinSetWidescreen))dlsym(handle, "PTDolphinSetWidescreen");
     engine->_setCheats = (__typeof__(&PTDolphinSetCheats))dlsym(handle, "PTDolphinSetCheats");
     engine->_getPerformance = (__typeof__(&PTDolphinGetPerformance))dlsym(handle, "PTDolphinGetPerformance");
+    __typeof__(&PTDolphinSetRumbleHandler) setRumble = dlsym(handle, "PTDolphinSetRumbleHandler");
+    if (setRumble) setRumble(PTDolphinRumble);
 
     void *view = engine->_fn.PTDolphinSetup(userDirectory.fileSystemRepresentation,
                                             gameCubeSaveDirectory.fileSystemRepresentation,

@@ -32,6 +32,11 @@ enum N64Settings {
 
     static let resolutionKey = "resolutionN64"
     static let formatKey = "formatN64"
+    /// Accessoire branché sur la manette : Controller Pak (sauvegardes de certains jeux, par défaut) ou Rumble Pak
+    /// (vibrations). Une seule place, comme sur la vraie manette ; pris au lancement d'un jeu.
+    static let rumblePakKey = "rumblePakN64"
+
+    static var rumblePak: Bool { UserDefaults.standard.bool(forKey: rumblePakKey) }
 
     static var resolution: Resolution {
         Resolution(rawValue: UserDefaults.standard.integer(forKey: resolutionKey)) ?? .x2
@@ -49,6 +54,7 @@ enum N64Settings {
             "mupen64plus-43screensize": resolution.coreValue(wide: false),
             "mupen64plus-169screensize": resolution.coreValue(wide: true),
             "mupen64plus-FXAA": "0",
+            "mupen64plus-pak1": rumblePak ? "rumble" : "memory",
         ]
     }
 }

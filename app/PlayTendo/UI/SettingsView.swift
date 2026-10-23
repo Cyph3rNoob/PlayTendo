@@ -7,6 +7,8 @@ struct SettingsView: View {
     /// Retour en arrière (RewindSettings).
     @AppStorage(RewindSettings.key) private var rewindEnabled = true
     @AppStorage(PerformanceSettings.key) private var showPerformance = false
+    @AppStorage(RumbleSettings.key) private var rumbleEnabled = true
+    @AppStorage(N64Settings.rumblePakKey) private var n64RumblePak = false
     /// PS2 : démarrage sans le logo de la console (PS2Settings.fastBoot).
     @AppStorage(PS2Settings.fastBootKey) private var ps2FastBoot = true
     @EnvironmentObject private var jit: JITManager
@@ -417,13 +419,22 @@ struct SettingsView: View {
             Toggle(isOn: $showPerformance) {
                 Label(tr("Afficher les performances"), systemImage: "gauge.with.dots.needle.33percent")
             }
+            Toggle(isOn: $rumbleEnabled) {
+                Label(tr("Vibrations de la manette"), systemImage: "water.waves")
+            }
+            Toggle(isOn: $n64RumblePak) {
+                Label(tr("N64 : Rumble Pak au lieu du Controller Pak"), systemImage: "gamecontroller")
+            }
+            .disabled(!rumbleEnabled)
         } footer: {
 #if os(iOS)
             Text(tr("Menu pause › Retour arrière : la partie recule (une trentaine de secondes au plus) jusqu'à ce que tu touches l'écran. Avec une manette, la gâchette L2 maintenue fait pareil (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
             Text(tr("Performances : images par seconde et vitesse du jeu, processeur et mémoire utilisés, batterie et chaleur de l'appareil (iOS ne donne ni la carte graphique ni la température en degrés)."))
+            Text(tr("Vibrations : N64 (avec le Rumble Pak, qui prend la place du Controller Pak où certains jeux sauvegardent ; pris au prochain lancement), PS1, PS2, GameCube, Wii, et cartouches Game Boy et GBA à vibreur. Avec une manette qui sait vibrer (PlayStation, Xbox récentes)."))
 #else
             Text(tr("Menu pause › Retour arrière, ou Espace maintenu (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) : la partie recule d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
             Text(tr("Performances : images par seconde et vitesse du jeu, processeur, carte graphique et mémoire utilisés, et chaleur du Mac."))
+            Text(tr("Vibrations : N64 (avec le Rumble Pak, qui prend la place du Controller Pak où certains jeux sauvegardent ; pris au prochain lancement), PS1, PS2, GameCube, Wii, et cartouches Game Boy et GBA à vibreur. Avec une manette qui sait vibrer (PlayStation, Xbox récentes)."))
 #endif
         }
     }

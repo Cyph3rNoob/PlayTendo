@@ -797,6 +797,18 @@ PTDOLPHIN_EXPORT bool PTDolphinGetPerformance(double* fps, double* speed)
   return true;
 }
 
+// Vibrations des manettes GameCube et de la Wiimote : retouche 12 de patch_dolphin.py.
+namespace Pad
+{
+extern void (*g_playtendo_rumble)(int pad, double strength);
+}
+
+/// PlayTendo reçoit les vibrations (manette, force de 0 à 1) et fait vibrer sa manette.
+PTDOLPHIN_EXPORT void PTDolphinSetRumbleHandler(void (*handler)(int pad, double strength))
+{
+  Pad::g_playtendo_rumble = handler;
+}
+
 PTDOLPHIN_EXPORT bool PTDolphinCaptureScreen(const char* path)
 {
   if (!path)

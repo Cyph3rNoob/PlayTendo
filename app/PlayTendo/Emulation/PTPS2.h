@@ -60,6 +60,9 @@ void PTPS2SetImageOptions(int upscale, bool smoothing, bool widescreen);
 /// Codes de triche du jeu en cours (texte .pnach : lignes « patch=… »), appliqués tout de suite et gardés pour ses
 /// prochains lancements ; texte vide : plus aucun. À appeler jeu démarré. Facultative : absente des moteurs d'avant.
 void PTPS2SetCheats(const char *pnach);
+/// Vibrations des manettes PS2 : `handler` reçoit la manette (0 : joueur 1) et la force des deux moteurs (0 à 1).
+/// Facultative : absente des moteurs d'avant.
+void PTPS2SetVibrationHandler(void (*handler)(unsigned int pad, float large, float small));
 /// Images par seconde du jeu et vitesse (%) ; faux hors partie. Facultative : absente des moteurs d'avant.
 bool PTPS2GetPerformance(float *fps, float *speed);
 /// Format de l'image affichée (largeur / hauteur : 4:3, ou 16:9 avec un correctif écran large), 0 si inconnu.

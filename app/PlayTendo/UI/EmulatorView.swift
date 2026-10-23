@@ -118,6 +118,7 @@ struct EmulatorView: View {
             gamepad.stickMovesDPad = !controls.hasAnalogStick
             gamepad.nintendoLetters = controls.nintendoLetters
             gamepad.mapping = GamepadMapping.load(for: controls)
+            gamepad.listenToRumble()
             ScreenAwake.hold(.playing)
 #if os(macOS)
             // Réglages › Clavier s'ouvrira sur les touches de cette console.
@@ -128,6 +129,7 @@ struct EmulatorView: View {
         }
         .onDisappear {
             ScreenAwake.release(.playing)
+            gamepad.stopListeningToRumble()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active && session.state == .running { openMenu() }
@@ -398,6 +400,7 @@ struct EmulatorView: View {
         guard !showingMenu, session.state == .running else { return }
         session.stopRewind()
         session.clearInput()
+        gamepad.stopRumble()
         session.pause()
         showingMenu = true
         // Menu pause : l'écran peut s'éteindre comme d'habitude (il restait allumé tant que la partie était ouverte).

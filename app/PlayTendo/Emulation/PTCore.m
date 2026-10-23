@@ -1,4 +1,5 @@
 #import "PTCore.h"
+#import "PTRumble.h"
 #import "PTGLContext.h"
 #import "PTJIT.h"
 #import "PTVulkanContext.h"
@@ -337,7 +338,15 @@ static void PTPerfRegister(struct retro_perf_counter *counter) { counter->regist
 static void PTPerfStart(struct retro_perf_counter *counter) {}
 static void PTPerfStop(struct retro_perf_counter *counter) {}
 static void PTPerfLog(void) {}
-static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t strength) { return false; }
+/// Vibrations (N64 avec le Rumble Pak, PS1 DualShock, cartouches Game Boy et GBA à vibreur) : les deux moteurs de
+/// chaque manette, réglés l'un après l'autre par le moteur, envoyés ensemble à l'app (thread d'émulation).
+static bool PTSetRumble(unsigned port, enum retro_rumble_effect effect, uint16_t strength) {
+    static float motors[4][2];
+    if (port >= 4) return false;
+    motors[port][effect == RETRO_RUMBLE_STRONG ? 0 : 1] = strength / 65535.0f;
+    PTRumbleSet(port, motors[port][0], motors[port][1]);
+    return true;
+}
 
 static uintptr_t PTHardwareFramebuffer(void) {
     PTCore *core = gCore;
@@ -540,7 +549,7 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         }
         if (_hw.context_reset) _hw.context_reset();
     }
-    _api.set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
+    _api.set_controller_port_device(0, _controllerDevice ?: RETRO_DEVICE_JOYPAD);
     PTLogLine([NSString stringWithFormat:@"Jeu chargé : %u×%u, %.3f images/s, son %.0f Hz",
                av.geometry.base_width, av.geometry.base_height, _framesPerSecond, _sampleRate]);
     return YES;

@@ -1,4 +1,5 @@
 #import "PTPS2Engine.h"
+#import "PTRumble.h"
 #import <dlfcn.h>
 
 // Fonctions du moteur, trouvées par dlsym (déclarées dans PTPS2.h).
@@ -17,6 +18,11 @@ static PTPS2Engine *loadedEngine;
 /// Échec après le chargement du moteur (dlopen réussi) : il ne se répare pas en cours de route. Les essais suivants
 /// renvoient la même erreur au lieu de refaire une préparation à moitié faite.
 static NSString *loadFailure;
+
+/// Vibrations de la manette PS2 → manette de l'app (GamepadManager).
+static void PTPS2Vibration(unsigned int pad, float large, float small) {
+    PTRumbleSet(pad, large, small);
+}
 
 @implementation PTPS2Engine {
     PTPS2Functions _fn;
@@ -58,6 +64,8 @@ static NSString *loadFailure;
     engine->_bootStateResult = (__typeof__(&PTPS2GetBootStateResult))dlsym(handle, "PTPS2GetBootStateResult");
     engine->_setCheats = (__typeof__(&PTPS2SetCheats))dlsym(handle, "PTPS2SetCheats");
     engine->_getPerformance = (__typeof__(&PTPS2GetPerformance))dlsym(handle, "PTPS2GetPerformance");
+    __typeof__(&PTPS2SetVibrationHandler) setVibration = dlsym(handle, "PTPS2SetVibrationHandler");
+    if (setVibration) setVibration(PTPS2Vibration);
 
     void *view = engine->_fn.PTPS2Setup(dataRoot.fileSystemRepresentation, biosDirectory.fileSystemRepresentation,
                                         memoryCardDirectory.fileSystemRepresentation);

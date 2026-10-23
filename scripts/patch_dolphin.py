@@ -34,6 +34,9 @@ Les deux :
    même pour une sauvegarde refusée (autre jeu, fichier abîmé). Audit du 2026-10-20.
 11. DVDInterface.h : `PlayTendoDiscIndex()` donne le rang du disque inséré d'un jeu en plusieurs disques (Dolphin le
    garde pour lui) : menu pause › DISQUE de PlayTendo, qui suit aussi les changements automatiques. 2026-10-21.
+12. GCPad.cpp + WiimoteEmu.cpp : la vibration des manettes GameCube et de la Wiimote passe aussi par
+   `Pad::g_playtendo_rumble` (posé par PTDolphinSetRumbleHandler) : PlayTendo fait vibrer sa manette (les manettes
+   de Dolphin n'ont pas de moteur relié dans PlayTendo). 2026-10-23.
 """
 import os
 import sys
@@ -289,5 +292,44 @@ patch("Source/Core/Core/HW/DVD/DVDInterface.h", [
 """, """  bool AutoChangeDisc(const Core::CPUThreadGuard& guard);
   // PlayTendo : rang du disque inséré dans la liste d'un jeu en plusieurs disques (lu par PTDolphinGetDisc).
   size_t PlayTendoDiscIndex() const { return m_auto_disc_change_index; }
+"""),
+])
+
+patch("Source/Core/Core/HW/GCPad.cpp", [
+    ("""void Rumble(const int pad_num, const ControlState strength)
+{
+""", """// PlayTendo : vibrations données à l'app (PTDolphinSetRumbleHandler), qui fait vibrer sa manette.
+void (*g_playtendo_rumble)(int pad, double strength) = nullptr;
+
+void Rumble(const int pad_num, const ControlState strength)
+{
+  if (g_playtendo_rumble)
+    g_playtendo_rumble(pad_num, strength);
+"""),
+    ("""void ResetRumble(const int pad_num)
+{
+""", """void ResetRumble(const int pad_num)
+{
+  if (g_playtendo_rumble)
+    g_playtendo_rumble(pad_num, 0.0);
+"""),
+])
+
+patch("Source/Core/Core/HW/WiimoteEmu/WiimoteEmu.cpp", [
+    ("""#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
+""", """#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
+
+// PlayTendo : vibration envoyée à l'app (GCPad.cpp).
+namespace Pad
+{
+extern void (*g_playtendo_rumble)(int pad, double strength);
+}
+"""),
+    ("""void Wiimote::SetRumble(bool on)
+{
+""", """void Wiimote::SetRumble(bool on)
+{
+  if (Pad::g_playtendo_rumble)
+    Pad::g_playtendo_rumble(m_index, on ? 1.0 : 0.0);
 """),
 ])

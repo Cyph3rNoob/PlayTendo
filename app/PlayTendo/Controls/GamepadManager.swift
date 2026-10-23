@@ -1,4 +1,11 @@
+import CoreHaptics
 import GameController
+
+/// Vibrations de la manette (Réglages) : activées par défaut.
+enum RumbleSettings {
+    static let key = "vibrationsManette"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+}
 
 /// Manettes Bluetooth (Xbox, PlayStation, Switch, MFi…). La disposition suit la position des
 /// boutons : celui du bas = B, celui de droite = A, comme sur une manette Nintendo. Sauf une manette Nintendo sur
@@ -37,6 +44,14 @@ final class GamepadManager: ObservableObject {
     }
 
     private var observers: [NSObjectProtocol] = []
+    /// Vibrations : moteur de vibrations de la manette et lecteur d'une vibration continue dont on règle la force
+    /// (tout sur `hapticQueue`).
+    private let hapticQueue = DispatchQueue(label: "PlayTendo.vibrations")
+    private var hapticController: GCController?
+    private var hapticEngine: CHHapticEngine?
+    private var hapticPlayer: CHHapticAdvancedPatternPlayer?
+    private var hapticPlaying = false
+    private var hapticIntensity: Float = 0
     /// Boutons enfoncés en ce moment (hors directions), à relâcher si la manette disparaît.
     private var heldButtons: Set<PTButton> = []
     private var dpadState: Set<PTButton> = []
@@ -89,6 +104,11 @@ final class GamepadManager: ObservableObject {
         let controller = Self.currentController
         isConnected = controller != nil
         isNintendoPad = controller.map(Self.reportsNintendoLabels) ?? false
+        hapticQueue.async { [weak self] in
+            guard let self, hapticController !== controller else { return }
+            stopHaptics()
+            hapticController = controller
+        }
         if !isConnected { isActive = false }
         if let controller, let pad = controller.extendedGamepad {
             let nintendo = Self.reportsNintendoLabels(controller)
@@ -173,6 +193,90 @@ final class GamepadManager: ObservableObject {
                 if pressed { self?.onMenu?() }
             }
         }
+    }
+
+    // MARK: Vibrations
+
+    /// Pendant une partie : les vibrations des moteurs (PTRumble) font vibrer la manette (joueur 1).
+    func listenToRumble() {
+        PTRumbleSetHandler { [weak self] port, strong, weak in
+            guard port == 0 else { return }
+            self?.rumble(strong: strong, weak: weak)
+        }
+    }
+
+    /// Menu pause : la vibration en cours s'arrête (le jeu ne la coupera pas lui-même).
+    func stopRumble() {
+        rumble(strong: 0, weak: 0)
+    }
+
+    /// Fin de partie : plus de vibrations.
+    func stopListeningToRumble() {
+        PTRumbleSetHandler(nil)
+        stopRumble()
+    }
+
+    private func rumble(strong: Float, weak: Float) {
+        // Une seule vibration par manette : le gros moteur, ou le petit un peu moins fort.
+        let intensity = min(1, max(strong, weak * 0.7))
+        hapticQueue.async { [weak self] in self?.applyRumble(intensity) }
+    }
+
+    /// Règle la force de la vibration (fil `hapticQueue`) ; arrêtée sous 2 %.
+    private func applyRumble(_ intensity: Float) {
+        let on = intensity > 0.02 && RumbleSettings.enabled
+        guard on != hapticPlaying || (on && abs(intensity - hapticIntensity) > 0.03) else { return }
+        hapticIntensity = intensity
+        guard on else {
+            try? hapticPlayer?.stop(atTime: CHHapticTimeImmediate)
+            hapticPlaying = false
+            return
+        }
+        do {
+            if hapticPlayer == nil {
+                guard let engine = hapticController?.haptics?.createEngine(withLocality: .default) else { return }
+                engine.playsHapticsOnly = true
+                engine.stoppedHandler = { [weak self] _ in
+                    self?.hapticQueue.async { self?.forgetHaptics() }
+                }
+                engine.resetHandler = { [weak self] in
+                    self?.hapticQueue.async { self?.forgetHaptics() }
+                }
+                try engine.start()
+                let event = CHHapticEvent(eventType: .hapticContinuous,
+                                          parameters: [CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
+                                                       CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3)],
+                                          relativeTime: 0, duration: 30)
+                let player = try engine.makeAdvancedPlayer(with: CHHapticPattern(events: [event], parameters: []))
+                player.loopEnabled = true
+                hapticEngine = engine
+                hapticPlayer = player
+            }
+            try hapticPlayer?.sendParameters([CHHapticDynamicParameter(parameterID: .hapticIntensityControl,
+                                                                       value: intensity, relativeTime: 0)],
+                                             atTime: CHHapticTimeImmediate)
+            if !hapticPlaying {
+                try hapticPlayer?.start(atTime: CHHapticTimeImmediate)
+                hapticPlaying = true
+            }
+        } catch {
+            PTLogLine("Vibrations de la manette impossibles : \(error.localizedDescription)")
+            stopHaptics()
+        }
+    }
+
+    /// Arrête et oublie le moteur de vibrations (manette changée, erreur) — fil `hapticQueue`.
+    private func stopHaptics() {
+        try? hapticPlayer?.stop(atTime: CHHapticTimeImmediate)
+        hapticEngine?.stop()
+        forgetHaptics()
+    }
+
+    private func forgetHaptics() {
+        hapticPlayer = nil
+        hapticEngine = nil
+        hapticPlaying = false
+        hapticIntensity = 0
     }
 
     /// Relâche tout ce que la manette tenait : boutons, directions et sticks.

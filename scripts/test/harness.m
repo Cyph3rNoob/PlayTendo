@@ -117,6 +117,7 @@ int main(int argc, const char *argv[]) {
         // Cheats.swift) ; « --find 42EF » cherche ces octets dans la mémoire (ou la sauvegarde rapide) avant et après.
         NSMutableDictionary<NSNumber *, NSArray<NSString *> *> *cheats = [NSMutableDictionary dictionary];
         NSData *findPattern = nil;
+        unsigned device = 0;   // « --device 0x205 » : manette DualShock de la PS1
         int sequenceStart = 120;
         for (int i = 5; i + 1 < argc; i += 2) {
             NSString *flag = @(argv[i]), *value = @(argv[i + 1]);
@@ -154,6 +155,8 @@ int main(int argc, const char *argv[]) {
                     [bytes appendBytes:&byte length:1];
                 }
                 findPattern = bytes;
+            } else if ([flag isEqualToString:@"--device"]) {
+                device = (unsigned)strtoul(value.UTF8String, NULL, 0);
             } else if ([flag isEqualToString:@"--opt"]) {
                 NSArray *kv = [value componentsSeparatedByString:@"="];
                 options[kv[0]] = kv[1];
@@ -207,6 +210,7 @@ int main(int argc, const char *argv[]) {
         };
         core.audioHandler = ^(const int16_t *samples, size_t count) { audioFrames += count; };
 
+        core.controllerDevice = device;
         if (![core loadGameAtPath:gamePath systemDirectory:system saveDirectory:saves options:options error:&error]) {
             printf("ECHEC chargement jeu : %s\n", error.localizedDescription.UTF8String);
             return 1;

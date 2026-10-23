@@ -759,11 +759,17 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     /// Charge le moteur libretro et le jeu (thread d'émulation), avec la mémoire de sauvegarde de la cartouche.
+    /// RETRO_DEVICE_PSE_DUALSHOCK de PCSX-ReARMed : RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_ANALOG, 1).
+    private static let dualShockDevice: UInt32 = ((1 + 1) << 8) | 5
+
     private func loadCore(path: String) throws -> PTCore {
         let system = game.system
         let core = try PTCore(libraryPath: path)
         core.allowsJIT = JITManager.benefits(system)
         core.prefersVulkan = system == .n3ds
+        // PS1 : manette DualShock (vibrations, et sticks pour les jeux qui les lisent) ; elle répond comme une manette
+        // simple tant que le jeu ne lui demande rien d'autre.
+        if system == .psx { core.controllerDevice = Self.dualShockDevice }
         let frameBuffer = self.frameBuffer
         let ring = self.ring
         core.videoHandler = { pixels, width, height, pitch, format in
