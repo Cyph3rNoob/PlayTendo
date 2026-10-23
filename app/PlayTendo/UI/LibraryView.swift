@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -20,6 +21,12 @@ struct LibraryView: View {
     /// Ordre des jeux dans chaque console (les favoris restent en tête).
     @AppStorage(LibrarySort.key) private var sortRaw = LibrarySort.name.rawValue
     @State private var gameToDelete: Game?
+    /// Jeu dont on choisit la jaquette (menu du jeu › Choisir une jaquette), dans Photos ou dans Fichiers.
+    @State private var coverGame: Game?
+    @State private var choosingCoverPhoto = false
+    @State private var choosingCoverFile = false
+    @State private var coverPhoto: PhotosPickerItem?
+    @State private var coverUnreadable = false
     /// Fiche ouverte (toucher une boîte) ; ce qu'elle demande une fois refermée : jouer ou supprimer.
     @State private var detailGame: Game?
     @State private var afterDetail: DetailAction?
@@ -481,8 +488,30 @@ struct LibraryView: View {
                                                 Label(tr("Ajouter aux favoris"), systemImage: "star")
                                             }
                                         }
-                                        Button { metadata.retryCover(for: game) } label: {
-                                            Label(tr("Actualiser la jaquette"), systemImage: "arrow.clockwise")
+                                        Menu {
+                                            Button {
+                                                coverGame = game
+                                                choosingCoverPhoto = true
+                                            } label: {
+                                                Label(tr("Photos"), systemImage: "photo.on.rectangle")
+                                            }
+                                            Button {
+                                                coverGame = game
+                                                choosingCoverFile = true
+                                            } label: {
+                                                Label(tr("Fichiers"), systemImage: "folder")
+                                            }
+                                        } label: {
+                                            Label(tr("Choisir une jaquette"), systemImage: "photo")
+                                        }
+                                        if metadata.hasCustomCover(game) {
+                                            Button { metadata.removeCustomCover(for: game) } label: {
+                                                Label(tr("Retirer ma jaquette"), systemImage: "photo.badge.minus")
+                                            }
+                                        } else {
+                                            Button { metadata.retryCover(for: game) } label: {
+                                                Label(tr("Actualiser la jaquette"), systemImage: "arrow.clockwise")
+                                            }
                                         }
                                         Button(role: .destructive) { gameToDelete = game } label: {
                                             Label(tr("Supprimer"), systemImage: "trash")
@@ -501,6 +530,37 @@ struct LibraryView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 30)
             }
+        }
+        // Jaquette choisie pour un jeu. Le sélecteur de fichiers est ici, pas avec celui des jeux : deux sélecteurs
+        // sur la même vue, seul le dernier s'ouvre.
+        .photosPicker(isPresented: $choosingCoverPhoto, selection: $coverPhoto, matching: .images)
+        .onChange(of: coverPhoto) { _, item in
+            guard let item, let game = coverGame else { return }
+            coverPhoto = nil
+            Task {
+                let data = try? await item.loadTransferable(type: Data.self)
+                await applyCover(data, to: game)
+            }
+        }
+        .fileImporter(isPresented: $choosingCoverFile, allowedContentTypes: [.image]) { result in
+            guard case .success(let url) = result, let game = coverGame else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            let data = try? Data(contentsOf: url)
+            if access { url.stopAccessingSecurityScopedResource() }
+            Task { await applyCover(data, to: game) }
+        }
+        .alert(tr("Image illisible"), isPresented: $coverUnreadable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tr("Choisis une image PNG, JPEG ou HEIC."))
+        }
+    }
+
+    private func applyCover(_ data: Data?, to game: Game) async {
+        coverGame = nil
+        guard let data, await metadata.setCustomCover(data, for: game) else {
+            coverUnreadable = true
+            return
         }
     }
 

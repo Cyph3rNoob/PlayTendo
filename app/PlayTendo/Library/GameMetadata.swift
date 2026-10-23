@@ -2,7 +2,8 @@ import ImageIO
 import SwiftUI
 
 /// Ce que l'app sait de chaque jeu au-delà du fichier : son nom officiel (reconnu dans la base),
-/// sa jaquette (boîte 3D de ScreenScraper, sinon libretro, sinon SteamGridDB) et la date de la dernière partie.
+/// sa jaquette (choisie par l'utilisateur, sinon boîte 3D de ScreenScraper, sinon libretro, sinon SteamGridDB) et la
+/// date de la dernière partie.
 @MainActor
 final class GameMetadata: ObservableObject {
     struct Info: Codable, Equatable {
@@ -123,6 +124,7 @@ final class GameMetadata: ObservableObject {
             infos[key] = nil
             lastPlayed[key] = nil
             favorites.remove(key)
+            try? manager.removeItem(at: Self.customCoverURL(key: key))
         }
         save()
         UserDefaults.standard.set(Array(favorites), forKey: Self.favoritesKey)
@@ -145,6 +147,8 @@ final class GameMetadata: ObservableObject {
     func display(for game: Game) -> GameDisplay { GameDisplay(game: game, officialName: officialName(for: game)) }
 
     func coverFile(for game: Game) -> URL? {
+        let custom = Self.customCoverURL(key: game.key)
+        if FileManager.default.fileExists(atPath: custom.path) { return custom }
         guard let name = officialName(for: game) else { return nil }
         let url = Self.coverURL(name: name, system: game.system)
         if FileManager.default.fileExists(atPath: url.path) { return url }
@@ -181,6 +185,45 @@ final class GameMetadata: ObservableObject {
     func markPlayed(_ game: Game) {
         lastPlayed[game.key] = Date().timeIntervalSince1970
         UserDefaults.standard.set(lastPlayed, forKey: Self.lastPlayedKey)
+    }
+
+    // MARK: Jaquette perso
+
+    /// Jaquette choisie par l'utilisateur (romhack, jeu introuvable ailleurs…), rangée par fichier de jeu : elle passe
+    /// devant les jaquettes téléchargées, qui ne la remplacent jamais.
+    nonisolated private static func customCoverURL(key: String) -> URL {
+        Paths.support.appendingPathComponent("Jaquettes/Perso/\(safeFileName(key)).png")
+    }
+
+    func hasCustomCover(_ game: Game) -> Bool {
+        FileManager.default.fileExists(atPath: Self.customCoverURL(key: game.key).path)
+    }
+
+    /// Image choisie (Photos, Fichiers) mise en boîte 3D comme les autres jaquettes (une boîte déjà en 3D, sur fond
+    /// transparent, est gardée telle quelle). false si l'image est illisible.
+    func setCustomCover(_ data: Data, for game: Game) async -> Bool {
+        let file = Self.customCoverURL(key: game.key)
+        let system = game.system
+        let title = display(for: game).title
+        let saved = await Task.detached(priority: .userInitiated) { () -> Bool in
+            guard let box = BoxArt.isFlat(data) ? BoxArt.make(from: data, system: system, title: title)
+                                                : BoxArt.trimmed(data) else { return false }
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            return (try? box.write(to: file, options: .atomic)) != nil
+        }.value
+        guard saved else { return false }
+        CoverImages.forget(file)
+        coverRevisions[game.key, default: 0] += 1
+        PTLogLine("Jaquette choisie par l'utilisateur : \(game.key)")
+        return true
+    }
+
+    /// Retire la jaquette choisie : celle téléchargée (s'il y en a une) revient.
+    func removeCustomCover(for game: Game) {
+        let file = Self.customCoverURL(key: game.key)
+        try? FileManager.default.removeItem(at: file)
+        CoverImages.forget(file)
+        coverRevisions[game.key, default: 0] += 1
     }
 
     /// Relance la recherche de jaquette d'un jeu (menu « Actualiser la jaquette »).
