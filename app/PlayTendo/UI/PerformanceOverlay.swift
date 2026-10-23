@@ -150,7 +150,7 @@ struct PerformanceOverlay: View {
             if paused {
                 Text(tr("PAUSE"))
             } else if let fps = reading.fps {
-                Text(tr("\(Int(fps.rounded())) i/s"))
+                Text("\(Int(fps.rounded())) FPS")
                     .foregroundStyle(.white)
                 if let speed = reading.speed {
                     Text("\(Int(speed.rounded())) %")

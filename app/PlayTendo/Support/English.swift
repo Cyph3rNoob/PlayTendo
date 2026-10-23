@@ -206,7 +206,6 @@ enum English {
         "Rien": "Nothing",
         "Touches de la manette": "Controller buttons",
         "PAUSE": "PAUSE",
-        "%@ i/s": "%@ fps",
         "%@ Mo": "%@ MB",
         "Normal": "Normal",
         "Chaud": "Warm",
