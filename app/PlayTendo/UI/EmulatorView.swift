@@ -117,6 +117,7 @@ struct EmulatorView: View {
             gamepad.onMenu = { showingMenu ? closeMenu() : openMenu() }
             gamepad.stickMovesDPad = !controls.hasAnalogStick
             gamepad.nintendoLetters = controls.nintendoLetters
+            gamepad.mapping = GamepadMapping.load(for: controls)
             ScreenAwake.hold(.playing)
 #if os(macOS)
             // Réglages › Clavier s'ouvrira sur les touches de cette console.
@@ -336,7 +337,9 @@ struct EmulatorView: View {
                             ? fill : nil,
                          filter: FilterSettings.systems.contains(game.system) ? $screenFilter : nil,
                          wiiController: game.system == .wii ? wii : nil,
-                         onEditControls: Self.hasTouchControls ? { editControls() } : nil)
+                         onEditControls: Self.hasTouchControls ? { editControls() } : nil,
+                         nintendoPad: gamepad.isNintendoPad,
+                         onGamepadMapping: { gamepad.mapping = $0 })
     }
 
     /// Menu pause › Modifier les boutons : le menu laisse la place au mode édition, le jeu reste en pause.
@@ -388,6 +391,7 @@ struct EmulatorView: View {
         session.clearInput()
         session.setWiimote(controller == .wiimote)
         gamepad.nintendoLetters = controls.nintendoLetters
+        gamepad.mapping = GamepadMapping.load(for: controls)
     }
 
     private func openMenu() {
@@ -459,6 +463,10 @@ private struct PauseMenu: View {
     let wiiController: Binding<DolphinSettings.WiiController>?
     /// iPhone, iPad : mode édition des boutons à l'écran (nil sur Mac).
     let onEditControls: (() -> Void)?
+    /// Manette Nintendo branchée (Touches de la manette : ses A, B, X, Y peuvent faire leur lettre d'origine).
+    let nintendoPad: Bool
+    /// Touches de la manette changées : appliquées tout de suite.
+    let onGamepadMapping: (GamepadMapping) -> Void
 
     /// PSP : résolution et lissage des textures, choisis directement (gardés pour tous les jeux PSP).
     @AppStorage(PSPSettings.resolutionKey) private var resolution = PSPSettings.Resolution.x2.rawValue
@@ -553,6 +561,7 @@ private struct PauseMenu: View {
 
     @State private var tab: MenuTab = .game
     @State private var showingCheats = false
+    @State private var showingGamepad = false
     @AppStorage(PerformanceSettings.key) private var showPerformance = false
 
     var body: some View {
@@ -569,6 +578,10 @@ private struct PauseMenu: View {
         .sheet(isPresented: $showingCheats) {
             CheatsView(session: session, title: metadata.display(for: session.game).title,
                        officialName: metadata.officialName(for: session.game))
+        }
+        .sheet(isPresented: $showingGamepad) {
+            GamepadMappingView(scheme: scheme, title: metadata.display(for: session.game).title,
+                               nintendoPad: nintendoPad, onChange: onGamepadMapping)
         }
     }
 
@@ -651,6 +664,7 @@ private struct PauseMenu: View {
         case .controls:
             if let wiiController { wiiPicker(wiiController) }
             if let onEditControls { editControlsButton(onEditControls) }
+            gamepadButton
 #if os(macOS)
             MacKeysSection(scheme: scheme)
 #endif
@@ -718,6 +732,7 @@ private struct PauseMenu: View {
                 MenuBlock(title: tr("COMMANDES")) {
                     if let wiiController { wiiPicker(wiiController) }
                     if let onEditControls { editControlsButton(onEditControls) }
+                    gamepadButton
 #if os(macOS)
                     MenuButton(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true }
 #endif
@@ -758,6 +773,10 @@ private struct PauseMenu: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }
+    }
+
+    private var gamepadButton: some View {
+        MenuButton(title: tr("Touches de la manette"), icon: "gamecontroller") { showingGamepad = true }
     }
 
     private func editControlsButton(_ action: @escaping () -> Void) -> some View {

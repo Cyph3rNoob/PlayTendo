@@ -7,6 +7,8 @@ final class GamepadManager: ObservableObject {
     @Published private(set) var isConnected = false
     /// Vrai dès qu'on se sert de la manette ; les boutons tactiles se cachent alors.
     @Published private(set) var isActive = false
+    /// La manette branchée est une manette Nintendo (Switch Pro, Joy-Con).
+    @Published private(set) var isNintendoPad = false
 
     var onButton: ((PTButton, Bool) -> Void)?
     var onAnalog: ((UInt32, Float, Float) -> Void)?
@@ -20,6 +22,15 @@ final class GamepadManager: ObservableObject {
             // Seule une manette Nintendo est concernée : elle est rebranchée avec les nouveaux boutons.
             guard nintendoLetters != oldValue, let controller = Self.currentController,
                   Self.reportsNintendoLabels(controller) else { return }
+            releaseAll()
+            refresh()
+        }
+    }
+
+    /// Touches changées pour la console en cours (menu pause › Commandes › Touches de la manette).
+    var mapping = GamepadMapping() {
+        didSet {
+            guard mapping != oldValue else { return }
             releaseAll()
             refresh()
         }
@@ -77,6 +88,7 @@ final class GamepadManager: ObservableObject {
         #endif
         let controller = Self.currentController
         isConnected = controller != nil
+        isNintendoPad = controller.map(Self.reportsNintendoLabels) ?? false
         if !isConnected { isActive = false }
         if let controller, let pad = controller.extendedGamepad {
             let nintendo = Self.reportsNintendoLabels(controller)
@@ -99,7 +111,13 @@ final class GamepadManager: ObservableObject {
     }
 
     private func bind(_ pad: GCExtendedGamepad, nintendoLabels: Bool) {
-        func map(_ input: GCControllerButtonInput?, _ button: PTButton) {
+        // Chaque bouton fait celui choisi pour la console, sinon celui d'origine ; « Rien » : il ne fait plus rien.
+        func map(_ input: GCControllerButtonInput?, _ place: GamepadInput) {
+            guard let button = mapping.button(for: place, default: place.defaultButton(letters: nintendoLetters,
+                                                                                       nintendoPad: nintendoLabels)) else {
+                input?.pressedChangedHandler = nil
+                return
+            }
             input?.pressedChangedHandler = { [weak self] _, _, pressed in
                 guard let self else { return }
                 if pressed {
@@ -111,21 +129,21 @@ final class GamepadManager: ObservableObject {
                 onButton?(button, pressed)
             }
         }
-        // Bouton du bas → B, de droite → A, de gauche → Y, du haut → X (PlayStation : croix, rond, carré, triangle).
+        // Par défaut, bouton du bas → B, de droite → A, de gauche → Y, du haut → X (PlayStation : croix, rond, carré,
+        // triangle). iOS donne les boutons d'une manette Nintendo par lettre (A à droite) : remis à leur place.
         if nintendoLabels {
-            // iOS donne les boutons d'une manette Nintendo par lettre : chacun fait le bouton choisi pour la console.
-            map(pad.buttonA, nintendoLetters.a)
-            map(pad.buttonB, nintendoLetters.b)
-            map(pad.buttonX, nintendoLetters.x)
-            map(pad.buttonY, nintendoLetters.y)
+            map(pad.buttonA, .east)
+            map(pad.buttonB, .south)
+            map(pad.buttonX, .north)
+            map(pad.buttonY, .west)
         } else {
-            map(pad.buttonA, .b)
-            map(pad.buttonB, .a)
-            map(pad.buttonX, .y)
-            map(pad.buttonY, .x)
+            map(pad.buttonA, .south)
+            map(pad.buttonB, .east)
+            map(pad.buttonX, .west)
+            map(pad.buttonY, .north)
         }
-        map(pad.leftShoulder, .l)
-        map(pad.rightShoulder, .r)
+        map(pad.leftShoulder, .l1)
+        map(pad.rightShoulder, .r1)
         map(pad.leftTrigger, .l2)
         map(pad.rightTrigger, .r2)
         map(pad.leftThumbstickButton, .l3)

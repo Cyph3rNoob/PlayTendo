@@ -117,49 +117,6 @@ extension ControlScheme {
         return schemes
     }
 
-    /// Nom des touches de cette console dans les réglages de l'app (ne pas changer : les touches choisies y sont
-    /// rangées).
-    var keyboardID: String {
-        switch self {
-        case .nes: "nes"
-        case .snes: "snes"
-        case .nintendo64: "n64"
-        case .gameBoy: "gb"
-        case .gameBoyAdvance: "gba"
-        case .nintendoDS: "nds"
-        case .nintendo3DS: "3ds"
-        case .playStation: "ps1"
-        case .psp: "psp"
-        case .playStation2: "ps2"
-        case .gameCube: "gamecube"
-        case .wiimote: "wii"
-#if PLAYTENDO_VITA
-        case .psVita: "vita"
-#endif
-        }
-    }
-
-    /// Nom court de la console (pastilles de Réglages › Clavier).
-    var keyboardName: String {
-        switch self {
-        case .nes: "NES"
-        case .snes: "SNES"
-        case .nintendo64: "N64"
-        case .gameBoy: "GB / GBC"
-        case .gameBoyAdvance: "GBA"
-        case .nintendoDS: "DS"
-        case .nintendo3DS: "3DS"
-        case .playStation: "PS1"
-        case .psp: "PSP"
-        case .playStation2: "PS2"
-        case .gameCube: "GameCube"
-        case .wiimote: "Wii"
-#if PLAYTENDO_VITA
-        case .psVita: "PS Vita"
-#endif
-        }
-    }
-
     /// Nom du bouton que fait cette commande sur la console (« Stick droit → », « ✕ »), pour les messages.
     func keyboardLabel(for command: KeyCommand) -> String {
         if command == .menu { return tr("Menu pause") }
