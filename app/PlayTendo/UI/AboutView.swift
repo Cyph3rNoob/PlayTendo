@@ -111,6 +111,26 @@ struct AboutView: View {
                     }
                 }
 
+                if RomPatch.systems.contains(where: EmulatorSession.engineInstalled) {
+                    Section(tr("Romhacks")) {
+                        Label(tr("Une romhack déjà patchée (.z64, .sfc, .gba…) se joue comme n'importe quel jeu."),
+                              systemImage: "checkmark.circle")
+                        Label(tr("Un patch (.ips, .bps, .ups) : pose-le dans Jeux avec le jeu d'origine. Il apparaît comme un jeu à part, avec ses sauvegardes."),
+                              systemImage: "bandage")
+                        Label(tr("Le jeu d'origine n'est jamais modifié : le patch s'applique à une copie au lancement, et un même jeu peut servir à plusieurs romhacks."),
+                              systemImage: "lock.shield")
+                        Label(tr("Un .bps ou un .ups trouve son jeu d'origine tout seul (ROM N64 en .z64, .v64 ou .n64 ; ROM SNES avec ou sans en-tête). Un .ips, par le nom : « Super Mario World (USA) Kaizo.ips » va avec « Super Mario World (USA).sfc »."),
+                              systemImage: "magnifyingglass")
+#if os(iOS)
+                        Label(tr("Pas de jaquette ? Appui long sur le jeu › Choisir une jaquette."), systemImage: "photo")
+#else
+                        Label(tr("Pas de jaquette ? Clic droit sur le jeu › Choisir une jaquette."), systemImage: "photo")
+#endif
+                        Label(tr("Consoles : NES, Super Nintendo, N64, Game Boy et Color, GBA, DS. Un patch absent de la bibliothèque : son jeu d'origine manque, ou ce n'est pas la bonne version."),
+                              systemImage: "questionmark.circle")
+                    }
+                }
+
                 Section("BIOS") {
                     if EmulatorSession.engineInstalled(for: .ps2) {
                         Label(tr("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) : Réglages › BIOS PS2 › Importer, ou copié dans le dossier BIOS."),
