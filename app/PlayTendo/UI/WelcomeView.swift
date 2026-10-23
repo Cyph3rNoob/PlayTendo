@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Présentation de PlayTendo en 4 cartes (demandée le 2026-10-07) : montrée une fois après l'animation de démarrage
-/// (premier lancement, et à chaque nouvelle version de la présentation), et depuis « À propos ».
+/// Présentation de PlayTendo en 5 cartes (demandée le 2026-10-07, carte « À ta façon » et nouveautés le 2026-10-23) :
+/// montrée une fois après l'animation de démarrage (premier lancement, et à chaque nouvelle version de la
+/// présentation), et depuis « À propos ».
 struct WelcomeView: View {
     /// Version de la présentation déjà vue : l'augmenter la remontre une fois à tout le monde.
     static let seenKey = "presentationVue"
-    static let version = 1
+    static let version = 2
 
     let onFinish: () -> Void
 
     @State private var page = 0
-    private var pageCount: Int { showsTurbo ? 4 : 3 }
+    private var pageCount: Int { showsTurbo ? 5 : 4 }
 
 #if os(iOS)
     private var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
@@ -44,7 +45,8 @@ struct WelcomeView: View {
                     intro.tag(0)
                     games.tag(1)
                     play.tag(2)
-                    turbo.tag(3)
+                    yourWay.tag(3)
+                    turbo.tag(4)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 #else
@@ -54,6 +56,7 @@ struct WelcomeView: View {
                     case 0: intro
                     case 1: games
                     case 2: play
+                    case 3: yourWay
                     default: turbo
                     }
                 }
@@ -190,6 +193,15 @@ struct WelcomeView: View {
             if EmulatorSession.engineInstalled(for: .ps2) {
                 WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS PS2)."))
             }
+#if os(iOS)
+            WelcomeLine(icon: "photo", text: tr("Pas de jaquette ? Appui long sur le jeu › Choisir une jaquette, avec ta propre image."))
+#else
+            WelcomeLine(icon: "photo", text: tr("Pas de jaquette ? Clic droit sur le jeu › Choisir une jaquette, avec ta propre image."))
+#endif
+            if RomPatch.systems.contains(where: EmulatorSession.engineInstalled) {
+                WelcomeLine(icon: "bandage",
+                            text: tr("Romhacks : pose le patch (.ips, .bps, .ups) avec le jeu d'origine, il apparaît comme un jeu à part."))
+            }
 #if PLAYTENDO_VITA
             if EmulatorSession.engineInstalled(for: .vita) {
                 WelcomeLine(icon: "exclamationmark.triangle",
@@ -206,13 +218,46 @@ struct WelcomeView: View {
             WelcomeLine(icon: "hand.tap", text: tr("Touche un jeu pour le lancer : des boutons apparaissent à l'écran."))
             WelcomeLine(icon: "gamecontroller",
                         text: tr("Une manette Bluetooth (Switch, Xbox, PlayStation) marche aussi : les boutons de l'écran s'effacent dès que tu t'en sers."))
-            WelcomeLine(icon: "pause.circle", text: tr("Le bouton menu met le jeu en pause : sauvegarde rapide, options, quitter."))
+            WelcomeLine(icon: "pause.circle",
+                        text: tr("Le bouton menu met le jeu en pause : sauvegarde rapide, avance rapide, retour en arrière (de la NES à la N64, PS1), options, quitter."))
 #else
             WelcomeLine(icon: "cursorarrow.click", text: tr("Clique sur un jeu pour le lancer ; les touches du clavier sont dans les Réglages."))
             WelcomeLine(icon: "gamecontroller", text: tr("Une manette Bluetooth ou USB (Switch, Xbox, PlayStation) marche aussi."))
-            WelcomeLine(icon: "pause.circle", text: tr("Échap met le jeu en pause : sauvegarde rapide, options, plein écran, quitter."))
+            WelcomeLine(icon: "pause.circle",
+                        text: tr("Échap met le jeu en pause : sauvegarde rapide, avance rapide, retour en arrière (de la NES à la N64, PS1), options, plein écran, quitter."))
 #endif
+            if GameSystem.allCases.contains(where: { Cheats.supported($0) && EmulatorSession.engineInstalled(for: $0) }) {
+                WelcomeLine(icon: "wand.and.stars",
+                            text: tr("Codes de triche dans le menu pause : tape les tiens, ou télécharge ceux du jeu (« Codes disponibles »)."))
+            }
             WelcomeLine(icon: "externaldrive", text: tr("Les sauvegardes des jeux s'enregistrent toutes seules."))
+        }
+    }
+
+    /// Consoles où une deuxième manette joue le joueur 2 (sur Mac, celles déjà arrivées).
+    private var twoPlayerNames: [String] {
+        GameSystem.displayOrder.filter { $0.supportsTwoPlayers && EmulatorSession.engineInstalled(for: $0) }
+            .map(Self.resolutionName)
+    }
+
+    private var yourWay: some View {
+        WelcomeCard {
+            WelcomeTitle(icon: "slider.horizontal.3", title: tr("À TA FAÇON"), color: LibraryView.favoriteColor)
+            WelcomeLine(icon: "paintpalette", text: tr("4 thèmes : Néon, Rétro 8-bit, Minimal sombre et Pixel Art (Réglages › Thème)."))
+#if os(iOS)
+            WelcomeLine(icon: "hand.draw",
+                        text: tr("Les boutons à l'écran se déplacent et changent de taille comme tu veux (menu pause › Modifier les boutons)."))
+#else
+            WelcomeLine(icon: "keyboard", text: tr("Les touches du clavier se changent console par console (Réglages › Clavier)."))
+#endif
+            WelcomeLine(icon: "gamecontroller",
+                        text: tr("Manette : les touches à ta façon (menu pause › Touches de la manette) et les vibrations."))
+            if let last = twoPlayerNames.last {
+                let names = twoPlayerNames.count > 1 ? twoPlayerNames.dropLast().joined(separator: ", ") + tr(" et ") + last : last
+                WelcomeLine(icon: "person.2", text: tr("À deux avec deux manettes : \(names)."))
+            }
+            WelcomeLine(icon: "gauge.with.dots.needle.33percent",
+                        text: tr("Les performances en direct (images par seconde, processeur…) : Réglages › Afficher les performances."))
         }
     }
 
