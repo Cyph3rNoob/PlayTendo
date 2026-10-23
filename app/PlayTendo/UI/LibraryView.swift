@@ -7,6 +7,9 @@ struct LibraryView: View {
     @EnvironmentObject private var metadata: GameMetadata
     @EnvironmentObject private var jit: JITManager
     @State private var importing = false
+    /// Sélecteur de fichiers ouvert pour la jaquette de ce jeu (sinon : jeux à ajouter). Un seul sélecteur pour les
+    /// deux : sur Mac, un second, posé plus bas dans la vue, ne s'ouvrait pas.
+    @State private var coverFileGame: Game?
     @State private var showingAbout = false
     @State private var showingSettings = false
     /// Jeu qui attend l'activation du JIT avant de démarrer.
@@ -21,10 +24,9 @@ struct LibraryView: View {
     /// Ordre des jeux dans chaque console (les favoris restent en tête).
     @AppStorage(LibrarySort.key) private var sortRaw = LibrarySort.name.rawValue
     @State private var gameToDelete: Game?
-    /// Jeu dont on choisit la jaquette (menu du jeu › Choisir une jaquette), dans Photos ou dans Fichiers.
+    /// Jeu dont on choisit la jaquette dans Photos (menu du jeu › Choisir une jaquette).
     @State private var coverGame: Game?
     @State private var choosingCoverPhoto = false
-    @State private var choosingCoverFile = false
     @State private var coverPhoto: PhotosPickerItem?
     @State private var coverUnreadable = false
     /// Fiche ouverte (toucher une boîte) ; ce qu'elle demande une fois refermée : jouer ou supprimer.
@@ -50,7 +52,7 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     header
                     if library.games.isEmpty {
-                        EmptyLibraryView { importing = true }
+                        EmptyLibraryView { addGames() }
                             .padding(.top, 30)
                     } else {
                         HStack(spacing: 10) {
@@ -84,8 +86,19 @@ struct LibraryView: View {
             }
             .allowsHitTesting(false)
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { library.importFiles(urls) }
+        .fileImporter(isPresented: $importing, allowedContentTypes: coverFileGame == nil ? [.item] : [.image],
+                      allowsMultipleSelection: coverFileGame == nil) { result in
+            guard case .success(let urls) = result else { return }
+            if let game = coverFileGame {
+                coverFileGame = nil
+                guard let url = urls.first else { return }
+                let access = url.startAccessingSecurityScopedResource()
+                let data = try? Data(contentsOf: url)
+                if access { url.stopAccessingSecurityScopedResource() }
+                Task { await applyCover(data, to: game) }
+            } else {
+                library.importFiles(urls)
+            }
         }
         // Bibliothèque relue au retour d'une partie (app compilée avec la PS Vita : un jeu installé a pu quitter Jeux,
         // sa copie installée le remplace).
@@ -102,7 +115,7 @@ struct LibraryView: View {
         }
         // Barre des menus (PlayTendoApp) : Ajouter des jeux, Réglages.
         .onReceive(NotificationCenter.default.publisher(for: .playTendoImportGames)) { _ in
-            if playing == nil { importing = true }
+            if playing == nil { addGames() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .playTendoShowSettings)) { _ in
             if playing == nil { showingSettings = true }
@@ -322,7 +335,7 @@ struct LibraryView: View {
                 .accessibilityLabel(tr("À propos"))
             NeonIconButton(systemName: "gearshape.fill", color: Neon.magenta) { showingSettings = true }
                 .accessibilityLabel(tr("Réglages"))
-            NeonIconButton(systemName: "plus") { importing = true }
+            NeonIconButton(systemName: "plus") { addGames() }
                 .accessibilityLabel(tr("Ajouter des jeux"))
         }
         .padding(.top, 8)
@@ -496,8 +509,8 @@ struct LibraryView: View {
                                                 Label(tr("Photos"), systemImage: "photo.on.rectangle")
                                             }
                                             Button {
-                                                coverGame = game
-                                                choosingCoverFile = true
+                                                coverFileGame = game
+                                                importing = true
                                             } label: {
                                                 Label(tr("Fichiers"), systemImage: "folder")
                                             }
@@ -531,8 +544,7 @@ struct LibraryView: View {
                     .padding(.top, 30)
             }
         }
-        // Jaquette choisie pour un jeu. Le sélecteur de fichiers est ici, pas avec celui des jeux : deux sélecteurs
-        // sur la même vue, seul le dernier s'ouvre.
+        // Jaquette choisie pour un jeu dans Photos (Fichiers : le sélecteur des jeux, `coverFileGame`).
         .photosPicker(isPresented: $choosingCoverPhoto, selection: $coverPhoto, matching: .images)
         .onChange(of: coverPhoto) { _, item in
             guard let item, let game = coverGame else { return }
@@ -542,18 +554,17 @@ struct LibraryView: View {
                 await applyCover(data, to: game)
             }
         }
-        .fileImporter(isPresented: $choosingCoverFile, allowedContentTypes: [.image]) { result in
-            guard case .success(let url) = result, let game = coverGame else { return }
-            let access = url.startAccessingSecurityScopedResource()
-            let data = try? Data(contentsOf: url)
-            if access { url.stopAccessingSecurityScopedResource() }
-            Task { await applyCover(data, to: game) }
-        }
         .alert(tr("Image illisible"), isPresented: $coverUnreadable) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(tr("Choisis une image PNG, JPEG ou HEIC."))
         }
+    }
+
+    /// Sélecteur de fichiers pour ajouter des jeux (une jaquette choisie puis annulée n'y reste pas accrochée).
+    private func addGames() {
+        coverFileGame = nil
+        importing = true
     }
 
     private func applyCover(_ data: Data?, to game: Game) async {
