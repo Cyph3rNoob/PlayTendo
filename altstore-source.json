@@ -1,0 +1,42 @@
+{
+  "name": "PlayTendo",
+  "identifier": "com.playtendo.source",
+  "subtitle": "Tes jeux Nintendo et Sony, sur ton iPhone et ton iPad.",
+  "description": "Source officielle de PlayTendo pour AltStore et SideStore. PlayTendo ne contient aucun jeu ni BIOS : il fait tourner ceux que tu possèdes.",
+  "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+  "website": "https://github.com/Cyph3rNoob/PlayTendo",
+  "tintColor": "#00F0FF",
+  "featuredApps": ["com.playtendo.app"],
+  "apps": [
+    {
+      "name": "PlayTendo",
+      "bundleIdentifier": "com.playtendo.app",
+      "developerName": "Cyph3rNoob",
+      "subtitle": "14 consoles, de la NES à la PS Vita, dans une seule app.",
+      "localizedDescription": "Émulateur pour iPhone et iPad : NES, Super Nintendo, Nintendo 64, GameCube, Wii, Game Boy, Game Boy Color, Game Boy Advance, DS, 3DS, PlayStation, PlayStation 2, PSP et PS Vita (expérimentale), avec des moteurs d'émulation libres.\n\nBibliothèque qui reconnaît tes jeux et télécharge leurs jaquettes, sauvegarde rapide et reprise automatique, avance rapide et retour en arrière, codes de triche, patchs de romhacks (.ips, .bps, .ups), boutons à l'écran sur mesure, manettes Bluetooth (touches, vibrations, deux joueurs) et quatre thèmes.\n\nMode turbo (JIT) via l'app StikDebug, indispensable pour la PS2, la GameCube, la Wii, la 3DS et la PS Vita.\n\nAucun jeu ni BIOS n'est fourni. PlayTendo n'est affilié ni à Nintendo ni à Sony.",
+      "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+      "tintColor": "#00F0FF",
+      "category": "games",
+      "screenshots": [],
+      "versions": [
+        {
+          "version": "1.0",
+          "buildVersion": "1",
+          "date": "2026-10-23",
+          "localizedDescription": "Codes de triche (à taper ou à télécharger), patchs de romhacks, jaquette perso, thèmes Pixel Art et Minimal sombre, touches de manette sur mesure, vibrations, deux joueurs, affichage des performances.",
+          "downloadURL": "https://github.com/Cyph3rNoob/PlayTendo/releases/download/v1.0/PlayTendo.ipa",
+          "size": 58657439,
+          "minOSVersion": "18.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          "com.apple.developer.kernel.increased-memory-limit",
+          "get-task-allow"
+        ],
+        "privacy": {}
+      }
+    }
+  ],
+  "news": []
+}
