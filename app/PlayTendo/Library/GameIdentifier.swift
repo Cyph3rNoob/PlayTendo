@@ -66,7 +66,7 @@ enum GameIdentifier {
     }
 
     /// Les ROM N64 existent en trois ordres d'octets ; la base utilise l'ordre « .z64 ».
-    private static func bigEndianN64(_ data: Data) -> Data {
+    static func bigEndianN64(_ data: Data) -> Data {
         guard data.count >= 4, data.count % 4 == 0 else { return data }
         let magic = data.prefix(4)
         var bytes = [UInt8](data)
@@ -83,7 +83,7 @@ enum GameIdentifier {
         return Data(bytes)
     }
 
-    private static func crc32<D: DataProtocol>(_ data: D) -> UInt32 {
+    static func crc32<D: DataProtocol>(_ data: D) -> UInt32 {
         var crc: uLong = 0
         for region in data.regions {
             region.withUnsafeBytes { raw in

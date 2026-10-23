@@ -58,12 +58,17 @@ final class GameLibrary: ObservableObject {
                                                   options: [.skipsHiddenFiles]) else { return [] }
         var detection = DetectionCache.load()
         var files: [URL] = []
+        var patches: [URL] = []
 #if PLAYTENDO_VITA
         var vitaFolders: [URL] = []
 #endif
         for case let url as URL in enumerator {
             let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
             if values?.isRegularFile == true {
+                if RomPatch.extensions.contains(url.pathExtension.lowercased()) {
+                    patches.append(url)
+                    continue
+                }
                 if moveIfPS2BIOS(url) { continue }
 #if PLAYTENDO_VITA
                 if moveIfVitaFirmware(url) { continue }
@@ -86,7 +91,7 @@ final class GameLibrary: ObservableObject {
             for entry in referencedFiles(of: playlist) { hidden.insert(entry.path) }
         }
 
-        let found = groupDiscs(files.compactMap { url -> Game? in
+        let roms = groupDiscs(files.compactMap { url -> Game? in
             guard let system = detection.system(of: url),
                   !hidden.contains(url.standardizedFileURL.path) else { return nil }
 #if PLAYTENDO_VITA
@@ -95,6 +100,8 @@ final class GameLibrary: ObservableObject {
             return Game(url: url, system: system)
         })
         detection.save()
+        // Patchs de romhacks : un jeu à part chacun, rangé avec la console de son jeu d'origine.
+        let found = roms + RomPatch.games(for: patches, among: roms)
 #if PLAYTENDO_VITA
         // PS Vita : les jeux installés dont l'original n'est plus dans Jeux (retiré après l'installation).
         let vitaOriginals = vitaFolders + found.filter { $0.system == .vita }.map(\.url)
@@ -821,7 +828,8 @@ final class GameLibrary: ObservableObject {
 #endif
         // BIOS PS2 au format « .ROM0 » (les « .BIN » sont reconnus à leur contenu, après la copie).
         if ext == "rom0" { return Paths.bios.appendingPathComponent(name) }
-        guard GameSystem.forExtension(ext) != nil || GameSystem.companionExtensions.contains(ext) else { return nil }
+        guard GameSystem.forExtension(ext) != nil || GameSystem.companionExtensions.contains(ext)
+                || RomPatch.extensions.contains(ext) else { return nil }
         return Paths.games.appendingPathComponent(name)
     }
 

@@ -229,6 +229,7 @@ struct GameDetailView: View {
         }
         rows.append((tr("Console"), game.system.name))
         rows.append((tr("Fichier"), game.url.lastPathComponent))
+        if let base = game.patchBase { rows.append((tr("Jeu d'origine"), base.lastPathComponent)) }
         if let size = fileSize { rows.append((tr("Taille"), size)) }
         if game.discs.count > 1 { rows.append((tr("Disques"), "\(game.discs.count)")) }
         return VStack(alignment: .leading, spacing: 10) {

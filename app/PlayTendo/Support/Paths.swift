@@ -320,6 +320,8 @@ enum Paths {
 
     """ + readmeVitaGames + """
       Les archives .zip, .7z et .rar sont acceptées avec le bouton « + » de l'app.
+      Patchs de romhacks .ips .bps .ups (NES à DS) : pose-les avec le jeu d'origine,
+        chacun apparaît comme un jeu à part (le jeu d'origine reste intact).
 
     BIOS (facultatif)
       PlayStation : scph5501.bin (ou scph1001.bin…)
@@ -354,6 +356,8 @@ enum Paths {
 
     """ + readmeVitaGamesEnglish + """
       .zip, .7z and .rar archives are accepted with the app's “+” button.
+      Romhack patches .ips .bps .ups (NES to DS): put them with the original game,
+        each one shows up as its own game (the original stays untouched).
 
     BIOS (optional)
       PlayStation: scph5501.bin (or scph1001.bin…)
@@ -428,6 +432,8 @@ enum Paths {
               Put your games here (you can make subfolders), or drag them into the PlayTendo window:
             \(gameLines)
               .zip, .7z and .rar archives are accepted with the app's “+” button or by dragging them in.
+              Romhack patches .ips .bps .ups (NES to DS): put them with the original game,
+                each one shows up as its own game (the original stays untouched).
 
             BIOS (optional)
             \(biosLines)
@@ -447,6 +453,8 @@ enum Paths {
           Mets tes jeux ici (tu peux créer des sous-dossiers), ou glisse-les dans la fenêtre de PlayTendo :
         \(gameLines)
           Les archives .zip, .7z et .rar sont acceptées avec le bouton « + » de l'app ou en les glissant.
+          Patchs de romhacks .ips .bps .ups (NES à DS) : pose-les avec le jeu d'origine,
+            chacun apparaît comme un jeu à part (le jeu d'origine reste intact).
 
         BIOS (facultatif)
         \(biosLines)

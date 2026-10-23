@@ -8,11 +8,14 @@ struct Game: Identifiable, Hashable {
     /// Jeu en plusieurs disques (« … (Disc 1) », « … (Disc 2) ») : tous ses disques dans l'ordre, `url` étant le
     /// premier. Vide pour un jeu d'un seul fichier (ou dont un .m3u liste déjà les disques).
     let discs: [URL]
+    /// Patch de romhack (`url` est le .ips/.bps/.ups) : le jeu d'origine auquel il s'applique (RomPatch).
+    let patchBase: URL?
 
-    init(url: URL, system: GameSystem, discs: [URL] = []) {
+    init(url: URL, system: GameSystem, discs: [URL] = [], patchBase: URL? = nil) {
         self.url = url
         self.system = system
         self.discs = discs
+        self.patchBase = patchBase
         let root = Paths.games.resolvingSymlinksInPath().path
         let path = url.resolvingSymlinksInPath().path
         if path.hasPrefix(root + "/") {

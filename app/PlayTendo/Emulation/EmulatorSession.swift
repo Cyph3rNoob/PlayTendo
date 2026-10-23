@@ -800,7 +800,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         condition.lock()
         let options = system.coreOptions.merging(optionOverrides) { $1 }
         condition.unlock()
-        try core.loadGame(atPath: game.url.path,
+        // Patch de romhack : le jeu patché (refait dans Caches si besoin), pas le .ips/.bps/.ups.
+        try core.loadGame(atPath: RomPatch.prepare(game).path,
                           systemDirectory: Paths.systemDirectory(for: system).path,
                           saveDirectory: Paths.coreSaveDirectory(for: system).path,
                           options: options)
