@@ -22,6 +22,11 @@ struct EmulatorView: View {
     @AppStorage(PS1Settings.smoothingKey) private var ps1Smoothing = PS1Settings.Smoothing.off.rawValue
     /// Consoles 2D : filtre de l'image (FilterSettings), gardé pour chaque console.
     @AppStorage private var screenFilter: Int
+    /// Boutons sur mesure de cette console, en portrait et en paysage (ControlCustomization).
+    @State private var customPortrait: ControlCustomization
+    @State private var customLandscape: ControlCustomization
+    /// Mode édition des boutons (menu pause › Commandes › Modifier les boutons), jeu en pause.
+    @State private var editingControls = false
 
     init(game: Game, onClose: (() -> Void)? = nil) {
         self.game = game
@@ -35,6 +40,17 @@ struct EmulatorView: View {
                                           ?? (fillKey == Self.fillScreenKeyAnalog))
         _screenFilter = AppStorage(wrappedValue: FilterSettings.Filter.sharp.rawValue, FilterSettings.key(for: game.system))
         _wiiController = State(initialValue: DolphinSettings.controller(for: game))
+        let variant = game.system == .wii ? DolphinSettings.controller(for: game).rawValue : nil
+        _customPortrait = State(initialValue: .load(key: ControlCustomization.key(system: game.system, variant: variant,
+                                                                                  landscape: false)))
+        _customLandscape = State(initialValue: .load(key: ControlCustomization.key(system: game.system, variant: variant,
+                                                                                   landscape: true)))
+    }
+
+    /// Clé des boutons sur mesure (Wii : selon la manette choisie).
+    private func customKey(landscape: Bool) -> String {
+        ControlCustomization.key(system: game.system, variant: game.system == .wii ? wiiController.rawValue : nil,
+                                 landscape: landscape)
     }
 
     /// Commandes affichées : celles de la console, ou pour un jeu Wii la manette choisie.
@@ -141,6 +157,12 @@ struct EmulatorView: View {
 #if os(iOS)
             TouchControls(layout: layout, scheme: controls, session: session, onMenu: openMenu,
                           onTouchDown: { gamepad.deactivate() })
+                .opacity((landscape ? customLandscape : customPortrait).opacity)
+                .allowsHitTesting(!editingControls)
+            if editingControls {
+                ControlsEditor(layout: layout, bounds: bounds, custom: landscape ? $customLandscape : $customPortrait,
+                               onDone: finishEditingControls)
+            }
 #else
             MacInput(layout: layout, scheme: controls, session: session,
                      onMenu: { showingMenu ? closeMenu() : openMenu() },
@@ -246,9 +268,10 @@ struct EmulatorView: View {
         return ControlLayout.make(scheme: controls, aspect: session.aspectRatio,
                                   bounds: bounds, safe: Self.safeAreaInsets(),
                                   controllerConnected: gamepad.isConnected,
-                                  hideTouchControls: gamepad.isActive,
+                                  hideTouchControls: gamepad.isActive && !editingControls,
                                   dual: DualScreenOptions(swapped: screensSwapped, touchSize: touchSize),
-                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController))
+                                  fillScreen: controls.canFillScreen && (fillScreen || ps2FillsForController),
+                                  custom: bounds.width > bounds.height ? customLandscape : customPortrait)
 #endif
     }
 
@@ -292,7 +315,22 @@ struct EmulatorView: View {
                          fillScreen: Self.hasTouchControls && controls.canFillScreen && landscape && !ps2FillsForController
                             ? fill : nil,
                          filter: FilterSettings.systems.contains(game.system) ? $screenFilter : nil,
-                         wiiController: game.system == .wii ? wii : nil)
+                         wiiController: game.system == .wii ? wii : nil,
+                         onEditControls: Self.hasTouchControls ? { editControls() } : nil)
+    }
+
+    /// Menu pause › Modifier les boutons : le menu laisse la place au mode édition, le jeu reste en pause.
+    private func editControls() {
+        showingMenu = false
+        editingControls = true
+    }
+
+    /// Terminé : réglages gardés, retour au menu pause.
+    private func finishEditingControls() {
+        ControlCustomization.save(customPortrait, key: customKey(landscape: false))
+        ControlCustomization.save(customLandscape, key: customKey(landscape: true))
+        editingControls = false
+        showingMenu = true
     }
 
     private var failureMessage: String? {
@@ -324,6 +362,9 @@ struct EmulatorView: View {
         guard controller != wiiController else { return }
         wiiController = controller
         DolphinSettings.setController(controller, for: game)
+        // Boutons sur mesure : ceux de cette manette.
+        customPortrait = .load(key: customKey(landscape: false))
+        customLandscape = .load(key: customKey(landscape: true))
         session.clearInput()
         session.setWiimote(controller == .wiimote)
         gamepad.nintendoLetters = controls.nintendoLetters
@@ -396,6 +437,8 @@ private struct PauseMenu: View {
     let filter: Binding<Int>?
     /// Wii : manette utilisée (nil = réglage masqué).
     let wiiController: Binding<DolphinSettings.WiiController>?
+    /// iPhone, iPad : mode édition des boutons à l'écran (nil sur Mac).
+    let onEditControls: (() -> Void)?
 
     /// PSP : résolution et lissage des textures, choisis directement (gardés pour tous les jeux PSP).
     @AppStorage(PSPSettings.resolutionKey) private var resolution = PSPSettings.Resolution.x2.rawValue
@@ -448,7 +491,7 @@ private struct PauseMenu: View {
 #if os(macOS)
         true
 #else
-        wiiController != nil
+        wiiController != nil || onEditControls != nil
 #endif
     }
 
@@ -586,6 +629,7 @@ private struct PauseMenu: View {
             screensSection
         case .controls:
             if let wiiController { wiiPicker(wiiController) }
+            if let onEditControls { editControlsButton(onEditControls) }
 #if os(macOS)
             MacKeysSection(scheme: scheme)
 #endif
@@ -652,6 +696,7 @@ private struct PauseMenu: View {
             if hasControlsBlock {
                 MenuBlock(title: tr("COMMANDES")) {
                     if let wiiController { wiiPicker(wiiController) }
+                    if let onEditControls { editControlsButton(onEditControls) }
 #if os(macOS)
                     MenuButton(title: tr("Touches clavier"), icon: "keyboard") { showingKeys = true }
 #endif
@@ -692,6 +737,10 @@ private struct PauseMenu: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }
+    }
+
+    private func editControlsButton(_ action: @escaping () -> Void) -> some View {
+        MenuButton(title: tr("Modifier les boutons"), icon: "hand.draw", action: action)
     }
 
     /// Codes de triche : leur écran, avec le nombre de codes actifs (éteint si le moteur de la console ne les lit pas).

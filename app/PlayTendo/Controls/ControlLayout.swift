@@ -88,10 +88,11 @@ struct ControlLayout: Equatable {
     /// (en paysage, ils sont toujours grands), et les boutons tactiles se superposent aux écrans.
     /// `hideTouchControls` : la manette est en cours d'utilisation, seuls les boutons disparaissent.
     /// `fillScreen` (PSP en paysage) : l'image prend toute la hauteur de l'écran et les boutons
-    /// passent par-dessus.
+    /// passent par-dessus. `custom` : boutons sur mesure (déplacés, agrandis).
     static func make(scheme: ControlScheme, aspect: CGFloat, bounds: CGRect, safe: UIEdgeInsets,
                      controllerConnected: Bool, hideTouchControls: Bool,
-                     dual: DualScreenOptions = DualScreenOptions(), fillScreen: Bool = false) -> ControlLayout {
+                     dual: DualScreenOptions = DualScreenOptions(), fillScreen: Bool = false,
+                     custom: ControlCustomization = ControlCustomization()) -> ControlLayout {
         let usable = bounds.inset(by: safe)
         guard usable.width > 0, usable.height > 0, aspect > 0 else { return ControlLayout() }
         var layout = ControlLayout()
@@ -283,6 +284,7 @@ struct ControlLayout: Equatable {
         }
         layout.addFaceButtons(scheme: scheme, center: faceCenter, size: faceSize > 0 ? faceSize : cluster,
                               vertical: verticalFace)
+        layout.apply(custom, bounds: usable)
         if hideTouchControls {
             // Manette utilisée : seuls les boutons tactiles disparaissent. L'image du jeu garde
             // exactement la même place, pour ne pas sauter quand les boutons reviennent.
