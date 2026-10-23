@@ -3,7 +3,9 @@ import Foundation
 /// Codes de triche à télécharger (menu pause › Codes de triche › Codes disponibles). NES, SNES, Game Boy, GBA, N64,
 /// DS, PS1, PSP : base libretro-database (dossier cht, licence CC BY-SA 4.0), un fichier par jeu et par appareil
 /// (« (Game Genie) », « (Code Breaker) »…). GameCube, Wii : codes fournis avec Dolphin (dans l'app) et base Gecko en
-/// ligne codes.rc24.xyz (celle de Dolphin). Tous arrivent coupés ; ceux qu'un moteur ne lit pas sont écartés.
+/// ligne codes.rc24.xyz (celle de Dolphin). PS2 : collection pcsx2_cheats_collection (celle d'ARMSX2, par version
+/// exacte), sinon base de CheatDevicePS2 (GPL-3.0) par le titre. Tous arrivent coupés ; ceux qu'un moteur ne lit pas
+/// sont écartés.
 enum CheatLibrary {
     struct Download {
         var cheats: [Cheat] = []
@@ -11,6 +13,8 @@ enum CheatLibrary {
         var skipped = 0
         /// Codes trouvés pour une autre version du jeu (autre région) : ils peuvent ne pas marcher.
         var otherVersion: String?
+        /// Remarque à montrer avec le résultat (PS2 : codes faits pour une autre version, sans doute).
+        var note: String?
     }
 
     enum Failure: Error {
@@ -20,14 +24,18 @@ enum CheatLibrary {
     }
 
     static func isAvailable(for system: GameSystem) -> Bool {
-        libretroFolder(system) != nil || system == .gameCube || system == .wii
+        libretroFolder(system) != nil || [.gameCube, .wii, .ps2].contains(system)
     }
 
-    /// Codes trouvés pour ce jeu (pas encore ajoutés à ses codes).
-    static func download(for game: Game, officialName: String?) async throws -> Download {
+    /// Codes trouvés pour ce jeu (pas encore ajoutés à ses codes). PS2 : `ps2Identity` = numéro et CRC du jeu en cours,
+    /// donnés par le moteur.
+    static func download(for game: Game, officialName: String?,
+                         ps2Identity: (serial: String, crc: UInt32)? = nil) async throws -> Download {
         switch game.system {
         case .gameCube, .wii:
             return try await dolphinCodes(for: game)
+        case .ps2:
+            return try await ps2Codes(officialName: officialName, identity: ps2Identity)
         default:
             return try await libretroCodes(for: game, officialName: officialName)
         }
@@ -226,6 +234,154 @@ enum CheatLibrary {
             cheats.append(Cheat(name: name, code: code, enabled: false, source: source))
         }
         return (cheats.filter(\.isMaster) + cheats.filter { !$0.isMaster }, skipped)
+    }
+
+    // MARK: PS2
+
+    /// D'abord la collection d'ARMSX2 (fichiers .pnach rangés par numéro et CRC : la version exacte du jeu), sinon la
+    /// base de CheatDevicePS2 cherchée par le titre (versions américaines seulement).
+    private static func ps2Codes(officialName: String?, identity: (serial: String, crc: UInt32)?) async throws -> Download {
+        if let identity {
+            let crc = String(format: "%08X", identity.crc)
+            for file in ["\(identity.serial)_\(crc).pnach", "\(crc).pnach"] {
+                let url = "https://raw.githubusercontent.com/xs1l3n7x/pcsx2_cheats_collection/main/cheats/\(escape(file))"
+                if let text = try await fetchText(url) {
+                    let parsed = parsePnach(text, source: "PCSX2 · xs1l3n7x")
+                    if !parsed.cheats.isEmpty { return Download(cheats: parsed.cheats, skipped: parsed.skipped) }
+                }
+            }
+        }
+        guard let officialName else { throw Failure.unknownGame }
+        let base = try await cheatDeviceDatabase()
+        guard let found = cheatDeviceGame(in: base, officialName: officialName) else { return Download() }
+        var download = Download(cheats: found.cheats, skipped: found.skipped)
+        // La base ne contient que des versions américaines.
+        if !regions(officialName).contains("usa") { download.note = tr("Codes de la base CheatDevicePS2 pour « \(found.title) », faits pour la version américaine : certains peuvent ne pas marcher avec la tienne.") }
+        return download
+    }
+
+    /// Types de codes que PCSX2 sait faire (Patch.cpp, « extended ») : 0 à 7, D et E. Les autres (codes « maîtres »
+    /// 9 et F des boîtiers de triche…) sont retirés.
+    private static func ps2Supported(_ address: Substring) -> Bool {
+        guard let first = address.first?.uppercased() else { return false }
+        return "01234567DE".contains(first)
+    }
+
+    /// Fichier .pnach : un code par « [Nom] » (les groupes du même nom qui se suivent n'en font qu'un), lignes « patch= »
+    /// gardées seulement si PCSX2 sait les faire.
+    static func parsePnach(_ text: String, source: String) -> (cheats: [Cheat], skipped: Int) {
+        var groups: [(name: String, lines: [String])] = []
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("["), line.hasSuffix("]") {
+                let name = String(line.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+                if groups.last?.name != name { groups.append((name, [])) }
+            } else if line.lowercased().hasPrefix("patch=") {
+                if groups.isEmpty { groups.append((tr("Codes"), [])) }
+                let fields = line.split(separator: ",")
+                if fields.count >= 5, ps2Supported(fields[2].trimmingCharacters(in: .whitespaces)[...]) {
+                    groups[groups.count - 1].lines.append(line)
+                } else {
+                    groups[groups.count - 1].lines.append("")
+                }
+            }
+        }
+        var cheats: [Cheat] = []
+        var skipped = 0
+        for group in groups {
+            let lines = group.lines.filter { !$0.isEmpty }
+            let cheat = Cheat(name: group.name, code: lines.joined(separator: "\n"), enabled: false, source: source)
+            if lines.isEmpty || cheat.isMaster || Cheats.parts(of: cheat.code, system: .ps2) == nil {
+                skipped += 1
+            } else {
+                cheats.append(cheat)
+            }
+        }
+        return (cheats, skipped)
+    }
+
+    /// Base de CheatDevicePS2 (github.com/root670/CheatDevicePS2, CheatDatabase.txt, GPL-3.0) : téléchargée la première
+    /// fois (6,4 Mo), gardée un mois.
+    private static func cheatDeviceDatabase() async throws -> String {
+        let cache = cacheDirectory.appendingPathComponent("CheatDevicePS2.txt")
+        let date = (try? cache.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        if let date, Date().timeIntervalSince(date) < 30 * 24 * 3600, let text = try? String(contentsOf: cache, encoding: .utf8) {
+            return text
+        }
+        let url = "https://raw.githubusercontent.com/root670/CheatDevicePS2/master/CheatDatabase.txt"
+        if let data = try? await fetch(url), let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) {
+            try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            try? Data(text.utf8).write(to: cache, options: .atomic)
+            return text
+        }
+        if let text = try? String(contentsOf: cache, encoding: .utf8) { return text }
+        throw Failure.offline
+    }
+
+    /// Le jeu dans la base (titre entre guillemets, puis ses codes jusqu'au titre suivant), cherché par son titre sans
+    /// région, ponctuation ni petits mots (« Shadow of the Colossus » = « Shadow Of Colossus ») ; sinon le seul titre
+    /// qui le prolonge (« Burnout Revenge » → « Burnout-Revenge-Battle Racing Ignited »).
+    static func cheatDeviceGame(in base: String, officialName: String) -> (title: String, cheats: [Cheat], skipped: Int)? {
+        func key(_ name: String) -> String {
+            titleOnly(name).split(separator: " ").filter { !["the", "a", "an", "and"].contains($0) }.joined(separator: " ")
+        }
+        let wanted = key(officialName)
+        guard !wanted.isEmpty else { return nil }
+        let lines = base.split(whereSeparator: \.isNewline)
+        var exact: Int?
+        var longer: [Int] = []
+        for (index, line) in lines.enumerated() where line.hasPrefix("\"") {
+            let title = key(line.trimmingCharacters(in: CharacterSet(charactersIn: "\" ")))
+            if title == wanted {
+                exact = index
+                break
+            }
+            if title.hasPrefix(wanted + " ") { longer.append(index) }
+        }
+        guard let start = exact ?? (longer.count == 1 ? longer[0] : nil) else { return nil }
+        var end = start + 1
+        while end < lines.count, !lines[end].hasPrefix("\"") { end += 1 }
+        let title = lines[start].trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        let parsed = parseCheatDevice(lines[(start + 1)..<end])
+        return (title, parsed.cheats, parsed.skipped)
+    }
+
+    /// Codes d'un jeu de CheatDevicePS2 : un nom, puis ses lignes « XXXXXXXX YYYYYYYY » ; un nom sans ligne est le titre
+    /// d'une partie (« Action Mission Codes »), mis devant les noms suivants.
+    static func parseCheatDevice(_ lines: ArraySlice<Substring>) -> (cheats: [Cheat], skipped: Int) {
+        var cheats: [Cheat] = []
+        var skipped = 0
+        var section: String?
+        var name: String?
+        var codes: [String] = []
+        func finish() {
+            guard let name, !codes.isEmpty else { return }
+            let kept = codes.filter { ps2Supported($0.prefix(8)) }
+            let cheat = Cheat(name: section.map { "\($0) › \(name)" } ?? name, code: kept.joined(separator: "\n"),
+                              enabled: false, source: "CheatDevicePS2")
+            if kept.isEmpty || Cheat(name: name, code: "").isMaster || Cheats.parts(of: cheat.code, system: .ps2) == nil {
+                skipped += 1
+            } else {
+                cheats.append(cheat)
+            }
+        }
+        for raw in lines {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { continue }
+            if line.wholeMatch(of: #/[0-9A-Fa-f]{8} [0-9A-Fa-f]{8}/#) != nil {
+                if name != nil { codes.append(line) }
+                continue
+            }
+            if let previous = name, codes.isEmpty {
+                section = previous
+            } else {
+                finish()
+            }
+            name = line
+            codes = []
+        }
+        finish()
+        return (cheats, skipped)
     }
 
     // MARK: GameCube, Wii

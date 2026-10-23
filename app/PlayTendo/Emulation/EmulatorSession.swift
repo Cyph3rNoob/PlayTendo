@@ -428,6 +428,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         core?.setAnalogStick(stick, x: Self.axis(x), y: Self.axis(y), port: port)
     }
 
+    /// PS2 : numéro et CRC du jeu en cours (codes de triche de cette version exacte).
+    var engineGameIdentity: (serial: String, crc: UInt32)? { external?.gameIdentity }
+
     /// Deuxième manette branchée ou retirée (GameCube, Wii : manette ou Wiimote du joueur 2).
     func setSecondPlayer(_ connected: Bool) {
         external?.setSecondPlayer(connected)

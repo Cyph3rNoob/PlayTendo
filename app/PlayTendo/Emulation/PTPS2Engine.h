@@ -52,6 +52,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setCheats:(NSString *)pnach;
 /// Images par seconde du jeu et vitesse (%). NO hors partie ou avec un moteur d'avant.
 - (BOOL)getFPS:(double *)fps speed:(double *)speed;
+/// Numéro du jeu en cours (« SLUS-21016 ») et CRC de son programme dans `crc` ; nil hors partie ou moteur d'avant.
+- (nullable NSString *)gameSerial:(uint32_t *)crc;
 /// Joueur 2 (`player` = 1) ; 0 : comme setButton / setStick. Sans effet avec un moteur d'avant.
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed player:(NSInteger)player;
 - (void)setStick:(int)stick x:(float)x y:(float)y player:(NSInteger)player;

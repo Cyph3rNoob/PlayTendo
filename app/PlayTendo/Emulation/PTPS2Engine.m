@@ -34,6 +34,7 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     __typeof__(&PTPS2SetCheats) _setCheats;
     __typeof__(&PTPS2GetPerformance) _getPerformance;
     __typeof__(&PTPS2SetPadButton) _setPadButton;
+    __typeof__(&PTPS2GetGameIdentity) _gameIdentity;
     __typeof__(&PTPS2SetPadStick) _setPadStick;
 }
 
@@ -67,6 +68,7 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     engine->_setCheats = (__typeof__(&PTPS2SetCheats))dlsym(handle, "PTPS2SetCheats");
     engine->_getPerformance = (__typeof__(&PTPS2GetPerformance))dlsym(handle, "PTPS2GetPerformance");
     engine->_setPadButton = (__typeof__(&PTPS2SetPadButton))dlsym(handle, "PTPS2SetPadButton");
+    engine->_gameIdentity = (__typeof__(&PTPS2GetGameIdentity))dlsym(handle, "PTPS2GetGameIdentity");
     engine->_setPadStick = (__typeof__(&PTPS2SetPadStick))dlsym(handle, "PTPS2SetPadStick");
     __typeof__(&PTPS2SetVibrationHandler) setVibration = dlsym(handle, "PTPS2SetVibrationHandler");
     if (setVibration) setVibration(PTPS2Vibration);
@@ -161,6 +163,14 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     } else if (_setPadStick) {
         _setPadStick((int)player, stick, x, y);
     }
+}
+
+- (nullable NSString *)gameSerial:(uint32_t *)crc {
+    char serial[64] = {0};
+    unsigned int value = 0;
+    if (!_gameIdentity || !_gameIdentity(serial, sizeof serial, &value)) return nil;
+    *crc = value;
+    return @(serial);
 }
 
 - (BOOL)getFPS:(double *)fps speed:(double *)speed {

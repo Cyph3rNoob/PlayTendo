@@ -67,6 +67,9 @@ void PTPS2SetCheats(const char *pnach);
 /// Vibrations des manettes PS2 : `handler` reçoit la manette (0 : joueur 1) et la force des deux moteurs (0 à 1).
 /// Facultative : absente des moteurs d'avant.
 void PTPS2SetVibrationHandler(void (*handler)(unsigned int pad, float large, float small));
+/// Jeu en cours : numéro (« SLUS-21016 ») et CRC de son programme (noms des .pnach de PCSX2) ; faux hors partie.
+/// Facultative : absente des moteurs d'avant.
+bool PTPS2GetGameIdentity(char *serial, int size, unsigned int *crc);
 /// Images par seconde du jeu et vitesse (%) ; faux hors partie. Facultative : absente des moteurs d'avant.
 bool PTPS2GetPerformance(float *fps, float *speed);
 /// Format de l'image affichée (largeur / hauteur : 4:3, ou 16:9 avec un correctif écran large), 0 si inconnu.

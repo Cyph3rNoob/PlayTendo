@@ -60,6 +60,8 @@ protocol ExternalEngine: AnyObject {
     func applyCheats(_ cheats: [Cheat], system: GameSystem)
     /// Mesures pour l'affichage des performances (nil : le moteur n'en donne pas).
     var performance: EnginePerformance? { get }
+    /// PS2 : numéro et CRC du jeu en cours (codes de triche de cette version exacte) ; nil ailleurs.
+    var gameIdentity: (serial: String, crc: UInt32)? { get }
 }
 
 /// Moteurs sans changement de disque : le premier disque seulement.
@@ -71,6 +73,7 @@ extension ExternalEngine {
     var resumeLoaded: Bool? { nil }
     func applyCheats(_ cheats: [Cheat], system: GameSystem) {}
     var performance: EnginePerformance? { nil }
+    var gameIdentity: (serial: String, crc: UInt32)? { nil }
     /// Moteurs à un seul joueur (PS Vita) : la deuxième manette joue aussi le joueur 1.
     func setButton(_ button: Int, pressed: Bool, player: Int) { setButton(button, pressed: pressed) }
     func setStick(_ stick: Int32, x: Float, y: Float, player: Int) { setStick(stick, x: x, y: y) }
@@ -92,6 +95,11 @@ extension PTPS2Engine: ExternalEngine {
     var performance: EnginePerformance? {
         var fps = 0.0, speed = 0.0
         return getFPS(&fps, speed: &speed) ? EnginePerformance(fps: fps, speed: speed) : nil
+    }
+
+    var gameIdentity: (serial: String, crc: UInt32)? {
+        var crc: UInt32 = 0
+        return gameSerial(&crc).map { ($0, crc) }
     }
 
     /// Codes de triche : fichier .pnach du jeu (gardé par le moteur pour ses prochains lancements).

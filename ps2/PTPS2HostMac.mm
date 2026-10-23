@@ -989,6 +989,22 @@ PTPS2_EXPORT void PTPS2SetVibrationHandler(void (*handler)(unsigned int pad, flo
     g_playtendo_pad_vibration = handler;
 }
 
+/// Jeu en cours : son numéro (« SLUS-21016 ») et l'empreinte (CRC) de son programme, comme dans le nom des fichiers
+/// .pnach de PCSX2 (« SLUS-21016_C1B141D6.pnach ») : PlayTendo cherche ainsi les codes de cette version exacte.
+PTPS2_EXPORT bool PTPS2GetGameIdentity(char* serial, int size, unsigned int* crc)
+{
+    if (!VMManager::HasValidVM() || !serial || size <= 0)
+        return false;
+    const std::string disc = VMManager::GetDiscSerial();
+    const u32 value = VMManager::GetCurrentCRC() ? VMManager::GetCurrentCRC() : VMManager::GetDiscCRC();
+    if (disc.empty() || value == 0)
+        return false;
+    snprintf(serial, static_cast<size_t>(size), "%s", disc.c_str());
+    if (crc)
+        *crc = value;
+    return true;
+}
+
 PTPS2_EXPORT float PTPS2GetAspectRatio(void)
 {
     if (!VMManager::HasValidVM())

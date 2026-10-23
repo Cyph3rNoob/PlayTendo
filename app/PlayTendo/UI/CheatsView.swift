@@ -125,7 +125,9 @@ struct CheatsView: View {
             .foregroundStyle(Neon.dim)
             .fixedSize(horizontal: false, vertical: true)
         if CheatLibrary.isAvailable(for: system) {
-            Text(Cheats.hasKinds(system)
+            Text(system == .ps2
+                 ? tr("Codes disponibles : collection pcsx2_cheats_collection (celle d'ARMSX2), sinon base CheatDevicePS2 (GPL-3.0).")
+                 : Cheats.hasKinds(system)
                  ? tr("Codes disponibles : ceux fournis avec Dolphin et la base Gecko codes.rc24.xyz.")
                  : tr("Codes disponibles : base libretro-database (licence CC BY-SA 4.0)."))
                 .font(Neon.mono(10, weight: .medium))
@@ -143,7 +145,8 @@ struct CheatsView: View {
         Task {
             let message: String
             do {
-                let result = try await CheatLibrary.download(for: session.game, officialName: officialName)
+                let result = try await CheatLibrary.download(for: session.game, officialName: officialName,
+                                                             ps2Identity: session.engineGameIdentity)
                 let known = Set(session.cheats.map { CheatLibrary.codeKey($0.code) })
                 var seen = Set<String>()
                 let new = result.cheats.filter { cheat in
@@ -163,6 +166,7 @@ struct CheatsView: View {
                     if let other = result.otherVersion {
                         lines.append(tr("Codes de « \(other) » : ils peuvent ne pas marcher avec ta version."))
                     }
+                    if let note = result.note { lines.append(note) }
                     if result.skipped > 0 {
                         lines.append(tr("\(result.skipped) codes écartés : format que la console ne lit pas."))
                     }
