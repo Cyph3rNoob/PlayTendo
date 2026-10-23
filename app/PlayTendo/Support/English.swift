@@ -367,6 +367,7 @@ enum English {
         "LISSAGE": "SMOOTHING",
         "LocalDevVPN connecté (en Wi-Fi de préférence)": "LocalDevVPN connected (preferably on Wi-Fi)",
         "Minimal sombre": "Minimal dark",
+        "Pixel Art": "Pixel Art",
         "Mise à jour : installe la nouvelle version par-dessus. Supprimer l'app efface jeux et sauvegardes.": "Updates: install the new version over the old one. Deleting the app erases games and saves.",
         "Mise à jour : remplace l'app par la nouvelle version. Tes jeux et sauvegardes restent dans le dossier PlayTendo.": "Updating: replace the app with the new version. Your games and saves stay in the PlayTendo folder.",
         "Mode développeur activé (Réglages › Confidentialité et sécurité)": "Developer Mode turned on (Settings › Privacy & Security)",

@@ -2,13 +2,15 @@ import CoreText
 import SwiftUI
 
 /// Thème de l'interface (Réglages › Thème), appliqué tout de suite : Néon (cyberpunk, d'origine), Rétro 8-bit (gris
-/// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel) ou Minimal sombre (bleu nuit avec
-/// des vagues de lumière immobiles, texte blanc, un accent bleu, coins arrondis). L'image des jeux, leurs boutons tactiles et l'animation
-/// de démarrage ne changent pas.
+/// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel), Minimal sombre (bleu nuit avec
+/// des vagues de lumière immobiles, texte blanc, un accent bleu, coins arrondis) ou Pixel Art (coucher de soleil en
+/// pixels immobile, accent jaune, coins en escalier, police pixel). L'image des jeux, leurs boutons tactiles et
+/// l'animation de démarrage ne changent pas.
 enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     case neon
     case retro
     case minimal
+    case pixel
 
     var id: String { rawValue }
 
@@ -23,12 +25,17 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .neon: tr("Néon")
         case .retro: tr("Rétro 8-bit")
         case .minimal: tr("Minimal sombre")
+        case .pixel: tr("Pixel Art")
         }
     }
 
     var colorScheme: ColorScheme { self == .retro ? .light : .dark }
 
-    /// Couleur d'une console dans ce thème : néon telle quelle, plus sombre et franche en Rétro, adoucie en Minimal.
+    /// Thèmes aux ombres nettes décalées et à la police pixel (Rétro, Pixel Art).
+    var isPixelated: Bool { self == .retro || self == .pixel }
+
+    /// Couleur d'une console dans ce thème : néon telle quelle, plus sombre et franche en Rétro, adoucie en Minimal,
+    /// vive et un peu plus franche en Pixel Art.
     func consoleColor(_ neon: Color) -> Color {
         guard self != .neon else { return neon }
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
@@ -38,20 +45,24 @@ enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         (NSColor(neon).usingColorSpace(.sRGB) ?? .white)
             .getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
 #endif
-        return self == .retro
-            ? Color(hue: hue, saturation: min(1, saturation * 1.1 + 0.15), brightness: brightness * 0.62)
-            : Color(hue: hue, saturation: saturation * 0.5, brightness: min(0.82, brightness))
+        switch self {
+        case .retro: return Color(hue: hue, saturation: min(1, saturation * 1.1 + 0.15), brightness: brightness * 0.62)
+        case .pixel: return Color(hue: hue, saturation: min(1, saturation * 1.1 + 0.1), brightness: max(0.9, brightness))
+        default: return Color(hue: hue, saturation: saturation * 0.5, brightness: min(0.82, brightness))
+        }
     }
 }
 
 /// Couleurs et polices du thème choisi (les noms viennent du thème Néon d'origine : `cyan` est la couleur principale,
-/// `magenta` la seconde).
+/// `magenta` la seconde). Pixel Art : couleurs de la palette PICO-8 (jaune #FFEC27, orange #FFA300, rose #FF77A8,
+/// blanc #FFF1E8) sur le violet du ciel.
 enum Neon {
-    private static func pick(_ neon: Color, _ retro: Color, _ minimal: Color) -> Color {
+    private static func pick(_ neon: Color, _ retro: Color, _ minimal: Color, _ pixel: Color) -> Color {
         switch AppTheme.current {
         case .neon: neon
         case .retro: retro
         case .minimal: minimal
+        case .pixel: pixel
         }
     }
 
@@ -59,21 +70,23 @@ enum Neon {
         Color(red: red, green: green, blue: blue)
     }
 
-    static var background: Color { pick(rgb(0.016, 0.016, 0.047), rgb(0.78, 0.78, 0.75), rgb(0.039, 0.051, 0.082)) }
-    static var cyan: Color { pick(rgb(0.0, 0.94, 1.0), rgb(0.10, 0.18, 0.52), rgb(0.04, 0.52, 1.0)) }
-    static var magenta: Color { pick(rgb(1.0, 0.17, 0.84), rgb(0.80, 0.08, 0.12), rgb(0.40, 0.70, 1.0)) }
-    static var violet: Color { pick(rgb(0.54, 0.30, 1.0), rgb(0.40, 0.20, 0.55), rgb(0.55, 0.62, 1.0)) }
-    static var text: Color { pick(rgb(0.90, 0.95, 1.0), rgb(0.08, 0.08, 0.10), rgb(0.96, 0.96, 0.97)) }
-    static var dim: Color { pick(rgb(0.50, 0.56, 0.68), rgb(0.30, 0.30, 0.32), rgb(0.56, 0.56, 0.60)) }
-    static var panel: Color { pick(rgb(0.05, 0.06, 0.13), rgb(0.90, 0.90, 0.87), rgb(0.10, 0.115, 0.16)) }
+    static var background: Color {
+        pick(rgb(0.016, 0.016, 0.047), rgb(0.78, 0.78, 0.75), rgb(0.039, 0.051, 0.082), rgb(0.165, 0.078, 0.275))
+    }
+    static var cyan: Color { pick(rgb(0.0, 0.94, 1.0), rgb(0.10, 0.18, 0.52), rgb(0.04, 0.52, 1.0), rgb(1.0, 0.925, 0.153)) }
+    static var magenta: Color { pick(rgb(1.0, 0.17, 0.84), rgb(0.80, 0.08, 0.12), rgb(0.40, 0.70, 1.0), rgb(1.0, 0.64, 0.0)) }
+    static var violet: Color { pick(rgb(0.54, 0.30, 1.0), rgb(0.40, 0.20, 0.55), rgb(0.55, 0.62, 1.0), rgb(1.0, 0.47, 0.66)) }
+    static var text: Color { pick(rgb(0.90, 0.95, 1.0), rgb(0.08, 0.08, 0.10), rgb(0.96, 0.96, 0.97), rgb(1.0, 0.945, 0.91)) }
+    static var dim: Color { pick(rgb(0.50, 0.56, 0.68), rgb(0.30, 0.30, 0.32), rgb(0.56, 0.56, 0.60), rgb(0.66, 0.60, 0.76)) }
+    static var panel: Color { pick(rgb(0.05, 0.06, 0.13), rgb(0.90, 0.90, 0.87), rgb(0.10, 0.115, 0.16), rgb(0.11, 0.07, 0.20)) }
     /// Texte posé sur la couleur principale (bouton « Reprendre », pastille choisie).
-    static var onAccent: Color { pick(.black, .white, .white) }
+    static var onAccent: Color { pick(.black, .white, .white, rgb(0.11, 0.17, 0.33)) }
     /// Texte posé sur la couleur d'une console (étiquettes « N64 »…).
-    static var onConsole: Color { pick(.black, .white, .black) }
+    static var onConsole: Color { pick(.black, .white, .black, .black) }
     /// Fond sous les jaquettes.
-    static var coverBase: Color { pick(.black, rgb(0.16, 0.16, 0.18), .black) }
+    static var coverBase: Color { pick(.black, rgb(0.16, 0.16, 0.18), .black, rgb(0.08, 0.05, 0.13)) }
     /// Couleur des listes et boutons du système (Réglages, À propos).
-    static var tint: Color { pick(rgb(1.0, 0.36, 0.40), rgb(0.80, 0.08, 0.12), rgb(0.04, 0.52, 1.0)) }
+    static var tint: Color { pick(rgb(1.0, 0.36, 0.40), rgb(0.80, 0.08, 0.12), rgb(0.04, 0.52, 1.0), rgb(1.0, 0.925, 0.153)) }
 
     static func mono(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
         .system(size: size, weight: weight, design: AppTheme.current == .minimal ? .rounded : .monospaced)
@@ -123,12 +136,12 @@ extension Font {
     }
 
     /// Police des titres et boutons du thème : Orbitron (Néon), Press Start 2P (Rétro, police pixel libre OFL, plus
-    /// petite car très large) ou police du système arrondie (Minimal).
+    /// petite car très large, Rétro et Pixel Art) ou police du système arrondie (Minimal).
     static func display(_ size: CGFloat, weight: CGFloat = 700) -> Font {
         switch AppTheme.current {
         case .neon:
             orbitron(size, weight: weight)
-        case .retro:
+        case .retro, .pixel:
             .custom("PressStart2P-Regular", fixedSize: (size * 0.72).rounded())
         case .minimal:
             .system(size: size * 0.95, weight: weight >= 850 ? .heavy : weight >= 750 ? .bold : weight >= 600 ? .semibold : .medium,
@@ -145,12 +158,12 @@ private func orbitronFont(_ size: CGFloat, weight: CGFloat) -> CTFont {
 }
 
 extension View {
-    /// Halo lumineux autour d'un élément (Néon) ; ombre portée nette (Rétro) ; rien sur le noir du Minimal.
+    /// Halo lumineux autour d'un élément (Néon) ; ombre portée nette (Rétro, Pixel Art) ; rien sur le fond du Minimal.
     func neonGlow(_ color: Color, radius: CGFloat = 8) -> some View {
         let theme = AppTheme.current
         return shadow(color: theme == .neon ? color.opacity(0.75) : Self.plainShadow(theme, visible: color != .clear),
-                      radius: theme == .neon ? radius / 3 : theme == .retro ? 0 : radius * 0.6,
-                      x: theme == .retro ? 2 : 0, y: theme == .neon ? 0 : 2)
+                      radius: theme == .neon ? radius / 3 : theme.isPixelated ? 0 : radius * 0.6,
+                      x: theme.isPixelated ? 2 : 0, y: theme == .neon ? 0 : 2)
             .shadow(color: theme == .neon ? color.opacity(0.35) : .clear, radius: radius)
     }
 
@@ -158,17 +171,18 @@ extension View {
     func themedShadow(_ color: Color, radius: CGFloat) -> some View {
         let theme = AppTheme.current
         return shadow(color: theme == .neon ? color : Self.plainShadow(theme, visible: color != .clear),
-                      radius: theme == .neon ? radius : theme == .retro ? 0 : radius * 0.6,
-                      x: theme == .retro ? 2 : 0, y: theme == .neon ? 0 : 2)
+                      radius: theme == .neon ? radius : theme.isPixelated ? 0 : radius * 0.6,
+                      x: theme.isPixelated ? 2 : 0, y: theme == .neon ? 0 : 2)
     }
 
     private static func plainShadow(_ theme: AppTheme, visible: Bool) -> Color {
-        visible && theme == .retro ? .black.opacity(0.28) : .clear
+        guard visible else { return .clear }
+        return theme == .retro ? .black.opacity(0.28) : theme == .pixel ? .black.opacity(0.55) : .clear
     }
 }
 
-/// Forme des cadres et boutons : coins coupés en biais, haut gauche et bas droit (Néon), carrés (Rétro) ou arrondis
-/// (Minimal, rayon `cut`).
+/// Forme des cadres et boutons : coins coupés en biais, haut gauche et bas droit (Néon), carrés (Rétro), arrondis
+/// (Minimal, rayon `cut`) ou en escalier de deux marches (Pixel Art).
 struct Chamfer: InsettableShape {
     var cut: CGFloat = 14
     var inset: CGFloat = 0
@@ -179,6 +193,7 @@ struct Chamfer: InsettableShape {
         switch AppTheme.current {
         case .retro: return Path(r)
         case .minimal: return Path(roundedRect: r, cornerRadius: c, style: .continuous)
+        case .pixel: return c < 3 ? Path(r) : Self.staircase(r, step: (c / 3).rounded(.down))
         case .neon: break
         }
         var path = Path()
@@ -192,6 +207,21 @@ struct Chamfer: InsettableShape {
         return path
     }
 
+    /// Rectangle aux quatre coins taillés en deux marches de `step` points.
+    private static func staircase(_ r: CGRect, step s: CGFloat) -> Path {
+        let corner: [(CGFloat, CGFloat)] = [(2, 0), (2, 1), (1, 1), (1, 2), (0, 2)]
+        var points: [CGPoint] = []
+        // Coin haut droit, bas droit, bas gauche, haut gauche : mêmes marches, tournées d'un quart de tour.
+        for (x, y) in corner { points.append(CGPoint(x: r.maxX - x * s, y: r.minY + y * s)) }
+        for (x, y) in corner.reversed() { points.append(CGPoint(x: r.maxX - x * s, y: r.maxY - y * s)) }
+        for (x, y) in corner { points.append(CGPoint(x: r.minX + x * s, y: r.maxY - y * s)) }
+        for (x, y) in corner.reversed() { points.append(CGPoint(x: r.minX + x * s, y: r.minY + y * s)) }
+        var path = Path()
+        path.addLines(points)
+        path.closeSubpath()
+        return path
+    }
+
     func inset(by amount: CGFloat) -> Chamfer {
         var shape = self
         shape.inset += amount
@@ -200,7 +230,8 @@ struct Chamfer: InsettableShape {
 }
 
 /// Fond de l'app selon le thème. Néon : nuit violette, halos cyan et magenta, grille en perspective et lignes de
-/// balayage. Rétro : gris clair à motif de pixels. Minimal : bleu nuit, vagues de lumière en bas.
+/// balayage. Rétro : gris clair à motif de pixels. Minimal : bleu nuit, vagues de lumière en bas. Pixel Art : coucher
+/// de soleil en pixels.
 struct CyberBackground: View {
     @AppStorage(AppTheme.key) private var theme = AppTheme.neon
 
@@ -223,6 +254,8 @@ struct CyberBackground: View {
                 LinearGradient(colors: [Neon.background, Color(red: 0.063, green: 0.086, blue: 0.16)],
                                startPoint: .top, endPoint: .bottom)
                 LightWaves()
+            case .pixel:
+                PixelSunset()
             }
         }
         .ignoresSafeArea()
@@ -278,6 +311,89 @@ private struct LightWaves: View {
                 fill.closeSubpath()
                 context.fill(fill, with: .color(layer.color))
                 context.stroke(crest, with: .color(Color(red: 0.55, green: 0.70, blue: 1.0).opacity(0.25)), lineWidth: 1)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Coucher de soleil en pixel art (thème Pixel Art) : ciel en bandes violettes à orangées, soleil rayé posé sur des
+/// collines, mer et reflet. Dessiné sur une grille d'environ 70 gros pixels dans la plus petite dimension de l'écran,
+/// avec une trame d'un pixel sur deux entre les bandes. Immobile (redessiné seulement si la taille change).
+private struct PixelSunset: View {
+    private static func hex(_ value: Int) -> Color {
+        Color(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
+    }
+
+    private static let sky = [0x2A1446, 0x4A1C5C, 0x7A2A63, 0xB5436B, 0xE0685F, 0xF39A5B].map(hex)
+    private static let sea = [0x2B1A4A, 0x24163F, 0x1C1234, 0x150E29].map(hex)
+    private static let sun = hex(0xFFD56B)
+    private static let hills = hex(0x3A1A4F)
+    private static let cloud = hex(0xC45A78)
+    private static let glints = [hex(0xFFCF7A), hex(0xF39A5B)]
+
+    var body: some View {
+        Canvas { context, size in
+            let unit = max(3, (min(size.width, size.height) / 70).rounded(.down))
+            let columns = Int((size.width / unit).rounded(.up)), rows = Int((size.height / unit).rounded(.up))
+            func cell(_ x: Int, _ y: Int, _ width: Int = 1, _ height: Int = 1, _ color: Color) {
+                context.fill(Path(CGRect(x: CGFloat(x) * unit, y: CGFloat(y) * unit,
+                                         width: CGFloat(width) * unit, height: CGFloat(height) * unit)), with: .color(color))
+            }
+            /// Bandes horizontales de `top` à `bottom`, avec la trame entre deux bandes.
+            func bands(_ colors: [Color], _ top: Int, _ bottom: Int) {
+                let height = Double(bottom - top) / Double(colors.count)
+                for (index, color) in colors.enumerated() {
+                    let start = top + Int((Double(index) * height).rounded())
+                    cell(0, start, columns, Int(height.rounded(.up)) + 1, color)
+                }
+                for index in 1..<colors.count {
+                    let y = top + Int((Double(index) * height).rounded())
+                    for x in stride(from: 0, to: columns, by: 2) {
+                        cell(x, y, 1, 1, colors[index - 1])
+                        cell(x + 1, y - 1, 1, 1, colors[index])
+                    }
+                }
+            }
+
+            let horizon = rows * 61 / 100
+            bands(Self.sky, 0, horizon)
+
+            // Nuages fins, un peu plus clairs que le ciel (position en part de la largeur et du ciel).
+            for (x, y, length) in [(0.08, 0.30, 0.22), (0.55, 0.20, 0.30), (0.30, 0.50, 0.18), (0.70, 0.60, 0.20)] {
+                let cx = Int(Double(columns) * x), cy = Int(Double(horizon) * y), l = max(4, Int(Double(columns) * length))
+                cell(cx, cy, l, 1, Self.cloud)
+                cell(cx + 2, cy - 1, max(1, l - 5), 1, Self.cloud)
+            }
+
+            // Soleil : disque coupé par l'horizon, rayé dans sa moitié basse.
+            let radius = max(6, min(columns, rows * 52 / 100) / 5)
+            let sunX = columns / 2, sunY = horizon - radius * 3 / 10
+            for dy in -radius...radius {
+                let y = sunY + dy
+                guard y < horizon, !(dy > -radius / 3 && y % 3 == 0) else { continue }
+                // « + radius » : bord plus rond, sans pixel isolé en haut.
+                let half = Int((Double(radius * radius + radius - dy * dy)).squareRoot())
+                cell(sunX - half, y, half * 2 + 1, 1, Self.sun)
+            }
+
+            // Collines sur l'horizon.
+            for x in 0..<columns {
+                var top = horizon
+                for (peak, height) in [(0.06, 4), (0.26, 2), (0.62, 3), (0.88, 6)] {
+                    let y = horizon - height + Int((abs(Double(x) - Double(columns) * peak) * 0.8).rounded())
+                    top = min(top, y)
+                }
+                cell(x, top, 1, horizon - top + 2, Self.hills)
+            }
+
+            // Mer et reflet du soleil.
+            bands(Self.sea, horizon + 2, rows)
+            for line in 0..<12 {
+                let y = horizon + 4 + line * 4
+                guard y < rows else { break }
+                let length = max(2, radius * 2 - line * radius / 6)
+                cell(sunX - length / 2 + (line % 2 == 0 ? -1 : 2), y, length, 1, Self.glints[line % 2])
             }
         }
         .allowsHitTesting(false)
