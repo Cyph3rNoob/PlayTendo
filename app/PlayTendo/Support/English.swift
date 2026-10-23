@@ -143,8 +143,6 @@ enum English {
         "Infos et jaquettes : ScreenScraper.fr": "Info and covers: ScreenScraper.fr",
         "JOUER": "PLAY",
         "Retour en arrière": "Rewind",
-        "Menu pause › Retour arrière : la partie recule (une trentaine de secondes au plus) jusqu'à ce que tu touches l'écran. Avec une manette, la gâchette L2 maintenue fait pareil (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1.": "Pause menu › Rewind: the game goes back (up to about thirty seconds) until you touch the screen. With a controller, holding the L2 trigger does the same (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 and PS1.",
-        "Menu pause › Retour arrière, ou Espace maintenu (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) : la partie recule d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1.": "Pause menu › Rewind, or hold Space (or a controller's L2 trigger, on NES, Super Nintendo, Game Boy and GBA): the game goes back up to about thirty seconds. NES, Super Nintendo, Game Boy, GBA, N64 and PS1.",
         "Retour arrière": "Rewind",
         "Codes de triche": "Cheat codes",
         "CODES DE TRICHE": "CHEAT CODES",

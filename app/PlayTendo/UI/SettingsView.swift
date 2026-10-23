@@ -4,8 +4,6 @@ import UniformTypeIdentifiers
 /// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la PS Vita, de la GameCube/Wii et de la 3DS, le BIOS PS2,
 /// le firmware de la PS Vita et le son du démarrage. Sur Mac, en trois pages (Général, Clavier, Jeux et BIOS) avec les touches de chaque console.
 struct SettingsView: View {
-    /// Retour en arrière (RewindSettings).
-    @AppStorage(RewindSettings.key) private var rewindEnabled = true
     @AppStorage(PerformanceSettings.key) private var showPerformance = false
     @AppStorage(RumbleSettings.key) private var rumbleEnabled = true
     @AppStorage(N64Settings.rumblePakKey) private var n64RumblePak = false
@@ -76,7 +74,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 languageSection
-                rewindSection
+                playSection
                 jitSections
                 biosSection
 #if PLAYTENDO_VITA
@@ -231,7 +229,7 @@ struct SettingsView: View {
         case .general:
             Form {
                 languageSection
-                rewindSection
+                playSection
                 bootSection
                 if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
                     Section {
@@ -409,13 +407,10 @@ struct SettingsView: View {
     }
 #endif
 
-    /// Retour en arrière : activé par défaut ; le couper rend la mémoire qu'il prend (jusqu'à 128 Mo pendant une partie).
-    /// Avec lui, l'affichage des performances (coupé par défaut).
-    private var rewindSection: some View {
+    /// Pendant la partie : affichage des performances, vibrations de la manette (et Rumble Pak de la N64). Le retour en
+    /// arrière est dans le menu pause seulement (toujours là, sur les consoles qui savent reculer).
+    private var playSection: some View {
         Section {
-            Toggle(isOn: $rewindEnabled) {
-                Label(tr("Retour en arrière"), systemImage: "backward.fill")
-            }
             Toggle(isOn: $showPerformance) {
                 Label(tr("Afficher les performances"), systemImage: "gauge.with.dots.needle.33percent")
             }
@@ -428,11 +423,9 @@ struct SettingsView: View {
             .disabled(!rumbleEnabled)
         } footer: {
 #if os(iOS)
-            Text(tr("Menu pause › Retour arrière : la partie recule (une trentaine de secondes au plus) jusqu'à ce que tu touches l'écran. Avec une manette, la gâchette L2 maintenue fait pareil (NES, Super Nintendo, Game Boy, GBA). NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
             Text(tr("Performances : images par seconde et vitesse du jeu, processeur et mémoire utilisés, batterie et chaleur de l'appareil (iOS ne donne ni la carte graphique ni la température en degrés)."))
             Text(tr("Vibrations : N64 (avec le Rumble Pak, qui prend la place du Controller Pak où certains jeux sauvegardent ; pris au prochain lancement), PS1, PS2, GameCube, Wii, et cartouches Game Boy et GBA à vibreur. Avec une manette qui sait vibrer (PlayStation, Xbox récentes)."))
 #else
-            Text(tr("Menu pause › Retour arrière, ou Espace maintenu (ou la gâchette L2 d'une manette, sur NES, Super Nintendo, Game Boy et GBA) : la partie recule d'une trentaine de secondes au plus. NES, Super Nintendo, Game Boy, GBA, N64 et PS1."))
             Text(tr("Performances : images par seconde et vitesse du jeu, processeur, carte graphique et mémoire utilisés, et chaleur du Mac."))
             Text(tr("Vibrations : N64 (avec le Rumble Pak, qui prend la place du Controller Pak où certains jeux sauvegardent ; pris au prochain lancement), PS1, PS2, GameCube, Wii, et cartouches Game Boy et GBA à vibreur. Avec une manette qui sait vibrer (PlayStation, Xbox récentes)."))
 #endif

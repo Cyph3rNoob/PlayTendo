@@ -361,8 +361,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         [.nes, .snes, .gb, .gbc, .gba, .n64, .psx].contains(system)
     }
 
-    /// Retour en arrière possible pour ce jeu (console qui sait, réglage activé).
-    var rewindAvailable: Bool { Self.supportsRewind(game.system) && RewindSettings.enabled }
+    /// Retour en arrière possible pour ce jeu (console qui sait reculer).
+    var rewindAvailable: Bool { Self.supportsRewind(game.system) }
 
     /// Maintenu : la partie recule. Relâché : elle reprend de là.
     func setRewinding(_ on: Bool) {
@@ -1415,10 +1415,4 @@ struct RewindBuffer {
     }
 
     mutating func popLast() -> Data? { states.popLast() }
-}
-
-/// Réglages › Retour en arrière (activé par défaut).
-enum RewindSettings {
-    static let key = "retourArriere"
-    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }
