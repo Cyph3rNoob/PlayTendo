@@ -28,6 +28,9 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     PTPS2Functions _fn;
     /// Facultative (moteur Mac seulement).
     __typeof__(&PTPS2Shutdown) _shutdown;
+    /// RetroAchievements (facultatives : moteur d'avant le 2026-10-24).
+    __typeof__(&PTPS2SetAchievementHooks) _achievementHooks;
+    __typeof__(&PTPS2ReadAchievementMemory) _achievementRead;
     /// Facultatives (moteurs compilés avant elles) : reprise au démarrage, démarrage rapide.
     __typeof__(&PTPS2SetBootOptions) _setBootOptions;
     __typeof__(&PTPS2GetBootStateResult) _bootStateResult;
@@ -69,6 +72,8 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     engine->_getPerformance = (__typeof__(&PTPS2GetPerformance))dlsym(handle, "PTPS2GetPerformance");
     engine->_setPadButton = (__typeof__(&PTPS2SetPadButton))dlsym(handle, "PTPS2SetPadButton");
     engine->_gameIdentity = (__typeof__(&PTPS2GetGameIdentity))dlsym(handle, "PTPS2GetGameIdentity");
+    engine->_achievementHooks = (__typeof__(&PTPS2SetAchievementHooks))dlsym(handle, "PTPS2SetAchievementHooks");
+    engine->_achievementRead = (__typeof__(&PTPS2ReadAchievementMemory))dlsym(handle, "PTPS2ReadAchievementMemory");
     engine->_setPadStick = (__typeof__(&PTPS2SetPadStick))dlsym(handle, "PTPS2SetPadStick");
     __typeof__(&PTPS2SetVibrationHandler) setVibration = dlsym(handle, "PTPS2SetVibrationHandler");
     if (setVibration) setVibration(PTPS2Vibration);
@@ -225,6 +230,18 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     NSString *result = [NSString stringWithUTF8String:string];
     free(string);
     return result;
+}
+
+#pragma mark RetroAchievements
+
+- (BOOL)setAchievementFrame:(void (*)(void))frame game:(void (*)(const char *_Nullable))game {
+    if (!_achievementHooks || !_achievementRead) return NO;
+    _achievementHooks(frame, game);
+    return YES;
+}
+
+- (uint32_t (*)(uint32_t, uint8_t *, uint32_t))achievementReader {
+    return _achievementRead;
 }
 
 @end

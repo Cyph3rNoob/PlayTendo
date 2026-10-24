@@ -33,11 +33,14 @@
 
 static void PTEventHandler(const rc_client_event_t *event, rc_client_t *client);
 
-/// Mémoire de la console lue par rc_client (thread d'émulation seulement : lectures en arrière-plan interdites).
+/// Mémoire de la console lue par rc_client (fil de l'émulation seulement : lectures en arrière-plan interdites).
+/// Moteurs libretro : zones rc_libretro ; moteurs autonomes : fonction de lecture du moteur.
 static rc_libretro_memory_regions_t gRegions;
 static BOOL gRegionsReady;
+static PTAchievementReadFunction gExternalRead;
 
 static uint32_t PTReadMemory(uint32_t address, uint8_t *buffer, uint32_t count, rc_client_t *client) {
+    if (gExternalRead) return gExternalRead(address, buffer, count);
     return gRegionsReady ? rc_libretro_memory_read(&gRegions, address, buffer, count) : 0;
 }
 
@@ -97,6 +100,9 @@ static void PTHashLog(const char *message, const struct rc_hash_iterator *iterat
     rc_hash_callbacks_t _hashCallbacks;
     __weak PTCore *_core;
     uint32_t _console;
+    /// Moteur autonome : réponse à chaque jeu, dernière empreinte demandée.
+    PTAchievementGameHandler _externalCompletion;
+    NSString *_externalHash;
 }
 
 + (PTAchievements *)shared {
@@ -179,6 +185,7 @@ static void PTLoginDone(int result, const char *message, rc_client_t *client, vo
             @"NES": @(RC_CONSOLE_NINTENDO), @"SNES": @(RC_CONSOLE_SUPER_NINTENDO), @"N64": @(RC_CONSOLE_NINTENDO_64),
             @"GB": @(RC_CONSOLE_GAMEBOY), @"GBC": @(RC_CONSOLE_GAMEBOY_COLOR), @"GBA": @(RC_CONSOLE_GAMEBOY_ADVANCE),
             @"DS": @(RC_CONSOLE_NINTENDO_DS), @"PS1": @(RC_CONSOLE_PLAYSTATION), @"PSP": @(RC_CONSOLE_PSP),
+            @"PS2": @(RC_CONSOLE_PLAYSTATION_2), @"GC": @(RC_CONSOLE_GAMECUBE), @"Wii": @(RC_CONSOLE_WII),
         };
     });
     return consoles[system].unsignedIntValue;
@@ -254,7 +261,53 @@ static void PTGameLoaded(int result, const char *message, rc_client_t *client, v
     rc_client_unload_game(_client);
     rc_libretro_memory_destroy(&gRegions);
     gRegionsReady = NO;
+    gExternalRead = NULL;
     _core = nil;
+    @synchronized (self) {
+        _externalCompletion = nil;
+        _externalHash = nil;
+    }
+}
+
+#pragma mark Moteurs autonomes
+
+- (void)prepareExternalConsole:(uint32_t)console read:(PTAchievementReadFunction)read
+                    completion:(PTAchievementGameHandler)completion {
+    rc_client_unload_game(_client);
+    rc_libretro_memory_destroy(&gRegions);
+    gRegionsReady = NO;
+    _core = nil;
+    _console = console;
+    gExternalRead = read;
+    @synchronized (self) {
+        _externalCompletion = [completion copy];
+        _externalHash = nil;
+    }
+}
+
+- (void)loadExternalGameHash:(NSString *)hash {
+    PTAchievementGameHandler completion;
+    @synchronized (self) {
+        if (!_externalCompletion || [hash ?: @"" isEqualToString:_externalHash ?: @""]) return;
+        _externalHash = [hash copy];
+        completion = _externalCompletion;
+    }
+    rc_client_unload_game(_client);
+    if (hash.length == 0) {
+        PTLogLine(@"RetroAchievements : plus de jeu");
+        return;
+    }
+    PTLogLine([NSString stringWithFormat:@"RetroAchievements : jeu d'empreinte %@", hash]);
+    rc_client_begin_load_game(_client, hash.UTF8String, PTGameLoaded, (__bridge_retained void *)[completion copy]);
+}
+
+void PTAchievementsFrame(void) {
+    PTAchievements *achievements = PTAchievements.shared;
+    if (gExternalRead) rc_client_do_frame(achievements->_client);
+}
+
+void PTAchievementsGameHash(const char *hash) {
+    [PTAchievements.shared loadExternalGameHash:hash ? @(hash) : nil];
 }
 
 - (NSData *)progress {

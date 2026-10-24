@@ -307,6 +307,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             perform { [self] in
                 if external.saveState(toPath: Paths.stateFile(for: game).path) {
                     PTLogLine("\(game.system.shortName) : sauvegarde rapide écrite")
+                    writeAchievementProgress()
                     saveEngineThumbnail(external)
                     DispatchQueue.main.async { self.hasSaveState = true }
                     showToast(tr("Partie sauvegardée"))
@@ -325,12 +326,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             do {
                 let packed = Self.packState(data)
                 try packed.write(to: Paths.stateFile(for: game), options: .atomic)
-                let progress = achievementsOn ? PTAchievements.shared.progress() : nil
-                if let progress {
-                    try? progress.write(to: achievementProgressFile, options: .atomic)
-                } else {
-                    try? FileManager.default.removeItem(at: achievementProgressFile)
-                }
+                writeAchievementProgress()
                 PTLogLine(packed.count == data.count ? "Sauvegarde rapide : \(data.count / 1024) Ko (gardée brute)"
                           : "Sauvegarde rapide : \(data.count / 1024) Ko, \(packed.count / 1024) Ko une fois compressée")
                 saveThumbnail()
@@ -348,6 +344,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             perform { [self] in
                 if external.loadState(fromPath: Paths.stateFile(for: game).path) {
                     PTLogLine("\(game.system.shortName) : sauvegarde rapide chargée")
+                    if achievementsOn { PTAchievements.shared.restoreProgress(try? Data(contentsOf: achievementProgressFile)) }
                     showToast(tr("Sauvegarde chargée"))
                 } else {
                     PTLogLine("\(game.system.shortName) : chargement impossible (\(external.lastError() ?? "raison inconnue"))")
@@ -372,6 +369,15 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     /// Où en sont les succès RetroAchievements au moment de la sauvegarde rapide (à côté d'elle).
     private var achievementProgressFile: URL { Paths.stateFile(for: game).appendingPathExtension("succes") }
+
+    /// Après une sauvegarde rapide : la progression des succès gardée avec elle (effacée sans succès suivis).
+    private func writeAchievementProgress() {
+        if achievementsOn, let progress = PTAchievements.shared.progress() {
+            try? progress.write(to: achievementProgressFile, options: .atomic)
+        } else {
+            try? FileManager.default.removeItem(at: achievementProgressFile)
+        }
+    }
 
     /// Reprise automatique : la partie au moment de quitter, compressée comme une sauvegarde rapide.
     private func writeResume(_ state: Data?) {
@@ -913,6 +919,45 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Moteur autonome (PS2, GameCube, Wii) : il appelle les succès à chaque image et lit sa mémoire pour eux ; le jeu
+    /// est donné par son empreinte (PS2 : par PCSX2 une fois le disque lu ; GameCube/Wii : calculée ici par Dolphin).
+    private func startExternalAchievements(_ engine: ExternalEngine, console: UInt32) {
+        let reader: PTAchievementReadFunction?
+        if let ps2 = engine as? PTPS2Engine {
+            reader = ps2.achievementReader
+        } else if let dolphin = engine as? PTDolphinEngine {
+            reader = dolphin.achievementReader
+        } else {
+            reader = nil
+        }
+        guard let reader else { return }
+        achievementsOn = true
+        PTAchievements.shared.prepareExternalConsole(console, read: reader) { [weak self] title, unlocked, total, hardcore, _ in
+            self?.achievementsLoaded(found: title != nil, unlocked: Int(unlocked), total: Int(total), hardcore: hardcore)
+        }
+        if let ps2 = engine as? PTPS2Engine {
+            _ = ps2.setAchievementFrame(PTAchievementsFrame, game: PTAchievementsGameHash)
+        } else if let dolphin = engine as? PTDolphinEngine {
+            _ = dolphin.setAchievementFrame(PTAchievementsFrame)
+            let disc = game.discs.first ?? game.url
+            if let hash = dolphin.achievementHash(forPath: disc.path) {
+                PTAchievements.shared.loadExternalGameHash(hash)
+            } else {
+                PTLogLine("RetroAchievements : empreinte du disque impossible (\(disc.lastPathComponent))")
+            }
+        }
+    }
+
+    private func stopExternalAchievements(_ engine: ExternalEngine) {
+        if let ps2 = engine as? PTPS2Engine {
+            _ = ps2.setAchievementFrame(nil, game: nil)
+        } else if let dolphin = engine as? PTDolphinEngine {
+            _ = dolphin.setAchievementFrame(nil)
+        }
+        PTAchievements.shared.endGame()
+        achievementsOn = false
+    }
+
     /// Menu pause : compteur des succès à jour.
     func refreshAchievementCounts() {
         guard let counts = achievementCounts else { return }
@@ -1308,15 +1353,26 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.02)
         }
         let jitFailures = PTJITFailureCount()
+        // RetroAchievements (PS2, GameCube, Wii), branché avant le démarrage : la PS2 donne son jeu dès qu'elle l'a lu.
+        let achievementConsole = PTAchievements.console(forSystem: name)
+        if achievementConsole != 0, PTAchievements.shared.loggedIn {
+            startExternalAchievements(engine, console: achievementConsole)
+        }
         // Reprise automatique (pas de PS Vita : pas de sauvegarde rapide) : de préférence, la console démarre directement
         // dessus, sans logo ni son de démarrage ; sinon (moteur d'avant), elle est chargée quelques secondes après.
+        // Pas en Hardcore (reprendre une partie sauvegardée y est interdit).
         let resumeFile = Paths.resumeFile(for: game)
-        let hasResume = !game.system.isVita && FileManager.default.fileExists(atPath: resumeFile.path)
+        let hardcoreWanted = achievementsOn && PTAchievements.shared.hardcore
+        if hardcoreWanted && FileManager.default.fileExists(atPath: resumeFile.path) {
+            PTLogLine("\(name) : reprise automatique ignorée (Hardcore, RetroAchievements)")
+        }
+        let hasResume = !game.system.isVita && !hardcoreWanted && FileManager.default.fileExists(atPath: resumeFile.path)
         let resumedAtBoot = engine.prepareBoot(resume: hasResume ? resumeFile.path : nil)
         // Jeu en plusieurs disques (GameCube) : le moteur les reçoit tous, et passe au suivant quand le jeu le demande.
         let booted = game.discs.count > 1 ? engine.boot(discs: game.discs.map(\.path), jit: PTJITIsActive())
                                           : engine.boot(path: bootPath, jit: PTJITIsActive())
         guard booted else {
+            if achievementsOn { stopExternalAchievements(engine) }
             fail(engine.lastError().map(trMessage) ?? tr("Le jeu n'a pas pu démarrer."))
             return
         }
@@ -1453,6 +1509,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 }
             }
         }
+        if achievementsOn { stopExternalAchievements(engine) }
         engine.stop()
         let stopDeadline = clock.now + 15
         while engine.engineState != .stopped && clock.now < stopDeadline {

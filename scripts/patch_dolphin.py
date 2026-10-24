@@ -37,6 +37,8 @@ Les deux :
 12. GCPad.cpp + WiimoteEmu.cpp : la vibration des manettes GameCube et de la Wiimote passe aussi par
    `Pad::g_playtendo_rumble` (posé par PTDolphinSetRumbleHandler) : PlayTendo fait vibrer sa manette (les manettes
    de Dolphin n'ont pas de moteur relié dans PlayTendo). 2026-10-23.
+13. Core.cpp : à chaque image, après AchievementManager::DoFrame, `g_playtendo_achievement_frame` (posé par
+   PTDolphinSetAchievementFrame) : RetroAchievements suivi par PlayTendo, le module de Dolphin reste éteint. 2026-10-24.
 """
 import os
 import sys
@@ -332,4 +334,22 @@ extern void (*g_playtendo_rumble)(int pad, double strength);
   if (Pad::g_playtendo_rumble)
     Pad::g_playtendo_rumble(m_index, on ? 1.0 : 0.0);
 """),
+])
+
+patch("Source/Core/Core/Core.cpp", [
+    ("""  AchievementManager::GetInstance().DoFrame();
+}""", """  AchievementManager::GetInstance().DoFrame();
+  // PlayTendo : une image pour ses succès RetroAchievements (PTDolphinSetAchievementFrame).
+  if (g_playtendo_achievement_frame)
+    g_playtendo_achievement_frame();
+}"""),
+    # Déclaré hors de tout espace de noms (dans la fonction, il serait Core::…).
+    ("""#include "VideoCommon/VideoEvents.h"
+
+namespace Core""", """#include "VideoCommon/VideoEvents.h"
+
+// PlayTendo : appelé à chaque image pour ses succès RetroAchievements (défini dans PTDolphinHost.mm).
+extern void (*g_playtendo_achievement_frame)();
+
+namespace Core"""),
 ])

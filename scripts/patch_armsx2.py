@@ -28,6 +28,10 @@ Appelé par build_ps2.sh. Une retouche déjà faite est sautée : relancer le sc
 9. InputManager.cpp : les vibrations des manettes PS2 (DualShock 2) passent aussi par `g_playtendo_pad_vibration`
    (posé par PTPS2SetVibrationHandler) : PlayTendo fait vibrer sa manette. Sans cela elles se perdaient (iPhone :
    la file de vibrations d'ARMSX2 ne connaît que ses manettes SDL ; Mac : aucun moteur de vibration lié). 2026-10-23.
+10. RetroAchievements suivi par PlayTendo (son propre client, le module de PCSX2 reste éteint) : VMManager.cpp appelle
+   `g_playtendo_achievement_frame` à chaque image, juste après Achievements::FrameUpdate ; Achievements.cpp donne
+   l'empreinte du jeu en cours (même calcul que PCSX2 : nom et contenu de l'ELF) à `g_playtendo_achievement_game`
+   à chaque changement de jeu, même module éteint. Posés par PTPS2SetAchievementHooks. 2026-10-24.
 """
 import os
 import sys
@@ -306,5 +310,62 @@ void InputManager::SetPadVibrationIntensity(u32 pad_index, float large_or_single
 {
 	if (g_playtendo_pad_vibration && pad_index < Pad::NUM_CONTROLLER_PORTS)
 		g_playtendo_pad_vibration(pad_index, large_or_single_motor_intensity, small_motor_intensity);
+"""),
+], base=ROOT)
+
+patch("pcsx2/VMManager.cpp", [
+    ("""	Achievements::FrameUpdate();
+
+	PollDiscordPresence();""", """	Achievements::FrameUpdate();
+	// PlayTendo : une image pour ses succès RetroAchievements (PTPS2SetAchievementHooks, Achievements.cpp).
+	if (g_playtendo_achievement_frame)
+		g_playtendo_achievement_frame();
+
+	PollDiscordPresence();"""),
+    # Déclaré hors de tout espace de noms (dans la fonction, il serait VMManager::Internal::…).
+    ("""#if defined(__APPLE__) && TARGET_OS_IPHONE
+extern "C" void ARMSX2_PostEmulationOnlyStartupReady(void);
+#endif
+
+namespace VMManager
+{""", """#if defined(__APPLE__) && TARGET_OS_IPHONE
+extern "C" void ARMSX2_PostEmulationOnlyStartupReady(void);
+#endif
+
+// PlayTendo : appelé à chaque image pour ses succès RetroAchievements (défini dans Achievements.cpp).
+extern void (*g_playtendo_achievement_frame)();
+
+namespace VMManager
+{"""),
+], base=ROOT)
+
+patch("pcsx2/Achievements.cpp", [
+    ("""void Achievements::GameChanged(u32 disc_crc, u32 crc)
+{
+	std::unique_lock lock(s_achievements_mutex);
+""", """// PlayTendo : RetroAchievements est suivi par l'app (PTPS2SetAchievementHooks). Elle reçoit à chaque image l'appel
+// de VMManager, et ici l'empreinte du jeu en cours (chaîne vide sans jeu), calculée comme PCSX2 le fait.
+void (*g_playtendo_achievement_frame)() = nullptr;
+void (*g_playtendo_achievement_game)(const char* hash) = nullptr;
+static u32 s_playtendo_game_crc = 0;
+
+static void PlayTendoGameChanged(u32 disc_crc, u32 crc)
+{
+	if (!g_playtendo_achievement_game)
+		return;
+	const bool booted_elf = VMManager::Internal::HasBootedELF();
+	const u32 crc_to_use = booted_elf ? crc : disc_crc;
+	if (crc_to_use == s_playtendo_game_crc)
+		return;
+	s_playtendo_game_crc = crc_to_use;
+	const std::string hash = crc_to_use == 0 ? std::string() :
+		Achievements::GetGameHash(booted_elf ? VMManager::GetCurrentELF() : VMManager::GetDiscELF());
+	g_playtendo_achievement_game(hash.c_str());
+}
+
+void Achievements::GameChanged(u32 disc_crc, u32 crc)
+{
+	PlayTendoGameChanged(disc_crc, crc);
+	std::unique_lock lock(s_achievements_mutex);
 """),
 ], base=ROOT)

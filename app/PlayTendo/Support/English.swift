@@ -391,7 +391,7 @@ enum English {
         "Nom d'utilisateur": "Username",
         "Mot de passe": "Password",
         "Se connecter": "Log in",
-        "Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org : NES, Super Nintendo, N64, Game Boy, GBA, DS, PS1 et PSP. Il faut la bonne version du jeu (No-Intro, Redump). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe.": "Achievements to unlock as you play, with your free retroachievements.org account: NES, Super Nintendo, N64, Game Boy, GBA, DS, PS1 and PSP. You need the right version of the game (No-Intro, Redump). PlayTendo only keeps a login token, never your password.",
+        "Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org : NES, Super Nintendo, N64, Game Boy, GBA, DS, PS1, PSP, PS2 et GameCube. Il faut la bonne version du jeu (No-Intro, Redump). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe.": "Achievements to unlock as you play, with your free retroachievements.org account: NES, Super Nintendo, N64, Game Boy, GBA, DS, PS1, PSP, PS2 and GameCube. You need the right version of the game (No-Intro, Redump). PlayTendo only keeps a login token, never your password.",
         "Hardcore : les succès comptent davantage, mais le chargement des sauvegardes rapides, le retour arrière et les codes de triche sont coupés. Pris en compte au prochain jeu lancé.": "Hardcore: achievements count for more, but loading quick saves, rewind and cheat codes are turned off. Applies to the next game you launch.",
         "%@ pts": "%@ pts",
         "%@ succès sur %@": "%@ of %@ achievements",

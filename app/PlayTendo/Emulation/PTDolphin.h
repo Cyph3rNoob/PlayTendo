@@ -3,6 +3,7 @@
 // (PTDolphinEngine.m).
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,6 +57,10 @@ void PTDolphinShutdown(void);
 void PTDolphinReset(void);
 /// Avance rapide (vitesse ×3).
 void PTDolphinSetSpeed(float factor);
+/// RetroAchievements : appel à chaque image du jeu, empreinte d'un disque, lecture de la mémoire de la console.
+void PTDolphinSetAchievementFrame(void (*frame)(void));
+bool PTDolphinAchievementHash(const char *path, char *hash, int size);
+uint32_t PTDolphinReadAchievementMemory(uint32_t address, uint8_t *buffer, uint32_t count);
 
 /// Commandes envoyées à la Wiimote + Nunchuk (vrai) ou à la manette GameCube (faux, par défaut). Relâche tout.
 void PTDolphinSetWiimote(bool enabled);

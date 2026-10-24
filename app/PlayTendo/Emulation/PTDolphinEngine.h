@@ -72,6 +72,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)loadStateFromPath:(NSString *)path;
 - (nullable NSString *)lastError;
 
+/// RetroAchievements (PTAchievements) : `frame` appelé à chaque image du jeu (NULL : plus rien). NO si le moteur ne
+/// sait pas faire.
+- (BOOL)setAchievementFrame:(nullable void (*)(void))frame;
+/// Empreinte RetroAchievements du disque (calculée par Dolphin, .rvz compris), nil si impossible.
+- (nullable NSString *)achievementHashForPath:(NSString *)path;
+/// Lecture de la mémoire de la console comme la voit RetroAchievements (NULL si le moteur ne sait pas faire).
+@property (nonatomic, readonly, nullable) uint32_t (*achievementReader)(uint32_t, uint8_t *, uint32_t);
+
 @end
 
 NS_ASSUME_NONNULL_END

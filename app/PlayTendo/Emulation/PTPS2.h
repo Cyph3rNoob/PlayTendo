@@ -2,6 +2,7 @@
 // Le moteur exporte ces fonctions (ps2/PTPS2Host.mm) ; l'app les trouve par dlsym (PTPS2Engine.m).
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,6 +70,9 @@ void PTPS2SetCheats(const char *pnach);
 void PTPS2SetVibrationHandler(void (*handler)(unsigned int pad, float large, float small));
 /// Jeu en cours : numéro (« SLUS-21016 ») et CRC de son programme (noms des .pnach de PCSX2) ; faux hors partie.
 /// Facultative : absente des moteurs d'avant.
+/// RetroAchievements : appels à chaque image et au changement de jeu (empreinte), lecture de la mémoire.
+void PTPS2SetAchievementHooks(void (*frame)(void), void (*game)(const char *hash));
+uint32_t PTPS2ReadAchievementMemory(uint32_t address, uint8_t *buffer, uint32_t count);
 bool PTPS2GetGameIdentity(char *serial, int size, unsigned int *crc);
 /// Images par seconde du jeu et vitesse (%) ; faux hors partie. Facultative : absente des moteurs d'avant.
 bool PTPS2GetPerformance(float *fps, float *speed);

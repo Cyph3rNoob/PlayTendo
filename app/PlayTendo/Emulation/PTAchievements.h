@@ -72,6 +72,15 @@ typedef void (^PTAchievementEventHandler)(PTAchievementEvent event, PTAchievemen
 @property (nonatomic, readonly) BOOL hardcoreActive;
 /// Coupe le mode Hardcore pour ce jeu (codes de triche déjà actifs…).
 - (void)leaveHardcore;
+
+/// Lecture de la mémoire d'un moteur autonome (PS2, GameCube, Wii), comme la voit RetroAchievements.
+typedef uint32_t (*PTAchievementReadFunction)(uint32_t address, uint8_t *buffer, uint32_t count);
+/// Moteur autonome : sa mémoire est lue par `read`, ses images arrivent par PTAchievementsFrame (sur son propre fil),
+/// et chaque jeu par son empreinte (`loadExternalGameHash:`). `completion` : à chaque jeu chargé (ou refusé).
+- (void)prepareExternalConsole:(uint32_t)console read:(PTAchievementReadFunction)read
+                    completion:(PTAchievementGameHandler)completion;
+/// Jeu identifié par le moteur (empreinte RetroAchievements) ; nil ou vide : plus de jeu.
+- (void)loadExternalGameHash:(nullable NSString *)hash;
 - (void)doFrame;
 /// Partie en pause : garde la session active (messages réguliers au serveur).
 - (void)idle;
@@ -89,5 +98,10 @@ typedef void (^PTAchievementEventHandler)(PTAchievementEvent event, PTAchievemen
 - (NSUInteger)totalCount;
 
 @end
+
+/// Moteur autonome : une image du jeu (appelé par le moteur, sur son fil).
+void PTAchievementsFrame(void);
+/// PS2 : jeu identifié par PCSX2 (empreinte, chaîne vide sans jeu), sur le fil de la console.
+void PTAchievementsGameHash(const char *_Nullable hash);
 
 NS_ASSUME_NONNULL_END

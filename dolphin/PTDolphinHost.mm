@@ -47,12 +47,14 @@
 #include "Core/Config/WiimoteSettings.h"
 #include "Core/Config/UISettings.h"
 #include "Core/ConfigManager.h"
+#include "Core/AchievementManager.h"
 #include "Core/Core.h"
 #include "Core/DolphinAnalytics.h"
 #include "Core/GeckoCode.h"
 #include "Core/GeckoCodeConfig.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/GCPad.h"
+#include "Core/HW/Memmap.h"
 #include "Core/HW/SI/SI.h"
 #include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/ProcessorInterface.h"
@@ -514,6 +516,61 @@ PTDOLPHIN_EXPORT void PTDolphinReset(void)
     if (Core::IsRunning(system))
       system.GetProcessorInterface().ResetButton_Tap();
   });
+}
+
+// MARK: - RetroAchievements
+
+// Appelé par Core.cpp à chaque image (retouche 13 de patch_dolphin.py) : RetroAchievements suivi par PlayTendo.
+void (*g_playtendo_achievement_frame)() = nullptr;
+
+PTDOLPHIN_EXPORT void PTDolphinSetAchievementFrame(void (*frame)(void))
+{
+  g_playtendo_achievement_frame = frame;
+}
+
+// Empreinte RetroAchievements d'un disque (.iso, .rvz, .gcz…), calculée par Dolphin. false si impossible.
+PTDOLPHIN_EXPORT bool PTDolphinAchievementHash(const char* path, char* hash, int size)
+{
+  if (!path || !hash || size < 33)
+    return false;
+  const std::string result = AchievementManager::CalculateHash(path);
+  if (result.size() != 32)
+    return false;
+  snprintf(hash, static_cast<size_t>(size), "%s", result.c_str());
+  return true;
+}
+
+// Mémoire vue par RetroAchievements, comme Dolphin : MEM1 (24 Mo), puis MEM2 de la Wii juste au-dessus. Lue depuis le
+// fil du processeur de la console (appel de chaque image).
+PTDOLPHIN_EXPORT uint32_t PTDolphinReadAchievementMemory(uint32_t address, uint8_t* buffer, uint32_t count)
+{
+  if (!buffer || !Core::IsRunning(Core::System::GetInstance()))
+    return 0;
+  auto& system = Core::System::GetInstance();
+  auto& memory = system.GetMemory();
+  const u8* ram = memory.GetRAM();
+  const u8* exram = memory.GetEXRAM();
+  const u64 ram_size = memory.GetRamSizeReal();
+  const u64 exram_size = system.IsWii() && exram ? memory.GetExRamSizeReal() : 0;
+  constexpr u64 mem1 = 0x01800000;  // place de MEM1 dans la carte de RetroAchievements (comme AchievementManager)
+  for (uint32_t i = 0; i < count; i++)
+  {
+    const u64 at = static_cast<u64>(address) + i;
+    if (at < mem1)
+    {
+      if (!ram || at >= ram_size)
+        return i;
+      buffer[i] = ram[at];
+    }
+    else
+    {
+      const u64 offset = at - mem1;
+      if (offset >= exram_size)
+        return i;
+      buffer[i] = exram[offset];
+    }
+  }
+  return count;
 }
 
 // Vitesse du jeu : 1 normale ; 2 à 5 en avance rapide.

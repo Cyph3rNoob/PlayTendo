@@ -43,6 +43,7 @@
 #include "pcsx2/ImGui/ImGuiManager.h"
 #include "pcsx2/Input/InputManager.h"
 #include "pcsx2/MTGS.h"
+#include "pcsx2/Memory.h"
 #include "pcsx2/SIO/Memcard/MemoryCardFile.h"
 #include "pcsx2/SIO/Pad/Pad.h"
 #include "pcsx2/SIO/Pad/PadDualshock2.h"
@@ -999,6 +1000,34 @@ extern void (*g_playtendo_pad_vibration)(unsigned int pad, float large, float sm
 PTPS2_EXPORT void PTPS2SetVibrationHandler(void (*handler)(unsigned int pad, float large, float small))
 {
     g_playtendo_pad_vibration = handler;
+}
+
+// MARK: - RetroAchievements
+
+// Posés dans Achievements.cpp (retouche 10 de patch_armsx2.py).
+extern void (*g_playtendo_achievement_frame)();
+extern void (*g_playtendo_achievement_game)(const char* hash);
+
+/// RetroAchievements, suivi par PlayTendo : `frame` à chaque image du jeu (fil du processeur de la console), `game`
+/// quand le jeu change (empreinte RetroAchievements, chaîne vide sans jeu). NULL, NULL : plus rien.
+PTPS2_EXPORT void PTPS2SetAchievementHooks(void (*frame)(void), void (*game)(const char* hash))
+{
+    g_playtendo_achievement_frame = frame;
+    g_playtendo_achievement_game = game;
+}
+
+/// Mémoire vue par RetroAchievements, comme PCSX2 : la mémoire principale puis, juste au-dessus, le « scratchpad ».
+PTPS2_EXPORT uint32_t PTPS2ReadAchievementMemory(uint32_t address, uint8_t* buffer, uint32_t count)
+{
+    const uint64_t main = Ps2MemSize::ExposedRam;
+    if (!eeMem || !buffer || static_cast<uint64_t>(address) + count > main + Ps2MemSize::Scratch)
+        return 0;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        const uint64_t at = static_cast<uint64_t>(address) + i;
+        buffer[i] = at < main ? eeMem->Main[at] : eeMem->Scratch[at - main];
+    }
+    return count;
 }
 
 /// Jeu en cours : son numéro (« SLUS-21016 ») et l'empreinte (CRC) de son programme, comme dans le nom des fichiers

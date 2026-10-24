@@ -64,6 +64,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable PTPlatformImage *)snapshot;
 - (nullable NSString *)lastError;
 
+/// RetroAchievements (PTAchievements) : le moteur appelle `frame` à chaque image du jeu et `game` quand le jeu change
+/// (empreinte, chaîne vide sans jeu). NULL, NULL : plus rien. NO si le moteur ne sait pas faire.
+- (BOOL)setAchievementFrame:(nullable void (*)(void))frame game:(nullable void (*)(const char *_Nullable))game;
+/// Lecture de la mémoire de la console comme la voit RetroAchievements (NULL si le moteur ne sait pas faire).
+@property (nonatomic, readonly, nullable) uint32_t (*achievementReader)(uint32_t, uint8_t *, uint32_t);
+
 @end
 
 NS_ASSUME_NONNULL_END

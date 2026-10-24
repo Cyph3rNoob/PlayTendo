@@ -39,6 +39,9 @@ static void PTDolphinRumble(int pad, double strength) {
     __typeof__(&PTDolphinSetPadButton) _setPadButton;
     __typeof__(&PTDolphinSetPadStick) _setPadStick;
     __typeof__(&PTDolphinSetSecondPlayer) _setSecondPlayer;
+    __typeof__(&PTDolphinSetAchievementFrame) _achievementFrame;
+    __typeof__(&PTDolphinAchievementHash) _achievementHash;
+    __typeof__(&PTDolphinReadAchievementMemory) _achievementRead;
 }
 
 + (PTDolphinEngine *)loadedEngine {
@@ -76,6 +79,9 @@ static void PTDolphinRumble(int pad, double strength) {
     engine->_setPadButton = (__typeof__(&PTDolphinSetPadButton))dlsym(handle, "PTDolphinSetPadButton");
     engine->_setPadStick = (__typeof__(&PTDolphinSetPadStick))dlsym(handle, "PTDolphinSetPadStick");
     engine->_setSecondPlayer = (__typeof__(&PTDolphinSetSecondPlayer))dlsym(handle, "PTDolphinSetSecondPlayer");
+    engine->_achievementFrame = (__typeof__(&PTDolphinSetAchievementFrame))dlsym(handle, "PTDolphinSetAchievementFrame");
+    engine->_achievementHash = (__typeof__(&PTDolphinAchievementHash))dlsym(handle, "PTDolphinAchievementHash");
+    engine->_achievementRead = (__typeof__(&PTDolphinReadAchievementMemory))dlsym(handle, "PTDolphinReadAchievementMemory");
     __typeof__(&PTDolphinSetRumbleHandler) setRumble = dlsym(handle, "PTDolphinSetRumbleHandler");
     if (setRumble) setRumble(PTDolphinRumble);
 
@@ -225,6 +231,24 @@ static void PTDolphinRumble(int pad, double strength) {
     NSString *result = [NSString stringWithUTF8String:string];
     free(string);
     return result;
+}
+
+#pragma mark RetroAchievements
+
+- (BOOL)setAchievementFrame:(void (*)(void))frame {
+    if (!_achievementFrame || !_achievementRead) return NO;
+    _achievementFrame(frame);
+    return YES;
+}
+
+- (NSString *)achievementHashForPath:(NSString *)path {
+    char hash[33] = "";
+    if (!_achievementHash || !_achievementHash(path.fileSystemRepresentation, hash, sizeof hash)) return nil;
+    return @(hash);
+}
+
+- (uint32_t (*)(uint32_t, uint8_t *, uint32_t))achievementReader {
+    return _achievementRead;
 }
 
 @end
