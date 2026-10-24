@@ -169,6 +169,12 @@ enum Paths {
         return url
     }
 
+    /// Carte SD de la 3DS (dossier « sdmc » du moteur Azahar, qui range tout dans Sauvegardes/3DS/Azahar) : les homebrews
+    /// y cherchent leurs données (« sdmc:/3ds/<homebrew>/… »).
+    static var n3dsSDCard: URL {
+        saveDirectory(for: .n3ds).appendingPathComponent("Azahar/sdmc", isDirectory: true)
+    }
+
     static func saveRAMFile(for game: Game) -> URL {
         saveDirectory(for: game.system).appendingPathComponent(fileName(for: game) + ".srm")
     }
@@ -317,6 +323,8 @@ enum Paths {
       PlayStation Portable .iso .cso .pbp
       GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
       Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)
+      Homebrews 3DS : importe leur archive avec « + » ; son dossier 3ds/ (données)
+        va sur la carte SD de la 3DS : Sauvegardes/3DS/Azahar/sdmc
 
     """ + readmeVitaGames + """
       Les archives .zip, .7z et .rar sont acceptées avec le bouton « + » de l'app.
@@ -353,6 +361,8 @@ enum Paths {
       PlayStation Portable .iso .cso .pbp
       GameCube and Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz
       Nintendo 3DS .3ds .cci .cxi .3dsx (decrypted games)
+      3DS homebrew: import its archive with “+”; its 3ds/ folder (data)
+        goes to the 3DS SD card: Sauvegardes/3DS/Azahar/sdmc
 
     """ + readmeVitaGamesEnglish + """
       .zip, .7z and .rar archives are accepted with the app's “+” button.
@@ -394,8 +404,10 @@ enum Paths {
             ([.psp], "PlayStation Portable .iso .cso .pbp", "PlayStation Portable .iso .cso .pbp"),
             ([.gameCube, .wii], "GameCube et Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz",
              "GameCube and Wii .iso .rvz .gcm .wbfs .wia .ciso .gcz"),
-            ([.n3ds], "Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)",
-             "Nintendo 3DS .3ds .cci .cxi .3dsx (decrypted games)"),
+            ([.n3ds], "Nintendo 3DS .3ds .cci .cxi .3dsx (jeux décryptés)\n    Homebrews 3DS : importe leur archive ; son dossier 3ds/ (données) va sur la\n"
+             + "    carte SD de la 3DS : Sauvegardes/3DS/Azahar/sdmc",
+             "Nintendo 3DS .3ds .cci .cxi .3dsx (decrypted games)\n    3DS homebrew: import its archive; its 3ds/ folder (data) goes to the\n"
+             + "    3DS SD card: Sauvegardes/3DS/Azahar/sdmc"),
         ]
         var bios: [([GameSystem], String, String)] = [
             ([.psx], "PlayStation : scph5501.bin (ou scph1001.bin…)", "PlayStation: scph5501.bin (or scph1001.bin…)"),

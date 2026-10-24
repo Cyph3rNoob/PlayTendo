@@ -414,6 +414,8 @@ final class GameLibrary: ObservableObject {
         var files = 0
         /// Premiers fichiers vus dans l'archive (pour comprendre une archive sans jeu reconnu).
         var entries: [String] = []
+        /// Fichiers posés sur la carte SD de la 3DS (chemins sur la carte).
+        var sdCard: [String] = []
     }
 
     /// « Import : Jeu.zip (ZIP 2.0 (deflation), Sur mon iPhone) → 1 fichier, 8,4 Go en 84 s (99 Mo/s ; calcul 31 s) »
@@ -434,6 +436,10 @@ final class GameLibrary: ObservableObject {
         if stats.written > 0 {
             let speed = seconds > 0 ? Double(stats.written) / seconds / 1e6 : 0
             line += String(format: ", %@ écrits en %.1f s (%.0f Mo/s ; calcul %.1f s)", format(stats.written), seconds, speed, cpu)
+        }
+        if !stats.sdCard.isEmpty {
+            line += " ; carte SD 3DS : " + stats.sdCard.prefix(4).joined(separator: ", ")
+                + (stats.sdCard.count > 4 ? "… (\(stats.sdCard.count) fichiers)" : "")
         }
         if !stats.entries.isEmpty, result.map({ if case .added = $0 { return false } else { return true } }) ?? true {
             line += " ; contenu : " + stats.entries.joined(separator: ", ")
@@ -604,14 +610,38 @@ final class GameLibrary: ObservableObject {
         var files: [URL] = []
         /// Fichiers décompressés dans `staging` (chemins dans l'archive), à mettre à leur place à la fin.
         var staged: [String] = []
+        /// Données de homebrews 3DS décompressées dans `sdStaging` (chemins sur la carte SD), posées à la fin.
+        let sdStaging = staging.appendingPathComponent(".carte-sd", isDirectory: true)
+        var sdStaged: [String] = []
         while try archive.nextEntry() {
             stats.format = archive.formatName
             let name = (archive.entryPath as NSString).lastPathComponent
             if stats.entries.count < 8 { stats.entries.append(name) }
             if (name as NSString).pathExtension.lowercased() == "cia" { hasCIA = true }
             // Fichiers cachés du Mac (« __MACOSX/…/._Jeu.bin ») : pas des jeux.
-            guard let relative = safeRelativePath(archive.entryPath),
-                  let destination = destination(forFileNamed: name) else { continue }
+            guard let relative = safeRelativePath(archive.entryPath) else { continue }
+            guard let destination = destination(forFileNamed: name) else {
+                // Homebrew 3DS rangé comme sur la carte SD (« 3ds/emerald3ds/emerald3ds.pak ») : ses données vont sur
+                // la carte SD de la 3DS, au même chemin ; le .3dsx, lui, reste un jeu de la bibliothèque. Toujours
+                // réécrites : une nouvelle version du homebrew remplace les anciennes.
+                guard let onCard = sdCardPath(relative) else { continue }
+                let size = max(archive.entrySize, 0)
+                try checkFreeSpace(for: size)
+                let target = sdStaging.appendingPathComponent(onCard)
+                try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                guard update(.extracting, name, 0, size) else { throw PTArchiveError(.cancelled) }
+                var written: Int64 = 0
+                archive.maximumEntrySize = archive.entrySize >= 0 ? archive.entrySize : Self.freeSpaceForArchives()
+                try archive.extractEntry(to: target) { done in
+                    written = done
+                    return update(.extracting, name, done, size)
+                }
+                stats.written += written
+                stats.files += 1
+                added += 1
+                sdStaged.append(onCard)
+                continue
+            }
             let toBIOS = destination.deletingLastPathComponent() == Paths.bios
             // Déjà là (même nom, même taille) : à la racine de Jeux, ou rangé par un import précédent de cette archive.
             let candidates = toBIOS ? [destination]
@@ -649,9 +679,32 @@ final class GameLibrary: ObservableObject {
             if !toBIOS && !moveIfPS2BIOS(target) { staged.append(relative) }
         }
         if !staged.isEmpty { files += try placeStaged(staged, from: staging, folderName: folderName) }
+        if !sdStaged.isEmpty {
+            try placeOnSDCard(sdStaged, from: sdStaging)
+            stats.sdCard = sdStaged
+        }
         if added > 0 { return .added(added, files) }
         if present > 0 { return .alreadyThere(files) }
         return hasCIA ? .cia3DS : .noGame
+    }
+
+    /// Chemin sur la carte SD 3DS d'un fichier d'archive rangé dans un dossier « 3ds » (à la racine de l'archive ou
+    /// dans un dossier) : « 3ds/<homebrew>/… ». Nil sinon.
+    nonisolated private static func sdCardPath(_ relative: String) -> String? {
+        let parts = relative.split(separator: "/").map(String.init)
+        guard let index = parts.firstIndex(where: { $0.lowercased() == "3ds" }), index < parts.count - 2 else { return nil }
+        return (["3ds"] + parts[(index + 1)...]).joined(separator: "/")
+    }
+
+    /// Pose les données de homebrews 3DS sur la carte SD (en remplaçant les anciennes).
+    nonisolated private static func placeOnSDCard(_ paths: [String], from staging: URL) throws {
+        let manager = FileManager.default
+        for path in paths {
+            let target = Paths.n3dsSDCard.appendingPathComponent(path)
+            try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
+            try manager.moveItem(at: staging.appendingPathComponent(path), to: target)
+        }
     }
 
     /// Début du nom du dossier caché où une archive est décompressée (Jeux/.import-…).
