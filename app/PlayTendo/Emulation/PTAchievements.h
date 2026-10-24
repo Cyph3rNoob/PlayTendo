@@ -36,9 +36,10 @@ typedef NS_ENUM(NSInteger, PTAchievementEvent) {
 /// identifiants ou jeton refusés par le serveur (pas une simple coupure du réseau).
 typedef void (^PTAchievementLoginHandler)(NSString *_Nullable displayName, NSInteger score, NSString *_Nullable token,
                                           NSString *_Nullable error, BOOL rejected);
-/// Jeu reconnu (ou non) par RetroAchievements.
+/// Jeu reconnu (ou non) par RetroAchievements. `unknown` : cette version du jeu (son empreinte) n'est pas dans leur
+/// liste, ou son fichier n'a pas pu être lu pour la calculer.
 typedef void (^PTAchievementGameHandler)(NSString *_Nullable title, NSUInteger unlocked, NSUInteger total,
-                                         BOOL hardcore, NSString *_Nullable error);
+                                         BOOL hardcore, NSString *_Nullable error, BOOL unknown);
 typedef void (^PTAchievementEventHandler)(PTAchievementEvent event, PTAchievement *_Nullable achievement,
                                           NSString *_Nullable message);
 

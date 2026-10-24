@@ -888,15 +888,21 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             pendingReloadState = nil
             resuming = false
         }
-        PTAchievements.shared.beginGame(atPath: path, console: console, core: core) { [weak self] title, unlocked, total, hardcore, _ in
-            self?.achievementsLoaded(found: title != nil, unlocked: Int(unlocked), total: Int(total), hardcore: hardcore)
+        PTAchievements.shared.beginGame(atPath: path, console: console, core: core) { [weak self] title, unlocked, total, hardcore, _, unknown in
+            self?.achievementsLoaded(found: title != nil, unlocked: Int(unlocked), total: Int(total), hardcore: hardcore,
+                                     unknown: unknown)
         }
     }
 
     /// Réponse de RetroAchievements (thread principal). Des codes de triche actifs coupent le Hardcore pour ce jeu.
-    private func achievementsLoaded(found: Bool, unlocked: Int, total: Int, hardcore: Bool) {
+    /// Version du jeu inconnue chez eux, ou jeu sans succès : dit tout de suite, sinon on attendrait en vain.
+    private func achievementsLoaded(found: Bool, unlocked: Int, total: Int, hardcore: Bool, unknown: Bool) {
         var hardcore = hardcore
-        if hardcore && cheats.contains(where: \.enabled) {
+        if unknown {
+            showToast(tr("RetroAchievements ne connaît pas cette version du jeu"))
+        } else if found && total == 0 {
+            showToast(tr("RetroAchievements : pas encore de succès pour ce jeu"))
+        } else if hardcore && cheats.contains(where: \.enabled) {
             PTAchievements.shared.leaveHardcore()
             hardcore = false
             showToast(tr("Hardcore coupé pour ce jeu : des codes de triche sont actifs"))
@@ -932,8 +938,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
         guard let reader else { return }
         achievementsOn = true
-        PTAchievements.shared.prepareExternalConsole(console, read: reader) { [weak self] title, unlocked, total, hardcore, _ in
-            self?.achievementsLoaded(found: title != nil, unlocked: Int(unlocked), total: Int(total), hardcore: hardcore)
+        PTAchievements.shared.prepareExternalConsole(console, read: reader) { [weak self] title, unlocked, total, hardcore, _, unknown in
+            self?.achievementsLoaded(found: title != nil, unlocked: Int(unlocked), total: Int(total), hardcore: hardcore,
+                                     unknown: unknown)
         }
         if let ps2 = engine as? PTPS2Engine {
             _ = ps2.setAchievementFrame(PTAchievementsFrame, game: PTAchievementsGameHash)

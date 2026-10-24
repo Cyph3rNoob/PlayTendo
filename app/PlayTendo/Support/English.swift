@@ -414,6 +414,8 @@ enum English {
         "RetroAchievements de retour": "RetroAchievements is back",
         "Les succès en attente sont envoyés.": "Pending achievements are being sent.",
         "Erreur de RetroAchievements": "RetroAchievements error",
+        "RetroAchievements ne connaît pas cette version du jeu": "RetroAchievements doesn't know this version of the game",
+        "RetroAchievements : pas encore de succès pour ce jeu": "RetroAchievements: no achievements for this game yet",
         "Une romhack déjà patchée (.z64, .sfc, .gba…) se joue comme n'importe quel jeu.": "An already patched romhack (.z64, .sfc, .gba…) plays like any other game.",
         "Un patch (.ips, .bps, .ups) : pose-le dans Jeux avec le jeu d'origine. Il apparaît comme un jeu à part, avec ses sauvegardes.": "A patch (.ips, .bps, .ups): put it in Jeux with the original game. It shows up as its own game, with its own saves.",
         "Le jeu d'origine n'est jamais modifié : le patch s'applique à une copie au lancement, et un même jeu peut servir à plusieurs romhacks.": "The original game is never modified: the patch is applied to a copy at launch, and one game can serve several romhacks.",

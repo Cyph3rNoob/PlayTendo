@@ -213,7 +213,8 @@ static void PTGameLoaded(int result, const char *message, rc_client_t *client, v
                    summary.num_unlocked_achievements, summary.num_core_achievements, hardcore ? @", Hardcore" : @""]);
     }
     NSUInteger unlocked = summary.num_unlocked_achievements, total = summary.num_core_achievements;
-    dispatch_async(dispatch_get_main_queue(), ^{ completion(title, unlocked, total, hardcore, error); });
+    BOOL unknown = result == RC_NO_GAME_LOADED;
+    dispatch_async(dispatch_get_main_queue(), ^{ completion(title, unlocked, total, hardcore, error, unknown); });
 }
 
 - (void)beginGameAtPath:(NSString *)path console:(uint32_t)console core:(PTCore *)core
