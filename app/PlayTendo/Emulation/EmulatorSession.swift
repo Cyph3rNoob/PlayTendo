@@ -570,9 +570,31 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     /// Message bref affiché par-dessus le jeu.
     private func showToast(_ text: String) {
         DispatchQueue.main.async {
-            self.toast = text
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                if self.toast == text { self.toast = nil }
+            if self.toast == nil {
+                self.presentToast(text)
+            } else if self.toast != text, self.pendingToasts.last != text {
+                // Déjà un message à l'écran (« Partie reprise » et RetroAchievements arrivent ensemble) : il attend
+                // son tour au lieu de le remplacer. Au plus trois en attente.
+                self.pendingToasts.append(text)
+                if self.pendingToasts.count > 3 { self.pendingToasts.removeFirst() }
+            }
+        }
+    }
+
+    /// Messages en attente (thread principal), montrés l'un après l'autre.
+    private var pendingToasts: [String] = []
+
+    /// Thread principal : un message, le temps de le lire (plus long pour un long message), puis le suivant.
+    private func presentToast(_ text: String) {
+        toast = text
+        let duration = min(4, max(1.6, Double(text.count) * 0.05))
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            guard self.toast == text else { return }
+            self.toast = nil
+            guard !self.pendingToasts.isEmpty else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                guard self.toast == nil, !self.pendingToasts.isEmpty else { return }
+                self.presentToast(self.pendingToasts.removeFirst())
             }
         }
     }
