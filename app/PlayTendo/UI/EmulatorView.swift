@@ -326,7 +326,7 @@ struct EmulatorView: View {
             }
         } else {
             ForEach(Array(layout.screens.enumerated()), id: \.offset) { _, screen in
-                GameScreen(frameBuffer: session.frameBuffer, source: screen.source, paused: session.state == .paused,
+                GameScreen(frameBuffer: session.frameBuffer, source: screen.source,
                            smoothing: game.system == .psx && ps1Smoothing == PS1Settings.Smoothing.on.rawValue,
                            filter: FilterSettings.systems.contains(game.system)
                                ? FilterSettings.shaderMode(FilterSettings.Filter(rawValue: screenFilter) ?? .sharp,

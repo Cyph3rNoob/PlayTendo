@@ -30,12 +30,28 @@ final class FrameBuffer: @unchecked Sendable {
     private var width = 0
     private var height = 0
     private var sequence: UInt64 = 0
+    /// Prévenus à chaque nouvelle image (sur le fil d'émulation) : les écrans qui la dessinent.
+    private var listeners: [@Sendable () -> Void] = []
 
     deinit {
         storage?.deallocate()
     }
 
+    func addListener(_ listener: @escaping @Sendable () -> Void) {
+        lock.lock()
+        listeners.append(listener)
+        lock.unlock()
+    }
+
+    private func notifyListeners() {
+        lock.lock()
+        let listeners = self.listeners
+        lock.unlock()
+        for listener in listeners { listener() }
+    }
+
     func store(_ pixels: UnsafeRawPointer, width: Int, height: Int, pitch: Int, format: PTPixelFormat) {
+        defer { notifyListeners() }
         lock.lock()
         defer { lock.unlock() }
 
@@ -79,6 +95,7 @@ final class FrameBuffer: @unchecked Sendable {
     }
 
     func storeHardware(_ buffer: CVPixelBuffer, width: Int, height: Int, flipped: Bool) {
+        defer { notifyListeners() }
         lock.lock()
         defer { lock.unlock() }
         hardwareBuffer = buffer

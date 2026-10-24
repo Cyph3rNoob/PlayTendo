@@ -1,16 +1,15 @@
 import CoreVideo
 import MetalKit
+import os
 import SwiftUI
 
 /// Affiche l'image du jeu avec Metal. La vue occupe exactement la zone de l'écran affiché.
 /// `source` choisit la partie de l'image à dessiner (de 0 à 1) : la DS en utilise deux,
 /// une par écran, pour pouvoir les placer et les dimensionner librement.
+/// L'écran n'est dessiné que quand une image arrive ou qu'un réglage change (en pause : jamais, il garde la dernière).
 struct GameScreen {
     let frameBuffer: FrameBuffer
     var source = CGRect(x: 0, y: 0, width: 1, height: 1)
-    /// Jeu en pause : l'écran n'est plus redessiné 60 fois par seconde (il garde la dernière image), seulement quand
-    /// un réglage change.
-    var paused = false
     /// Lissage des bords (FXAA) avant l'agrandissement (PS1).
     var smoothing = false
     /// Consoles 2D : mode du filtre (FilterSettings.shaderMode) ; 0 = pixels nets.
@@ -32,18 +31,16 @@ struct GameScreen {
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.framebufferOnly = true
-        view.preferredFramesPerSecond = 60
+        // Pas de rafraîchissement régulier de la vue : GameRenderer dessine lui-même dans sa couche Metal.
+        view.isPaused = true
+        view.enableSetNeedsDisplay = false
         view.delegate = renderer
+        renderer.attach(view)
         return view
     }
 
     private func update(_ view: MTKView, _ renderer: GameRenderer) {
-        renderer.source = source
-        renderer.smoothing = smoothing
-        renderer.filter = filter
-        view.isPaused = paused
-        // En pause, une image redessinée à la demande si un réglage a changé (rien n'est fait sinon).
-        if paused { view.draw() }
+        renderer.configure(source: source, smoothing: smoothing, filter: filter)
     }
 }
 
@@ -64,7 +61,11 @@ final class PassThroughMTKView: MTKView {
 }
 #endif
 
-final class GameRenderer: NSObject, MTKViewDelegate {
+/// Dessine l'image du jeu dans la couche Metal de la vue, sur son propre fil, dès que le moteur la produit
+/// (2026-10-25). Avant, la vue attendait son prochain rafraîchissement (jusqu'à 1/60 s) pour dessiner, et l'image ne
+/// paraissait qu'au rafraîchissement d'après : une image de décalage en plus entre un bouton et l'écran.
+/// Tout le dessin et l'état qui va avec sont sur `renderQueue` ; les réglages arrivent du fil principal par `options`.
+final class GameRenderer: NSObject, MTKViewDelegate, @unchecked Sendable {
     let device: MTLDevice?
     private let frameBuffer: FrameBuffer
     private let queue: MTLCommandQueue?
@@ -72,9 +73,9 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     /// Lissage : FXAA vers une image intermédiaire à la taille du jeu, ensuite agrandie comme d'habitude.
     private var fxaaPipeline: MTLRenderPipelineState?
     private var smoothedTexture: MTLTexture?
-    var smoothing = false
+    private var smoothing = false
     private var drawnSmoothing = false
-    var filter = 0
+    private var filter = 0
     private var drawnFilter = 0
     private var sampler: MTLSamplerState?
     private var texture: MTLTexture?
@@ -85,7 +86,20 @@ final class GameRenderer: NSObject, MTKViewDelegate {
     /// Partie du tampon occupée par l'image (de 0 à 1) et sens vertical.
     private var region = CGRect(x: 0, y: 0, width: 1, height: 1)
     private var flipped = false
-    var source = CGRect(x: 0, y: 0, width: 1, height: 1)
+    private var source = CGRect(x: 0, y: 0, width: 1, height: 1)
+
+    private struct Options: Equatable {
+        var source = CGRect(x: 0, y: 0, width: 1, height: 1)
+        var smoothing = false
+        var filter = 0
+    }
+    /// Réglages voulus (fil principal), repris au début de chaque dessin.
+    private let options = OSAllocatedUnfairLock(initialState: Options())
+    private let renderQueue = DispatchQueue(label: "PlayTendo écran", qos: .userInteractive)
+    /// Un dessin déjà demandé et pas encore commencé : les demandes suivantes s'y fondent (avance rapide ×5, deux
+    /// écrans de DS…), il prendra la dernière image.
+    private let renderRequested = OSAllocatedUnfairLock(initialState: false)
+    private var layer: CAMetalLayer?
     /// Ce qui a été affiché la dernière fois : sans changement, inutile de redessiner.
     private var drawnSize = CGSize.zero
     private var drawnSource = CGRect.null
@@ -115,21 +129,71 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         samplerDescriptor.tAddressMode = .clampToEdge
         sampler = device.makeSamplerState(descriptor: samplerDescriptor)
         CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &textureCache)
+        frameBuffer.addListener { [weak self] in self?.requestRender() }
     }
 
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    /// Fil principal, à la création de la vue.
+    func attach(_ view: MTKView) {
+        let layer = view.layer as? CAMetalLayer
+        renderQueue.async { self.layer = layer }
+        requestRender()
+    }
+
+    /// Fil principal : réglages de l'écran ; redessiné s'ils changent (même en pause).
+    func configure(source: CGRect, smoothing: Bool, filter: Int) {
+        let wanted = Options(source: source, smoothing: smoothing, filter: filter)
+        let changed = options.withLock { current -> Bool in
+            guard current != wanted else { return false }
+            current = wanted
+            return true
+        }
+        if changed { requestRender() }
+    }
+
+    /// N'importe quel fil (image produite par le moteur, réglage, taille) : un dessin dès que possible.
+    func requestRender() {
+        let alreadyRequested = renderRequested.withLock { requested -> Bool in
+            defer { requested = true }
+            return requested
+        }
+        guard !alreadyRequested else { return }
+        renderQueue.async {
+            self.renderRequested.withLock { $0 = false }
+            self.render()
+        }
+    }
+
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        requestRender()
+    }
 
     func draw(in view: MTKView) {
+        requestRender()
+    }
+
+    /// Sur `renderQueue`.
+    private func render() {
+        let wanted = options.withLock { $0 }
+        source = wanted.source
+        smoothing = wanted.smoothing
+        filter = wanted.filter
         if uploadLatestFrame() { frameNotShown = true }
-        // Rien de nouveau (jeu en pause, même image, jeu à 30 images/s) : l'écran garde l'image déjà
-        // affichée, sans réveiller la puce graphique.
-        guard frameNotShown || view.drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing
+        guard let layer else { return }
+        let drawableSize = layer.drawableSize
+        guard drawableSize.width > 0, drawableSize.height > 0 else { return }
+        // Rien de nouveau (même image, jeu à 30 images/s) : l'écran garde l'image déjà affichée, sans réveiller la
+        // puce graphique.
+        guard frameNotShown || drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing
               || filter != drawnFilter
         else { return }
         guard let queue, let pipeline, let sampler,
-              let pass = view.currentRenderPassDescriptor,
-              let drawable = view.currentDrawable,
+              let drawable = layer.nextDrawable(),
               let commands = queue.makeCommandBuffer() else { return }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = drawable.texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+        pass.colorAttachments[0].storeAction = .store
 
         var texture = self.texture
         var shownRect = CGRect.zero
@@ -154,7 +218,6 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         if let texture {
             let size = SIMD2<Float>(Float(texture.width), Float(texture.height))
             let shown = SIMD2<Float>(size.x * Float(shownRect.width), size.y * Float(shownRect.height))
-            let drawableSize = view.drawableSize
             let scale = max(1, floor(min(Float(drawableSize.width) / shown.x, Float(drawableSize.height) / shown.y)))
             var uniforms = [SIMD4<Float>(size.x, size.y, scale, flipped ? 1 : 0),
                             SIMD4<Float>(Float(shownRect.minX), Float(shownRect.minY),
@@ -169,7 +232,7 @@ final class GameRenderer: NSObject, MTKViewDelegate {
         encoder.endEncoding()
         commands.present(drawable)
         commands.commit()
-        drawnSize = view.drawableSize
+        drawnSize = drawableSize
         drawnSource = source
         drawnSmoothing = smoothing
         drawnFilter = filter
