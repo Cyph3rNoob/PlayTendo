@@ -452,7 +452,7 @@ struct SettingsView: View {
             } header: {
                 Text(tr("Nintendo DS en ligne"))
             } footer: {
-                Text(tr("Échanges et combats Pokémon, Mario Kart DS… La Connexion Wi-Fi Nintendo a fermé en 2014 : des serveurs de passionnés la remplacent. Dans le jeu, va dans « Connexion Wi-Fi Nintendo » et connecte-toi comme sur une vraie DS. Si un jeu ne se connecte pas, essaie un autre serveur (Wiimmfi pour beaucoup de Pokémon). Pris en compte au prochain jeu lancé."))
+                Text(tr("Échanges et combats Pokémon, Mario Kart DS… La Connexion Wi-Fi Nintendo a fermé en 2014 : des serveurs de passionnés la remplacent. Dans le jeu, va dans « Connexion Wi-Fi Nintendo » et connecte-toi comme sur une vraie DS. Kaeru WFC marche avec les Pokémon ; si un jeu ne se connecte pas (erreur 20100…), essaie un autre serveur. Pris en compte au prochain jeu lancé."))
             }
         }
     }

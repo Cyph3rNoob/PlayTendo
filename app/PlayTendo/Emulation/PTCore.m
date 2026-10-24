@@ -250,7 +250,10 @@ static PTCore *gCore;
 #pragma mark Callbacks C
 
 static void PTCoreLog(enum retro_log_level level, const char *fmt, ...) {
-    if (level < RETRO_LOG_INFO) return;
+    // Messages de mise au point des moteurs : seulement si PT_LOG_DEBUG est défini (banc d'essai).
+    static int verbose = -1;
+    if (verbose < 0) verbose = getenv("PT_LOG_DEBUG") != NULL;
+    if (level < RETRO_LOG_INFO && !verbose) return;
     char buffer[2048];
     va_list args;
     va_start(args, fmt);

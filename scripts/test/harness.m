@@ -122,6 +122,7 @@ int main(int argc, const char *argv[]) {
         NSData *findPattern = nil;
         unsigned device = 0;   // « --device 0x205 » : manette DualShock de la PS1
         uint32_t achievementConsole = 0;
+        BOOL realtime = NO;   // « --realtime 1 » : une image tous les 1/60 s (réseau, minuteries du jeu)
         int sequenceStart = 120;
         for (int i = 5; i + 1 < argc; i += 2) {
             NSString *flag = @(argv[i]), *value = @(argv[i + 1]);
@@ -168,6 +169,8 @@ int main(int argc, const char *argv[]) {
                 systemOverride = value;
             } else if ([flag isEqualToString:@"--jit"]) {
                 jit = [value boolValue];
+            } else if ([flag isEqualToString:@"--realtime"]) {
+                realtime = [value boolValue];
             } else if ([flag isEqualToString:@"--achievements"]) {
                 achievementConsole = (uint32_t)[value intValue];
             }
@@ -245,6 +248,11 @@ int main(int argc, const char *argv[]) {
         NSData *ramBefore = nil, *stateBefore = nil;
         CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
         for (int i = 1; i <= frames; i++) {
+            if (realtime) {
+                double due = start + i / core.framesPerSecond;
+                double now = CFAbsoluteTimeGetCurrent();
+                if (due > now) usleep((useconds_t)((due - now) * 1e6));
+            }
             if (cheats[@(i)]) {
                 ramBefore = [core systemRAM];
                 stateBefore = [core saveState];
