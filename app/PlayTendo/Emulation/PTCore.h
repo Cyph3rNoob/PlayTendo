@@ -85,6 +85,10 @@ typedef void (^PTHardwareVideoHandler)(CVPixelBufferRef buffer, unsigned width, 
 /// Mémoire vive de la console (utilisée par le banc d'essai Mac, scripts/test/harness.m).
 - (nullable NSData *)systemRAM;
 
+/// RetroAchievements : remplit `regions` (rc_libretro_memory_regions_t) avec la mémoire de la console du jeu chargé,
+/// d'après la carte annoncée par le moteur. `console` : numéro RetroAchievements de la console.
+- (BOOL)fillAchievementMemory:(void *)regions console:(uint32_t)console;
+
 /// Codes de triche : efface ceux du moteur, puis met chacun de `codes` (déjà au format du moteur, voir Cheats.swift).
 /// Sans effet si le moteur ne sait pas (retro_cheat_set absent).
 - (void)setCheats:(NSArray<NSString *> *)codes;

@@ -79,6 +79,7 @@ for core in $CORES; do
       run mesen-macos make clean ;;
     bsnes)
       cd "$SRC/bsnes/bsnes"
+      python3 "$ROOT/scripts/patch_bsnes.py" "$SRC/bsnes/bsnes"
       run bsnes-macos make clean target=libretro
       run bsnes-macos make -j$JOBS target=libretro binary=library platform=macos local=false
       package bsnes out/bsnes_libretro.dylib

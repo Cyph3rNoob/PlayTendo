@@ -7,11 +7,14 @@
 //     --opt cle=valeur     réglage du moteur
 //     --system dossier     dossier système donné au moteur (fichiers de PPSSPP…)
 //     --jit 1              prépare la réserve JIT de l'app et la propose au moteur (PSP)
+//     --achievements 7     RetroAchievements : mémoire vue par rcheevos (console n° 7 = NES…) et empreinte du jeu
 //   Dans --sequence, en plus des boutons : sup/sdown/sleft/sright (stick gauche), cup/cdown/cleft/cright (stick
 //   droit, boutons C de la N64). Les images 3D (OpenGL) sont lues comme les autres.
 
 #import "PTCore.h"
 #import "PTJIT.h"
+#import "rc_hash.h"
+#import "rc_libretro.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
@@ -118,6 +121,7 @@ int main(int argc, const char *argv[]) {
         NSMutableDictionary<NSNumber *, NSArray<NSString *> *> *cheats = [NSMutableDictionary dictionary];
         NSData *findPattern = nil;
         unsigned device = 0;   // « --device 0x205 » : manette DualShock de la PS1
+        uint32_t achievementConsole = 0;
         int sequenceStart = 120;
         for (int i = 5; i + 1 < argc; i += 2) {
             NSString *flag = @(argv[i]), *value = @(argv[i + 1]);
@@ -164,6 +168,8 @@ int main(int argc, const char *argv[]) {
                 systemOverride = value;
             } else if ([flag isEqualToString:@"--jit"]) {
                 jit = [value boolValue];
+            } else if ([flag isEqualToString:@"--achievements"]) {
+                achievementConsole = (uint32_t)[value intValue];
             }
         }
 
@@ -285,6 +291,31 @@ int main(int argc, const char *argv[]) {
                expectedAudio > 0 ? audioFrames * 100.0 / expectedAudio : 0);
         printf("vitesse  : %.2f ms par image (%.0f×  le temps réel)\n", elapsed * 1000 / frames,
                (frames / core.framesPerSecond) / elapsed);
+
+        if (achievementConsole) {
+            rc_libretro_memory_regions_t regions = {0};
+            BOOL ok = [core fillAchievementMemory:&regions console:achievementConsole];
+            printf("succès   : mémoire %s, %u zone(s), %zu octets\n", ok ? "prête" : "ABSENTE", regions.count, regions.total_size);
+            for (uint32_t r = 0; r < regions.count; r++) {
+                printf("           zone %u : %zu octets%s\n", r, regions.size[r], regions.data[r] ? "" : " (vide)");
+            }
+            uint8_t bytes[8] = {0};
+            uint32_t read = rc_libretro_memory_read(&regions, 0, bytes, 8);
+            printf("           adresse 0 : %u octet(s) lus : %02X %02X %02X %02X\n", read, bytes[0], bytes[1], bytes[2], bytes[3]);
+            NSData *system = [core systemRAM];
+            if (system.length >= 8) {
+                const uint8_t *b = system.bytes;
+                printf("           mémoire système : %02X %02X %02X %02X (%s)\n", b[0], b[1], b[2], b[3],
+                       memcmp(b, bytes, 4) == 0 ? "identique" : "différente");
+            }
+            char hash[33] = "";
+            rc_hash_iterator_t iterator;
+            rc_hash_initialize_iterator(&iterator, argv[2], NULL, 0);
+            rc_hash_get_default_cdreader(&iterator.callbacks.cdreader);
+            int hashed = rc_hash_generate(hash, achievementConsole, &iterator);
+            rc_hash_destroy_iterator(&iterator);
+            printf("           empreinte : %s\n", hashed ? hash : "IMPOSSIBLE");
+        }
 
         NSData *ram = [core systemRAM];
         for (NSNumber *offset in peeks) {

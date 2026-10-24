@@ -129,6 +129,8 @@ struct EmulatorView: View {
             UserDefaults.standard.set(controls.keyboardID, forKey: KeyCapture.consoleKey)
 #endif
             session.setWiimote(controls.isWiimote)
+            // RetroAchievements : reconnexion si elle avait échoué faute de réseau (pour les jeux suivants).
+            Achievements.shared.reconnectIfNeeded()
             session.start()
             if game.system.supportsTwoPlayers && gamepad.hasSecondController { session.setSecondPlayer(true) }
         }
@@ -242,6 +244,10 @@ struct EmulatorView: View {
                 ToastView(text: toast)
                     .position(x: bounds.midX, y: max(layout.gameRect.minY, 20) + 34)
             }
+            // Succès RetroAchievements débloqués, en haut de l'image.
+            AchievementBanners()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, max(layout.gameRect.minY, 20) + 8)
         }
         .animation(.easeInOut(duration: 0.2), value: showingMenu)
         .animation(.easeInOut(duration: 0.2), value: session.toast)
@@ -576,6 +582,7 @@ private struct PauseMenu: View {
 
     @State private var tab: MenuTab = .game
     @State private var showingCheats = false
+    @State private var showingAchievements = false
     @State private var showingGamepad = false
     @AppStorage(PerformanceSettings.key) private var showPerformance = false
 
@@ -593,6 +600,9 @@ private struct PauseMenu: View {
         .sheet(isPresented: $showingCheats) {
             CheatsView(session: session, title: metadata.display(for: session.game).title,
                        officialName: metadata.officialName(for: session.game))
+        }
+        .sheet(isPresented: $showingAchievements) {
+            AchievementsListView(title: metadata.display(for: session.game).title, hardcore: session.achievementsHardcore)
         }
         .sheet(isPresented: $showingGamepad) {
             GamepadMappingView(scheme: scheme, title: metadata.display(for: session.game).title,
@@ -667,7 +677,7 @@ private struct PauseMenu: View {
         switch tab {
         case .game:
             quickActions
-            cheatsButton
+            extrasRow
             if let disk = session.diskInfo { discPicker(disk, showsTitle: true) }
             MenuButton(title: tr("Recommencer"), icon: "arrow.counterclockwise", action: onReset)
                 .disabled(!hasEngineExtras)
@@ -716,7 +726,7 @@ private struct PauseMenu: View {
     @ViewBuilder private var portraitContent: some View {
         MenuButton(title: tr("Reprendre"), icon: "play.fill", prominent: true, action: onResume)
         quickActions
-        cheatsButton
+        extrasRow
         if hasBlocks {
             ViewThatFits(in: .vertical) {
                 blocks
@@ -767,12 +777,14 @@ private struct PauseMenu: View {
                 session.saveState()
                 onResume()
             }
-            QuickButton(title: tr("Charger"), icon: "clock.arrow.circlepath", enabled: hasEngineExtras && session.hasSaveState) {
+            QuickButton(title: tr("Charger"), icon: "clock.arrow.circlepath",
+                        enabled: hasEngineExtras && session.hasSaveState && !session.achievementsHardcore) {
                 session.loadState()
                 onResume()
             }
             // Appui long (clic droit sur Mac) : la vitesse, de ×2 à ×5.
-            QuickButton(title: tr("Retour arrière ×\(session.rewindSpeed)"), icon: "backward.fill", enabled: session.rewindAvailable) {
+            QuickButton(title: tr("Retour arrière ×\(session.rewindSpeed)"), icon: "backward.fill",
+                        enabled: session.rewindAvailable && !session.achievementsHardcore) {
                 session.startRewind()
                 onResume()
             }
@@ -795,6 +807,13 @@ private struct PauseMenu: View {
                     }
                 }
             }
+        }
+        if session.achievementsHardcore {
+            Text(tr("Hardcore : chargement, retour arrière et codes de triche coupés."))
+                .font(.caption)
+                .foregroundStyle(Neon.dim)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
         if !hasEngineExtras {
             Text(tr("PS Vita : seules les sauvegardes faites dans le jeu existent."))
@@ -828,16 +847,31 @@ private struct PauseMenu: View {
         MenuButton(title: tr("Modifier les boutons"), icon: "hand.draw", action: action)
     }
 
-    /// Codes de triche : leur écran, avec le nombre de codes actifs (éteint si le moteur de la console ne les lit pas).
-    private var cheatsButton: some View {
-        let supported = Cheats.supported(session.game.system)
+    /// Codes de triche, et à côté les succès RetroAchievements quand le jeu en a (joueur connecté).
+    @ViewBuilder private var extrasRow: some View {
+        if let counts = session.achievementCounts {
+            HStack(spacing: 8) {
+                cheatsButton(small: true)
+                MenuButton(title: tr("Succès") + " · \(counts.unlocked)/\(counts.total)", icon: "trophy", small: true) {
+                    showingAchievements = true
+                }
+            }
+        } else {
+            cheatsButton(small: false)
+        }
+    }
+
+    /// Codes de triche : leur écran, avec le nombre de codes actifs (éteint si le moteur de la console ne les lit pas,
+    /// ou en Hardcore).
+    private func cheatsButton(small: Bool) -> some View {
+        let available = Cheats.supported(session.game.system) && !session.achievementsHardcore
         let active = session.cheats.filter(\.enabled).count
         return MenuButton(title: active > 0 ? tr("Codes de triche") + " · \(active)" : tr("Codes de triche"),
-                          icon: "wand.and.stars") {
+                          icon: "wand.and.stars", small: small) {
             showingCheats = true
         }
-        .disabled(!supported)
-        .opacity(supported ? 1 : 0.4)
+        .disabled(!available)
+        .opacity(available ? 1 : 0.4)
     }
 
     @ViewBuilder private var imageSection: some View {

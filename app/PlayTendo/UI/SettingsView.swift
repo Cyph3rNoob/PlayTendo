@@ -75,6 +75,7 @@ struct SettingsView: View {
             List {
                 languageSection
                 playSection
+                RetroAchievementsSection()
                 jitSections
                 biosSection
 #if PLAYTENDO_VITA
@@ -230,6 +231,7 @@ struct SettingsView: View {
             Form {
                 languageSection
                 playSection
+                RetroAchievementsSection()
                 bootSection
                 if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
                     Section {

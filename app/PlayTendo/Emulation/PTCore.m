@@ -5,6 +5,7 @@
 #import "PTVulkanContext.h"
 #import "libretro.h"
 #import "libretro_vulkan.h"
+#import "rc_libretro.h"
 
 #import <dlfcn.h>
 #import <mach/mach_time.h>
@@ -240,6 +241,10 @@ static PTCore *gCore;
     _Atomic int32_t _pointerX;
     _Atomic int32_t _pointerY;
     _Atomic int32_t _pointerPressed;
+
+    // Carte de la mémoire de la console annoncée par le moteur (SET_MEMORY_MAPS) : RetroAchievements y lit le jeu.
+    struct retro_memory_descriptor *_memoryDescriptors;
+    unsigned _memoryDescriptorCount;
 }
 
 #pragma mark Callbacks C
@@ -605,6 +610,9 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     if (_vk && _hw.context_destroy) _hw.context_destroy();
     if (_gameLoaded) _api.unload_game();
     _gameLoaded = NO;
+    free(_memoryDescriptors);
+    _memoryDescriptors = NULL;
+    _memoryDescriptorCount = 0;
     if (_initialized) _api.deinit();
     _initialized = NO;
     _gameData = nil;
@@ -854,7 +862,6 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         case PT_ENV(RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS):
         case PT_ENV(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS):
         case PT_ENV(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO):
-        case PT_ENV(RETRO_ENVIRONMENT_SET_MEMORY_MAPS):
         case PT_ENV(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO):
         case PT_ENV(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE):
         case PT_ENV(RETRO_ENVIRONMENT_SET_SUPPORT_ACHIEVEMENTS):
@@ -997,9 +1004,41 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
         case PT_ENV(RETRO_ENVIRONMENT_SHUTDOWN):
             _shutdownRequested = YES;
             return true;
+        case PT_ENV(RETRO_ENVIRONMENT_SET_MEMORY_MAPS): {
+            // Copie des descripteurs (leurs pointeurs restent ceux du moteur, valables tant que le jeu est chargé).
+            const struct retro_memory_map *map = data;
+            free(_memoryDescriptors);
+            _memoryDescriptors = NULL;
+            _memoryDescriptorCount = 0;
+            if (map && map->num_descriptors > 0 && map->descriptors) {
+                size_t size = sizeof(struct retro_memory_descriptor) * map->num_descriptors;
+                _memoryDescriptors = malloc(size);
+                memcpy(_memoryDescriptors, map->descriptors, size);
+                _memoryDescriptorCount = map->num_descriptors;
+            }
+            return true;
+        }
         default:
             return false;
     }
+}
+
+#pragma mark RetroAchievements
+
+/// Mémoire « système » ou « sauvegarde » du moteur, pour rc_libretro quand la carte ne suffit pas.
+static void PTAchievementMemoryInfo(uint32_t id, rc_libretro_core_memory_info_t *info) {
+    PTCore *core = gCore;
+    info->data = NULL;
+    info->size = 0;
+    if (!core || !core->_gameLoaded) return;
+    info->data = core->_api.get_memory_data(id);
+    info->size = core->_api.get_memory_size(id);
+}
+
+- (BOOL)fillAchievementMemory:(void *)regions console:(uint32_t)console {
+    if (!_gameLoaded || !regions) return NO;
+    struct retro_memory_map map = {_memoryDescriptors, _memoryDescriptorCount};
+    return rc_libretro_memory_init(regions, _memoryDescriptorCount > 0 ? &map : NULL, PTAchievementMemoryInfo, console) != 0;
 }
 
 @end

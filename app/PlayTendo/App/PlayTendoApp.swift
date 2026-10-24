@@ -30,6 +30,8 @@ struct PlayTendoApp: App {
 #endif
         Paths.prepare()
         BootSound.prepare()
+        // RetroAchievements : reconnexion au compte du joueur dès l'ouverture (jeton gardé dans le Trousseau).
+        _ = Achievements.shared
     }
 
     var body: some Scene {

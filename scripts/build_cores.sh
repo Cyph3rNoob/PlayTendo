@@ -82,6 +82,8 @@ build_bsnes() {
   sed -i '' 's/c++ -arch arm64 -marm -miphoneos-version-min=[0-9.]* -isysroot $(IOSSDK)/$(compiler)/' target-libretro/GNUmakefile
   # libco ne sauvegardait pas les registres d8-d15 : l'app plantait au retour de retro_run.
   python3 "$ROOT/scripts/patch_libco.py" "$SRC/bsnes/libco/aarch64.c" words
+  # Mémoire de travail visible pour RetroAchievements.
+  python3 "$ROOT/scripts/patch_bsnes.py" "$SRC/bsnes/bsnes"
   rm -f obj/libco.o
   run bsnes-ios make -j$JOBS target=libretro binary=library platform=ios-arm64 \
     compiler="$CXX_IOS" local=false openmp=false IOSSDK="$SDK"

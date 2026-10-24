@@ -1,4 +1,5 @@
 #import "PTCore.h"
+#import "PTAchievements.h"
 #import "PTJIT.h"
 #import "PTRumble.h"
 #import "PTPS2Engine.h"

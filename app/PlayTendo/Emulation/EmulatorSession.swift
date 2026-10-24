@@ -39,6 +39,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var isRewindingFromMenu = false
     /// Plus de photo à reprendre : la partie reste à la plus ancienne.
     @Published private(set) var rewindReachedStart = false
+    /// RetroAchievements : succès débloqués et total du jeu (nil si le joueur n'est pas connecté ou si le jeu n'en a
+    /// pas) ; mode Hardcore en cours (chargement de sauvegarde rapide, retour arrière et triche interdits).
+    @Published private(set) var achievementCounts: (unlocked: Int, total: Int)?
+    @Published private(set) var achievementsHardcore = false
     /// Codes de triche du jeu (menu pause › Codes de triche), gardés par Cheats.
     @Published private(set) var cheats: [Cheat]
     @Published var toast: String?
@@ -102,6 +106,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private var pendingReloadAttempts = 0
     /// La partie en attente (`pendingReloadState`) est la reprise automatique du lancement, pas un rechargement.
     private var resuming = false
+    /// RetroAchievements suivi pour ce jeu (thread d'émulation) ; reprise automatique gardée de côté en attendant de
+    /// savoir si le jeu est en Hardcore (où reprendre une partie sauvegardée est interdit).
+    private var achievementsOn = false
+    private var heldResumeState: Data?
 
 #if os(macOS)
     /// Partie en cours (thread principal) : arrêtée proprement avant que l'app se ferme (MacAppDelegate).
@@ -171,6 +179,22 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             persistSaveRAM()
             audio?.pause()
         }
+        startAchievementsIdle()
+    }
+
+    /// Pendant la pause, la session RetroAchievements reste active (message au serveur de temps en temps).
+    private var achievementsIdleTimer: Timer?
+
+    private func startAchievementsIdle() {
+        guard achievementCounts != nil else { return }
+        refreshAchievementCounts()
+        achievementsIdleTimer?.invalidate()
+        achievementsIdleTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.state == .paused else { return }
+                PTAchievements.shared.idle()
+            }
+        }
     }
 
     func resume() {
@@ -180,6 +204,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         condition.signal()
         condition.unlock()
         state = .running
+        achievementsIdleTimer?.invalidate()
+        achievementsIdleTimer = nil
         perform { [self] in audio?.start() }
     }
 
@@ -205,6 +231,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         perform { [self] in
             core?.reset()
             external?.reset()
+            if achievementsOn { PTAchievements.shared.reset() }
             // Codes de triche renvoyés au nouveau départ (certains moteurs les oublient).
             cheatsSent = false
             cheatFrames = 0
@@ -298,6 +325,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             do {
                 let packed = Self.packState(data)
                 try packed.write(to: Paths.stateFile(for: game), options: .atomic)
+                let progress = achievementsOn ? PTAchievements.shared.progress() : nil
+                if let progress {
+                    try? progress.write(to: achievementProgressFile, options: .atomic)
+                } else {
+                    try? FileManager.default.removeItem(at: achievementProgressFile)
+                }
                 PTLogLine(packed.count == data.count ? "Sauvegarde rapide : \(data.count / 1024) Ko (gardée brute)"
                           : "Sauvegarde rapide : \(data.count / 1024) Ko, \(packed.count / 1024) Ko une fois compressée")
                 saveThumbnail()
@@ -310,6 +343,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     func loadState() {
+        guard !achievementsHardcore else { return }
         if let external {
             perform { [self] in
                 if external.loadState(fromPath: Paths.stateFile(for: game).path) {
@@ -331,9 +365,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 return
             }
             PTLogLine("Sauvegarde rapide chargée (\(file.starts(with: Self.compressedStateMagic) ? "compressée" : "brute"))")
+            if achievementsOn { PTAchievements.shared.restoreProgress(try? Data(contentsOf: achievementProgressFile)) }
             showToast(tr("Sauvegarde chargée"))
         }
     }
+
+    /// Où en sont les succès RetroAchievements au moment de la sauvegarde rapide (à côté d'elle).
+    private var achievementProgressFile: URL { Paths.stateFile(for: game).appendingPathExtension("succes") }
 
     /// Reprise automatique : la partie au moment de quitter, compressée comme une sauvegarde rapide.
     private func writeResume(_ state: Data?) {
@@ -373,6 +411,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     /// Maintenu : la partie recule. Relâché : elle reprend de là.
     func setRewinding(_ on: Bool) {
+        if on && achievementsHardcore { return }
         condition.lock()
         rewindRequested = on
         condition.signal()
@@ -381,6 +420,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     /// Menu pause › Retour arrière : la partie recule (une fois le menu fermé) jusqu'à `stopRewind`.
     func startRewind() {
+        guard !achievementsHardcore else { return }
         rewindReachedStart = false
         isRewindingFromMenu = true
         setRewinding(true)
@@ -600,6 +640,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             resuming = true
         }
 
+        startAchievements(core: core)
+
         let audio = AudioOutput(sampleRate: core.sampleRate, ring: ring)
         audio.start()
         self.audio = audio
@@ -664,6 +706,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 if coreReloadRequested {
                     coreReloadRequested = false
                     guard let reloaded = reloadCore(core, path: corePath) else {
+                        if achievementsOn { PTAchievements.shared.endGame() }
                         audio.stop()
                         self.audio = nil
                         self.core = nil
@@ -671,6 +714,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                         return
                     }
                     core = reloaded
+                    if achievementsOn { PTAchievements.shared.attach(reloaded) }
                     cheatsSent = false
                     cheatFrames = 0
                 }
@@ -703,11 +747,16 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     }
                 }
             } else {
+                // Fin d'un retour en arrière : les succès repartent d'un état neutre (pas de faux déblocage).
+                if rewindingNow && achievementsOn { PTAchievements.shared.restoreProgress(nil) }
                 rewindingNow = false
                 rewindCredit = 0
                 rewindExhausted = false
                 let steps = fastForward ? fastForwardSteps : 1
-                for _ in 0..<steps { core.runFrame() }
+                for _ in 0..<steps {
+                    core.runFrame()
+                    if achievementsOn { PTAchievements.shared.doFrame() }
+                }
                 framesLock.withLock { producedFrames &+= UInt64(steps) }
                 // Codes de triche : envoyés après la première image (le moteur a fini de démarrer). La PSP ne sait quel
                 // est son jeu qu'une fois démarrée : 5 s (elle relit d'elle-même les codes déjà envoyés une autre fois).
@@ -736,6 +785,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     pendingReloadState = nil
                     if resuming {
                         resuming = false
+                        if achievementsOn { PTAchievements.shared.restoreProgress(nil) }
                         PTLogLine("Reprise automatique : partie reprise après \(pendingReloadAttempts) image(s)")
                         showToast(tr("Partie reprise"))
                     } else {
@@ -807,6 +857,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         saveThumbnail()
         // Reprise pas encore appliquée (jeu quitté tout de suite) : l'ancienne reste.
         if !(resuming && pendingReloadState != nil) { writeResume(core.saveState()) }
+        if achievementsOn { PTAchievements.shared.endGame() }
         core.unloadGame()
         audio.stop()
         self.audio = nil
@@ -815,6 +866,57 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             self.state = .stopped
             self.finishStop()
         }
+    }
+
+    // MARK: RetroAchievements
+
+    /// Thread d'émulation, jeu chargé : le jeu (fichier lancé, patché pour une romhack) est demandé à RetroAchievements
+    /// si le joueur est connecté et que la console a des succès. En Hardcore, la reprise automatique attend la réponse
+    /// (reprendre une partie sauvegardée y est interdit).
+    private func startAchievements(core: PTCore) {
+        let console = PTAchievements.console(forSystem: game.system.shortName)
+        guard console != 0, PTAchievements.shared.loggedIn, let path = try? RomPatch.prepare(game).path else { return }
+        achievementsOn = true
+        if PTAchievements.shared.hardcore, resuming, pendingReloadState != nil {
+            heldResumeState = pendingReloadState
+            pendingReloadState = nil
+            resuming = false
+        }
+        PTAchievements.shared.beginGame(atPath: path, console: console, core: core) { [weak self] title, unlocked, total, hardcore, _ in
+            self?.achievementsLoaded(found: title != nil, unlocked: Int(unlocked), total: Int(total), hardcore: hardcore)
+        }
+    }
+
+    /// Réponse de RetroAchievements (thread principal). Des codes de triche actifs coupent le Hardcore pour ce jeu.
+    private func achievementsLoaded(found: Bool, unlocked: Int, total: Int, hardcore: Bool) {
+        var hardcore = hardcore
+        if hardcore && cheats.contains(where: \.enabled) {
+            PTAchievements.shared.leaveHardcore()
+            hardcore = false
+            showToast(tr("Hardcore coupé pour ce jeu : des codes de triche sont actifs"))
+        } else if found && total > 0 {
+            showToast(hardcore ? tr("RetroAchievements : \(unlocked) succès sur \(total) · Hardcore")
+                               : tr("RetroAchievements : \(unlocked) succès sur \(total)"))
+        }
+        achievementsHardcore = hardcore
+        achievementCounts = found && total > 0 ? (unlocked, total) : nil
+        perform { [self] in
+            guard let held = heldResumeState else { return }
+            heldResumeState = nil
+            if hardcore {
+                PTLogLine("Reprise automatique ignorée : Hardcore (RetroAchievements)")
+            } else {
+                pendingReloadState = held
+                pendingReloadAttempts = 0
+                resuming = true
+            }
+        }
+    }
+
+    /// Menu pause : compteur des succès à jour.
+    func refreshAchievementCounts() {
+        guard let counts = achievementCounts else { return }
+        achievementCounts = (Int(PTAchievements.shared.unlockedCount()), counts.total)
     }
 
     /// Charge le moteur libretro et le jeu (thread d'émulation), avec la mémoire de sauvegarde de la cartouche.
