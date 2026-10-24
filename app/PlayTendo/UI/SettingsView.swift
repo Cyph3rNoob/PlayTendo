@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage(N64Settings.rumblePakKey) private var n64RumblePak = false
     /// PS2 : démarrage sans le logo de la console (PS2Settings.fastBoot).
     @AppStorage(PS2Settings.fastBootKey) private var ps2FastBoot = true
+    /// DS : serveur du jeu en ligne (DSSettings.WiFiServer).
+    @AppStorage(DSSettings.wifiServerKey) private var dsWiFiServer = DSSettings.WiFiServer.kaeru.rawValue
     @EnvironmentObject private var jit: JITManager
     @AppStorage(BootSound.enabledKey) private var bootSound = true
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
@@ -76,6 +78,7 @@ struct SettingsView: View {
                 languageSection
                 playSection
                 RetroAchievementsSection()
+                dsOnlineSection
                 jitSections
                 biosSection
 #if PLAYTENDO_VITA
@@ -232,6 +235,7 @@ struct SettingsView: View {
                 languageSection
                 playSection
                 RetroAchievementsSection()
+                dsOnlineSection
                 bootSection
                 if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
                     Section {
@@ -431,6 +435,25 @@ struct SettingsView: View {
             Text(tr("Performances : images par seconde et vitesse du jeu, processeur, carte graphique et mémoire utilisés, et chaleur du Mac."))
             Text(tr("Vibrations : N64 (avec le Rumble Pak, qui prend la place du Controller Pak où certains jeux sauvegardent ; pris au prochain lancement), PS1, PS2, GameCube, Wii, et cartouches Game Boy et GBA à vibreur. Avec une manette qui sait vibrer (PlayStation, Xbox récentes)."))
 #endif
+        }
+    }
+
+    /// DS : jeu en ligne par des serveurs qui remplacent la Connexion Wi-Fi Nintendo (seulement si la DS est dans l'app).
+    @ViewBuilder private var dsOnlineSection: some View {
+        if EmulatorSession.engineInstalled(for: .nds) {
+            Section {
+                Picker(selection: $dsWiFiServer) {
+                    ForEach(DSSettings.WiFiServer.allCases) { server in
+                        Text(server.label).tag(server.rawValue)
+                    }
+                } label: {
+                    Label(tr("Serveur"), systemImage: "wifi")
+                }
+            } header: {
+                Text(tr("Nintendo DS en ligne"))
+            } footer: {
+                Text(tr("Échanges et combats Pokémon, Mario Kart DS… La Connexion Wi-Fi Nintendo a fermé en 2014 : des serveurs de passionnés la remplacent. Dans le jeu, va dans « Connexion Wi-Fi Nintendo » et connecte-toi comme sur une vraie DS. Si un jeu ne se connecte pas, essaie un autre serveur (Wiimmfi pour beaucoup de Pokémon). Pris en compte au prochain jeu lancé."))
+            }
         }
     }
 
