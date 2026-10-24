@@ -4,11 +4,6 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>fr</string>
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>fr</string>
-		<string>en</string>
-	</array>
 	<key>CFBundleDisplayName</key>
 	<string>PlayTendo</string>
 	<key>CFBundleDocumentTypes</key>
@@ -36,6 +31,11 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>fr</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
@@ -56,6 +56,12 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_playtendo-link._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>PlayTendo relie deux appareils proches pour le câble link Game Boy (échanges et combats Pokémon).</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Orbitron.ttf</string>

@@ -22,7 +22,7 @@ CC_IOS="$CLANG -arch arm64 -isysroot $SDK -miphoneos-version-min=$MIN_IOS"
 CXX_IOS="$CLANGXX -arch arm64 -isysroot $SDK -miphoneos-version-min=$MIN_IOS -stdlib=libc++"
 JOBS=$(sysctl -n hw.ncpu)
 
-ALL=(mesen bsnes mgba melondsds pcsx_rearmed mupen64plus_next ppsspp)
+ALL=(mesen bsnes mgba gambatte melondsds pcsx_rearmed mupen64plus_next ppsspp)
 if (( $# )); then CORES=("$@"); else CORES=($ALL); fi
 
 # Affiche un point toutes les 20 lignes de compilation, pour montrer que ça avance.
@@ -104,6 +104,16 @@ build_mgba() {
     -DUSE_JSON_C=OFF -DUSE_LZMA=OFF -DENABLE_SCRIPTING=OFF
   run mgba-ios cmake --build "$b" --target mgba_libretro
   wrap mgba "$b/mgba_libretro.dylib"
+}
+
+# Game Boy et Game Boy Color (2026-10-24, à la place de mGBA qui garde la GBA) : Gambatte, pour son câble link par le
+# réseau (HAVE_NETWORK, posé par la cible ios-arm64), relié d'un appareil à l'autre par PlayTendo.
+build_gambatte() {
+  cd "$SRC/gambatte"
+  run gambatte-ios make -f Makefile platform=ios-arm64 clean
+  run gambatte-ios make -j$JOBS -f Makefile platform=ios-arm64 CC="$CC_IOS" CXX="$CXX_IOS" IOSSDK="$SDK"
+  wrap gambatte "$SRC/gambatte/gambatte_libretro_ios.dylib"
+  run gambatte-ios make -f Makefile platform=ios-arm64 clean
 }
 
 build_melondsds() {

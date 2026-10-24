@@ -643,11 +643,23 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     return _gameLoaded && _api.unserialize(state.bytes, state.length);
 }
 
+/// Horloge de la cartouche (Gambatte : Pokémon Or, Argent, Cristal…), gardée après la mémoire de sauvegarde, derrière
+/// cette marque : une sauvegarde d'un autre moteur (mGBA ajoutait sa propre horloge) n'est jamais prise pour elle.
+static const char PTRTCMagic[8] = {'P', 'T', 'R', 'T', 'C', '1', 0, 0};
+
 - (NSData *)saveRAM {
     if (!_gameLoaded) return nil;
     size_t size = _api.get_memory_size(RETRO_MEMORY_SAVE_RAM);
     void *bytes = _api.get_memory_data(RETRO_MEMORY_SAVE_RAM);
-    return (size > 0 && bytes) ? [NSData dataWithBytes:bytes length:size] : nil;
+    if (size == 0 || !bytes) return nil;
+    NSMutableData *data = [NSMutableData dataWithBytes:bytes length:size];
+    size_t rtcSize = _api.get_memory_size(RETRO_MEMORY_RTC);
+    void *rtc = _api.get_memory_data(RETRO_MEMORY_RTC);
+    if (rtcSize > 0 && rtc) {
+        [data appendBytes:PTRTCMagic length:sizeof PTRTCMagic];
+        [data appendBytes:rtc length:rtcSize];
+    }
+    return data;
 }
 
 - (void)restoreSaveRAM:(NSData *)data {
@@ -655,6 +667,12 @@ static retro_proc_address_t PTHardwareProcAddress(const char *symbol) {
     size_t size = _api.get_memory_size(RETRO_MEMORY_SAVE_RAM);
     void *bytes = _api.get_memory_data(RETRO_MEMORY_SAVE_RAM);
     if (size > 0 && bytes) memcpy(bytes, data.bytes, MIN(size, data.length));
+    size_t rtcSize = _api.get_memory_size(RETRO_MEMORY_RTC);
+    void *rtc = _api.get_memory_data(RETRO_MEMORY_RTC);
+    if (rtcSize > 0 && rtc && data.length == size + sizeof PTRTCMagic + rtcSize
+        && memcmp((const char *)data.bytes + size, PTRTCMagic, sizeof PTRTCMagic) == 0) {
+        memcpy(rtc, (const char *)data.bytes + size + sizeof PTRTCMagic, rtcSize);
+    }
 }
 
 - (NSData *)systemRAM {

@@ -210,6 +210,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     }
 
     func stop(then completion: @escaping () -> Void) {
+        // Câble link débranché avec le jeu (l'autre appareil le voit tout de suite).
+        if (game.system == .gb || game.system == .gbc), linkCable.isActive { linkCable.stop() }
         switch state {
         case .stopped, .failed:
             completion()
@@ -267,6 +269,39 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         optionOverrides.merge(options) { $1 }
         condition.unlock()
         perform { [self] in core?.updateOptions(options) }
+    }
+
+    // MARK: Câble link (Game Boy, Game Boy Color)
+
+    /// Liaison avec un autre appareil (menu pause › Câble link).
+    lazy var linkCable = LinkCable(session: self)
+
+    /// Câble link de Gambatte : sans câble, en serveur (hôte), ou en client vers 127.0.0.1 (invité, relayé par LinkCable).
+    enum LinkMode {
+        case off, server(UInt16), client(UInt16)
+    }
+
+    func setLinkMode(_ mode: LinkMode) {
+        guard game.system == .gb || game.system == .gbc else { return }
+        var options: [String: String]
+        switch mode {
+        case .off:
+            options = ["gambatte_gb_link_mode": "Not Connected"]
+        case .server(let port):
+            options = ["gambatte_gb_link_mode": "Network Server", "gambatte_gb_link_network_port": "\(port)"]
+        case .client(let port):
+            options = ["gambatte_gb_link_mode": "Network Client", "gambatte_gb_link_network_port": "\(port)"]
+            // Adresse 127.0.0.1, chiffre par chiffre (12 réglages de Gambatte : 127 000 000 001).
+            for (index, digit) in "127000000001".enumerated() {
+                options["gambatte_gb_link_network_server_ip_\(index + 1)"] = String(digit)
+            }
+        }
+        applyOptions(options)
+    }
+
+    /// Message bref par-dessus le jeu, demandé par l'interface (câble link branché…).
+    func showMessage(_ text: String) {
+        showToast(text)
     }
 
     /// PS2 : applique la résolution, le lissage et le format choisis dans le menu pause (PS2Settings).

@@ -3,7 +3,7 @@
 # - cores/mac/<nom>.framework : embarqués dans l'app Mac (phase « Embed cores » de la cible PlayTendo Mac) ;
 # - cores/macos/<nom>.dylib : mêmes moteurs pour le banc d'essai (scripts/test/test_buttons.py).
 # Même version des sources que pour l'iPhone (scripts/fetch_sources.sh).
-#   zsh scripts/build_cores_macos.sh [mesen bsnes mgba melondsds pcsx_rearmed mupen64plus_next ppsspp]
+#   zsh scripts/build_cores_macos.sh [mesen bsnes mgba gambatte melondsds pcsx_rearmed mupen64plus_next ppsspp]
 set -e
 set -o pipefail
 
@@ -64,7 +64,7 @@ EOF
   printf "OK (macOS %s, %d Ko) " "$minos" $(( $(stat -f %z "$fw/Versions/A/$name") / 1024 ))
 }
 
-ALL=(mesen bsnes mgba melondsds pcsx_rearmed mupen64plus_next ppsspp)
+ALL=(mesen bsnes mgba gambatte melondsds pcsx_rearmed mupen64plus_next ppsspp)
 if (( $# )); then CORES=("$@"); else CORES=($ALL); fi
 
 for core in $CORES; do
@@ -94,6 +94,14 @@ for core in $CORES; do
         -DUSE_EDITLINE=OFF -DUSE_EPOXY=OFF -DUSE_JSON_C=OFF -DUSE_LZMA=OFF -DENABLE_SCRIPTING=OFF
       run mgba-macos cmake --build "$WORK/mgba" --target mgba_libretro
       package mgba "$WORK/mgba/mgba_libretro.dylib" ;;
+    gambatte)
+      # Game Boy / Game Boy Color, avec le câble link par le réseau (HAVE_NETWORK, posé par la cible osx).
+      cd "$SRC/gambatte"
+      run gambatte-macos make -f Makefile platform=osx clean
+      run gambatte-macos make -j$JOBS -f Makefile platform=osx ARCHFLAGS="-arch arm64" \
+        CC="clang -arch arm64 -mmacosx-version-min=$MIN_MACOS" CXX="clang++ -arch arm64 -mmacosx-version-min=$MIN_MACOS"
+      package gambatte gambatte_libretro.dylib
+      run gambatte-macos make -f Makefile platform=osx clean ;;
     melondsds)
       # Rendu OpenGL de melonDS (résolution augmentée) avec l'OpenGL « core » du Mac : les retouches OpenGL ES de
       # l'iPhone (patch_melonds.py) ne s'appliquent qu'avec PT_GLES_COMPAT, et le melonDS téléchargé dans ce dossier

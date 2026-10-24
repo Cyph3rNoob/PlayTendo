@@ -583,6 +583,7 @@ private struct PauseMenu: View {
     @State private var tab: MenuTab = .game
     @State private var showingCheats = false
     @State private var showingAchievements = false
+    @State private var showingLink = false
     @State private var showingGamepad = false
     @AppStorage(PerformanceSettings.key) private var showPerformance = false
 
@@ -600,6 +601,9 @@ private struct PauseMenu: View {
         .sheet(isPresented: $showingCheats) {
             CheatsView(session: session, title: metadata.display(for: session.game).title,
                        officialName: metadata.officialName(for: session.game))
+        }
+        .sheet(isPresented: $showingLink) {
+            LinkCableView(link: session.linkCable, gameTitle: metadata.display(for: session.game).title)
         }
         .sheet(isPresented: $showingAchievements) {
             AchievementsListView(title: metadata.display(for: session.game).title, hardcore: session.achievementsHardcore)
@@ -847,8 +851,16 @@ private struct PauseMenu: View {
         MenuButton(title: tr("Modifier les boutons"), icon: "hand.draw", action: action)
     }
 
-    /// Codes de triche, et à côté les succès RetroAchievements quand le jeu en a (joueur connecté).
+    /// Codes de triche, et à côté les succès RetroAchievements quand le jeu en a (joueur connecté) ; Game Boy et Game Boy
+    /// Color : le câble link en dessous.
     @ViewBuilder private var extrasRow: some View {
+        cheatsAndAchievements
+        if session.game.system == .gb || session.game.system == .gbc {
+            LinkCableButton(link: session.linkCable) { showingLink = true }
+        }
+    }
+
+    @ViewBuilder private var cheatsAndAchievements: some View {
         if let counts = session.achievementCounts {
             HStack(spacing: 8) {
                 cheatsButton(small: true)
@@ -1343,3 +1355,18 @@ private struct KeyboardPanel: View {
     }
 }
 #endif
+
+/// Menu pause › Câble link, avec son état (« branché »).
+private struct LinkCableButton: View {
+    @ObservedObject var link: LinkCable
+    let action: () -> Void
+
+    var body: some View {
+        let connected: Bool = {
+            if case .connected = link.state { return true }
+            return false
+        }()
+        MenuButton(title: connected ? tr("Câble link") + " · " + tr("branché") : tr("Câble link"),
+                   icon: "cable.connector", action: action)
+    }
+}
