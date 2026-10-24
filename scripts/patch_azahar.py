@@ -23,6 +23,11 @@ Homebrews : 8. vk_pipeline_cache.cpp (2026-10-25, plantage d'Emerald3DS à chaqu
    reconstruit la console, donc un cache de shaders neuf, au numéro de jeu 0, sans carnet ouvert ; SwitchCache le
    croyait déjà prêt pour un homebrew (numéro 0 lui aussi) et ne l'ouvrait pas → pointeur vide au premier dessin
    (ShaderDiskCache::UseProgrammableVertexShader). Il n'est plus sauté tant qu'aucun carnet n'est ouvert.
+
+Mémoire : 9. vk_texture_runtime.cpp (2026-10-25, optimisation) : le tampon d'envoi des textures faisait 512 Mo,
+   taille prévue pour les packs de textures HD (pas dans PlayTendo), réservés dès le lancement (≈ 600 Mo de mémoire
+   graphique mesurés sur Mac). Une texture 3DS fait au plus 4 Mo (1024×1024) : 64 Mo suffisent largement (le tampon
+   tourne en boucle).
 """
 import os
 import sys
@@ -181,4 +186,9 @@ patch("src/video_core/renderer_vulkan/vk_pipeline_cache.cpp", [
      "    if (GetProgramID() == title_id && curr_disk_cache) {\n"
      "        LOG_DEBUG(Render_Vulkan,\n"
      "                  \"Skipping pipeline cache switch - already using cache for title_id={:016X}\",\n"),
+])
+
+patch("src/video_core/renderer_vulkan/vk_texture_runtime.cpp", [
+    ("constexpr u64 UPLOAD_BUFFER_SIZE = 512_MiB;",
+     "constexpr u64 UPLOAD_BUFFER_SIZE = 64_MiB; // PlayTendo : 512 Mo (packs de textures HD), voir patch_azahar.py"),
 ])
