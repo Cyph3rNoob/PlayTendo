@@ -404,6 +404,16 @@ static bool PTDolphinBootFiles(std::vector<std::string> files, bool jit)
     // interpréteur « en cache » (très lent).
     Config::SetBase(Config::MAIN_CPU_CORE, jit ? PowerPC::CPUCore::JITARM64 : PowerPC::CPUCore::CachedInterpreter);
     Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, jit ? VertexLoaderType::Native : VertexLoaderType::Software);
+    // Effets graphiques préparés en arrière-plan, sur plusieurs fils (avant : un par un, le jeu figé le temps de
+    // chacun : les à-coups au premier passage). iPhone : un effet pas encore prêt n'est pas dessiné (une fraction de
+    // seconde, la toute première fois) ; Mac : dessiné en attendant par les « ubershaders », plus lourds pour la puce
+    // graphique mais sans rien qui manque.
+#if TARGET_OS_IOS
+    Config::SetBase(Config::GFX_SHADER_COMPILATION_MODE, ShaderCompilationMode::AsynchronousSkipRendering);
+#else
+    Config::SetBase(Config::GFX_SHADER_COMPILATION_MODE, ShaderCompilationMode::AsynchronousUberShaders);
+#endif
+    Config::SetBase(Config::GFX_SHADER_COMPILER_THREADS, -1);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, 1.0f);
     Config::SetBase(Config::MAIN_AUTO_DISC_CHANGE, files.size() > 1);
     // Codes de triche : ceux de PlayTendo (PTDolphinSetCheats), donnés une fois le jeu lancé.

@@ -28,6 +28,11 @@ Mémoire : 9. vk_texture_runtime.cpp (2026-10-25, optimisation) : le tampon d'en
    taille prévue pour les packs de textures HD (pas dans PlayTendo), réservés dès le lancement (≈ 600 Mo de mémoire
    graphique mesurés sur Mac). Une texture 3DS fait au plus 4 Mo (1024×1024) : 64 Mo suffisent largement (le tampon
    tourne en boucle).
+
+À-coups : 10. core_settings.cpp (2026-10-25, optimisation) : effets graphiques (pipelines Vulkan) préparés en
+   arrière-plan (`async_shader_compilation`, réglage d'Azahar que la version libretro ne propose pas, coupé par
+   défaut) : un dessin dont l'effet n'est pas prêt est sauté au lieu de figer le jeu le temps de le compiler (les
+   « Lenteur » du journal). Les tout petits dessins (6 sommets au plus) l'attendent toujours.
 """
 import os
 import sys
@@ -191,4 +196,16 @@ patch("src/video_core/renderer_vulkan/vk_pipeline_cache.cpp", [
 patch("src/video_core/renderer_vulkan/vk_texture_runtime.cpp", [
     ("constexpr u64 UPLOAD_BUFFER_SIZE = 512_MiB;",
      "constexpr u64 UPLOAD_BUFFER_SIZE = 64_MiB; // PlayTendo : 512 Mo (packs de textures HD), voir patch_azahar.py"),
+])
+
+patch("src/citra_libretro/core_settings.cpp", [
+    ("    Settings::values.use_disk_shader_cache =\n"
+     "        LibRetro::FetchVariable(config::graphics::use_disk_shader_cache, config::enabled) ==\n"
+     "        config::enabled;\n",
+     "    Settings::values.use_disk_shader_cache =\n"
+     "        LibRetro::FetchVariable(config::graphics::use_disk_shader_cache, config::enabled) ==\n"
+     "        config::enabled;\n"
+     "\n"
+     "    // PlayTendo : effets graphiques préparés en arrière-plan (voir patch_azahar.py).\n"
+     "    Settings::values.async_shader_compilation = true;\n"),
 ])
