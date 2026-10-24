@@ -395,11 +395,23 @@ PTPS2_EXPORT void PTPS2Reset(void)
     }, false);
 }
 
-PTPS2_EXPORT void PTPS2SetTurbo(bool enabled)
+/// Vitesse du jeu : 1 normale ; 2 à 5 en avance rapide (limiteur « turbo » de PCSX2 réglé sur ce facteur, appliqué
+/// tout de suite même s'il était déjà en turbo).
+PTPS2_EXPORT void PTPS2SetSpeed(float factor)
 {
-    Host::RunOnCPUThread([enabled]() {
-        if (VMManager::HasValidVM())
-            VMManager::SetLimiterMode(enabled ? LimiterModeType::Turbo : LimiterModeType::Nominal);
+    Host::RunOnCPUThread([factor]() {
+        if (!VMManager::HasValidVM())
+            return;
+        if (factor > 1.0f)
+        {
+            EmuConfig.EmulationSpeed.TurboScalar = factor;
+            VMManager::SetLimiterMode(LimiterModeType::Turbo);
+            VMManager::UpdateTargetSpeed();
+        }
+        else
+        {
+            VMManager::SetLimiterMode(LimiterModeType::Nominal);
+        }
     }, false);
 }
 

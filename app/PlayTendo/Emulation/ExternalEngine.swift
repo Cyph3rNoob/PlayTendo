@@ -25,7 +25,8 @@ protocol ExternalEngine: AnyObject {
     func setPaused(_ paused: Bool)
     func stop()
     func reset()
-    func setTurbo(_ enabled: Bool)
+    /// Vitesse du jeu : 1 normale, 2 à 5 en avance rapide.
+    func setSpeed(_ factor: Double)
     /// Bouton RetroPad (PTButton).
     func setButton(_ button: Int, pressed: Bool)
     func setStick(_ stick: Int32, x: Float, y: Float)
@@ -214,7 +215,7 @@ extension PTVitaEngine: ExternalEngine {
     /// La Vita n'a pas de bouton « recommencer ».
     func reset() {}
     /// Pas d'avance rapide dans Vita3K.
-    func setTurbo(_ enabled: Bool) {}
+    func setSpeed(_ factor: Double) {}
     /// Vita3K n'a pas de sauvegarde rapide : seules les sauvegardes des jeux existent.
     func saveState(toPath path: String) -> Bool { false }
     func loadState(fromPath path: String) -> Bool { false }

@@ -42,7 +42,7 @@ void PTPS2ReleaseMemory(void);
 /// Fermeture de l'app (Mac) : arrêt de la partie et du thread de la console. Facultative : absente des moteurs iPhone.
 void PTPS2Shutdown(void);
 /// Avance rapide (vitesse « turbo » de PCSX2).
-void PTPS2SetTurbo(bool enabled);
+void PTPS2SetSpeed(float factor);
 
 /// Bouton de la manette, avec les numéros RetroPad de PlayTendo (PTButton) : B = Croix, A = Rond,
 /// Y = Carré, X = Triangle, L/R = L1/R1.

@@ -771,14 +771,29 @@ private struct PauseMenu: View {
                 session.loadState()
                 onResume()
             }
-            QuickButton(title: tr("Retour arrière"), icon: "backward.fill", enabled: session.rewindAvailable) {
+            // Appui long (clic droit sur Mac) : la vitesse, de ×2 à ×5.
+            QuickButton(title: tr("Retour arrière ×\(session.rewindSpeed)"), icon: "backward.fill", enabled: session.rewindAvailable) {
                 session.startRewind()
                 onResume()
             }
-            QuickButton(title: session.isFastForwarding ? tr("Vitesse normale") : tr("Avance rapide ×3"),
+            .contextMenu {
+                speedChoices(tr("Vitesse du retour arrière"), current: session.rewindSpeed) { speed in
+                    session.startRewind(speed: speed)
+                    onResume()
+                }
+            }
+            QuickButton(title: session.isFastForwarding ? tr("Vitesse normale") : tr("Avance rapide ×\(session.fastForwardSpeed)"),
                         icon: session.isFastForwarding ? "tortoise.fill" : "forward.fill", enabled: hasEngineExtras) {
                 session.toggleFastForward()
                 onResume()
+            }
+            .contextMenu {
+                if hasEngineExtras {
+                    speedChoices(tr("Vitesse de l'avance rapide"), current: session.fastForwardSpeed) { speed in
+                        session.startFastForward(speed: speed)
+                        onResume()
+                    }
+                }
             }
         }
         if !hasEngineExtras {
@@ -787,6 +802,21 @@ private struct PauseMenu: View {
                 .foregroundStyle(Neon.dim)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// ×2 à ×5, la vitesse choisie cochée ; un choix la lance tout de suite.
+    @ViewBuilder private func speedChoices(_ title: String, current: Int, choose: @escaping (Int) -> Void) -> some View {
+        Section(title) {
+            ForEach(EmulatorSession.speeds, id: \.self) { speed in
+                Button { choose(speed) } label: {
+                    if speed == current {
+                        Label("×\(speed)", systemImage: "checkmark")
+                    } else {
+                        Text("×\(speed)")
+                    }
+                }
+            }
         }
     }
 

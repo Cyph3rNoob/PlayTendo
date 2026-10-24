@@ -31,6 +31,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     @Published private(set) var hasSaveState: Bool
     @Published private(set) var diskInfo: DiskInfo?
     @Published private(set) var isFastForwarding = false
+    /// Vitesses de l'avance rapide et du retour en arrière (appui long sur leurs boutons du menu pause), gardées pour
+    /// tous les jeux.
+    @Published private(set) var fastForwardSpeed = EmulatorSession.storedSpeed(EmulatorSession.fastForwardSpeedKey, default: 3)
+    @Published private(set) var rewindSpeed = EmulatorSession.storedSpeed(EmulatorSession.rewindSpeedKey, default: 2)
     /// Retour en arrière lancé depuis le menu pause : la partie recule jusqu'à ce qu'on touche l'écran.
     @Published private(set) var isRewindingFromMenu = false
     /// Plus de photo à reprendre : la partie reste à la plus ancienne.
@@ -73,6 +77,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
     // Uniquement manipulés sur le thread d'émulation.
     private var fastForward = false
+    /// Images du moteur par image affichée en avance rapide ; images de jeu reculées par image en retour en arrière.
+    private var fastForwardSteps = EmulatorSession.storedSpeed(EmulatorSession.fastForwardSpeedKey, default: 3)
+    private var rewindStep = EmulatorSession.storedSpeed(EmulatorSession.rewindSpeedKey, default: 2)
     /// Retour en arrière demandé (menu pause, gâchette L2, Espace sur Mac), sous `condition`.
     private var rewindRequested = false
     /// Partie en train de reculer : son coupé (lu par le moteur, sur son thread).
@@ -391,8 +398,38 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         let enabled = isFastForwarding
         perform { [self] in
             fastForward = enabled
-            external?.setTurbo(enabled)
+            external?.setSpeed(enabled ? Double(fastForwardSteps) : 1)
         }
+    }
+
+    /// Choix proposés pour l'avance rapide et le retour en arrière.
+    static let speeds = [2, 3, 4, 5]
+    private static let fastForwardSpeedKey = "vitesseAvanceRapide"
+    private static let rewindSpeedKey = "vitesseRetourArriere"
+
+    private static func storedSpeed(_ key: String, default value: Int) -> Int {
+        let stored = UserDefaults.standard.integer(forKey: key)
+        return speeds.contains(stored) ? stored : value
+    }
+
+    /// Avance rapide à cette vitesse (gardée pour les prochaines fois), mise en route si elle ne l'était pas.
+    func startFastForward(speed: Int) {
+        fastForwardSpeed = speed
+        UserDefaults.standard.set(speed, forKey: Self.fastForwardSpeedKey)
+        isFastForwarding = true
+        perform { [self] in
+            fastForwardSteps = speed
+            fastForward = true
+            external?.setSpeed(Double(speed))
+        }
+    }
+
+    /// Retour en arrière à cette vitesse (gardée pour les prochaines fois), lancé depuis le menu.
+    func startRewind(speed: Int) {
+        rewindSpeed = speed
+        UserDefaults.standard.set(speed, forKey: Self.rewindSpeedKey)
+        perform { [self] in rewindStep = speed }
+        startRewind()
     }
 
     /// Met le disque `index` (à partir de 0) : menu pause › DISQUE.
@@ -589,11 +626,12 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         // Démarre avec un peu d'avance pour remplir le tampon audio.
         var deadline = clock.now - 0.05
         var lastAutoSave = clock.now
-        // Retour en arrière : photos de la partie, images depuis la dernière, images à garder la photo reprise.
+        // Retour en arrière : photos de la partie, images depuis la dernière, images de jeu à reculer (la vitesse en
+        // ajoute à chaque image affichée ; une photo est reprise chaque fois qu'il y en a assez).
         let rewindEnabled = rewindAvailable
         var rewindBuffer = RewindBuffer()
         var rewindFrame = 0
-        var rewindHold = 0
+        var rewindCredit = 0
         var rewindExhausted = false
         var clockReset = false
         var wasPaused = false
@@ -645,24 +683,30 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 
             let workStart = clock.now
             if rewinding {
-                // Retour en arrière : une photo reprise de temps en temps (assez souvent pour reculer environ deux fois
-                // plus vite que le jeu n'avance), chacune montrée avec une image du moteur, sans le son.
+                // Retour en arrière : `rewindStep` fois plus vite que le jeu n'avance (photos sautées au besoin), la
+                // dernière photo reprise montrée avec une image du moteur, sans le son.
                 rewindingNow = true
-                if rewindHold > 0 {
-                    rewindHold -= 1
-                } else if let state = rewindBuffer.popLast() {
-                    if core.loadState(state) { core.runFrame() }
-                    rewindHold = max(0, rewindBuffer.interval / 2 - 1)
-                } else if !rewindExhausted {
+                rewindCredit += rewindStep
+                var target: Data?
+                while rewindCredit >= rewindBuffer.interval, let state = rewindBuffer.popLast() {
+                    target = state
+                    rewindCredit -= rewindBuffer.interval
+                }
+                if let target {
+                    if core.loadState(target) { core.runFrame() }
+                } else if rewindCredit >= rewindBuffer.interval {
                     // Plus loin impossible : la partie reste à la plus ancienne photo (annoncé à l'écran).
-                    rewindExhausted = true
-                    DispatchQueue.main.async { self.rewindReachedStart = true }
+                    rewindCredit = 0
+                    if !rewindExhausted {
+                        rewindExhausted = true
+                        DispatchQueue.main.async { self.rewindReachedStart = true }
+                    }
                 }
             } else {
                 rewindingNow = false
-                rewindHold = 0
+                rewindCredit = 0
                 rewindExhausted = false
-                let steps = fastForward ? 3 : 1
+                let steps = fastForward ? fastForwardSteps : 1
                 for _ in 0..<steps { core.runFrame() }
                 framesLock.withLock { producedFrames &+= UInt64(steps) }
                 // Codes de triche : envoyés après la première image (le moteur a fini de démarrer). La PSP ne sait quel

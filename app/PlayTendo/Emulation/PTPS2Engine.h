@@ -37,7 +37,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)releaseMemory;
 /// Fermeture de l'app (Mac) : arrêt de la partie et du thread de la console.
 - (void)shutdown;
-- (void)setTurbo:(BOOL)enabled;
+/// Vitesse du jeu : 1 normale, 2 à 5 en avance rapide.
+- (void)setSpeed:(double)factor;
 /// Bouton RetroPad (PTButton).
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed;
 /// Stick 0 (gauche) ou 1 (droit), de -1 à 1.

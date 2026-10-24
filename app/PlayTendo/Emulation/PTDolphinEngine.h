@@ -49,7 +49,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Arrêt en règle de Dolphin avant la fermeture de l'app (Mac).
 - (void)shutdown;
 - (void)reset;
-- (void)setTurbo:(BOOL)enabled;
+/// Vitesse du jeu : 1 normale, 2 à 5 en avance rapide.
+- (void)setSpeed:(double)factor;
 /// Commandes envoyées à la Wiimote + Nunchuk (YES) ou à la manette GameCube (NO). Relâche tout.
 - (void)setWiimote:(BOOL)enabled;
 /// Bouton RetroPad (PTButton).

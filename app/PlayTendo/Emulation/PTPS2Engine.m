@@ -5,7 +5,7 @@
 // Fonctions du moteur, trouvées par dlsym (déclarées dans PTPS2.h).
 #define PT_PS2_FUNCTIONS(X) \
     X(PTPS2Setup) X(PTPS2PickBIOS) X(PTPS2Boot) X(PTPS2GetState) X(PTPS2SetPaused) X(PTPS2Stop) \
-    X(PTPS2Reset) X(PTPS2ReleaseMemory) X(PTPS2SetTurbo) X(PTPS2SetButton) X(PTPS2SetStick) X(PTPS2SaveState) X(PTPS2LoadState) \
+    X(PTPS2Reset) X(PTPS2ReleaseMemory) X(PTPS2SetSpeed) X(PTPS2SetButton) X(PTPS2SetStick) X(PTPS2SaveState) X(PTPS2LoadState) \
     X(PTPS2SetImageOptions) X(PTPS2GetAspectRatio) X(PTPS2CopySnapshot) X(PTPS2CopyLastError)
 
 typedef struct {
@@ -129,8 +129,8 @@ static void PTPS2Vibration(unsigned int pad, float large, float small) {
     _fn.PTPS2ReleaseMemory();
 }
 
-- (void)setTurbo:(BOOL)enabled {
-    _fn.PTPS2SetTurbo(enabled);
+- (void)setSpeed:(double)factor {
+    _fn.PTPS2SetSpeed((float)factor);
 }
 
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed {

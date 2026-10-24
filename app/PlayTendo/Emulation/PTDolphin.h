@@ -55,7 +55,7 @@ void PTDolphinStop(void);
 void PTDolphinShutdown(void);
 void PTDolphinReset(void);
 /// Avance rapide (vitesse ×3).
-void PTDolphinSetTurbo(bool enabled);
+void PTDolphinSetSpeed(float factor);
 
 /// Commandes envoyées à la Wiimote + Nunchuk (vrai) ou à la manette GameCube (faux, par défaut). Relâche tout.
 void PTDolphinSetWiimote(bool enabled);

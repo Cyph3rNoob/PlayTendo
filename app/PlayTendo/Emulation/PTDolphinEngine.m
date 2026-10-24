@@ -5,7 +5,7 @@
 // Fonctions du moteur, trouvées par dlsym (déclarées dans PTDolphin.h).
 #define PT_DOLPHIN_FUNCTIONS(X) \
     X(PTDolphinSetup) X(PTDolphinBoot) X(PTDolphinGetState) X(PTDolphinSetPaused) X(PTDolphinStop) \
-    X(PTDolphinReset) X(PTDolphinSetTurbo) X(PTDolphinSetButton) X(PTDolphinSetStick) X(PTDolphinSaveState) \
+    X(PTDolphinReset) X(PTDolphinSetSpeed) X(PTDolphinSetButton) X(PTDolphinSetStick) X(PTDolphinSaveState) \
     X(PTDolphinLoadState) X(PTDolphinCopyLastError) X(PTDolphinSetWiimote) X(PTDolphinSetPointer) \
     X(PTDolphinGetAspectRatio) X(PTDolphinSetImageOptions) X(PTDolphinCaptureScreen) X(PTDolphinFastmemStatus)
 
@@ -175,8 +175,8 @@ static void PTDolphinRumble(int pad, double strength) {
     _fn.PTDolphinReset();
 }
 
-- (void)setTurbo:(BOOL)enabled {
-    _fn.PTDolphinSetTurbo(enabled);
+- (void)setSpeed:(double)factor {
+    _fn.PTDolphinSetSpeed((float)factor);
 }
 
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed {

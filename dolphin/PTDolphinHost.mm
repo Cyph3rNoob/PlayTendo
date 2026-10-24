@@ -516,9 +516,10 @@ PTDOLPHIN_EXPORT void PTDolphinReset(void)
   });
 }
 
-PTDOLPHIN_EXPORT void PTDolphinSetTurbo(bool enabled)
+// Vitesse du jeu : 1 normale ; 2 à 5 en avance rapide.
+PTDOLPHIN_EXPORT void PTDolphinSetSpeed(float factor)
 {
-  Config::SetCurrent(Config::MAIN_EMULATION_SPEED, enabled ? 3.0f : 1.0f);
+  Config::SetCurrent(Config::MAIN_EMULATION_SPEED, factor > 1.0f ? factor : 1.0f);
 }
 
 // MARK: - Commandes
