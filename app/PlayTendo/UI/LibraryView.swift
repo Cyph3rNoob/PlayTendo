@@ -67,7 +67,7 @@ struct LibraryView: View {
                         sections
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, Self.sideMargin)
                 .padding(.top, 6)
                 .padding(.bottom, 40)
                 .id("\(language.rawValue)-\(theme.rawValue)")
@@ -399,6 +399,10 @@ struct LibraryView: View {
         return GameSystem.libraryGroups.filter(present.contains)
     }
 
+    /// Marge de la bibliothèque à gauche et à droite. Les rangées qui défilent de côté (filtres, Continuer) la
+    /// reprennent à l'intérieur : elles défilent ainsi jusqu'au bord de l'écran au lieu d'être coupées à la marge.
+    static let sideMargin: CGFloat = 16
+
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -422,9 +426,10 @@ struct LibraryView: View {
                 }
             }
             .padding(.vertical, 8)
-            .padding(.horizontal, 2)
+            .padding(.horizontal, Self.sideMargin + 2)
         }
         .padding(.vertical, -8)
+        .padding(.horizontal, -Self.sideMargin)
     }
 
     // MARK: Continuer
@@ -440,9 +445,10 @@ struct LibraryView: View {
                     }
                 }
                 .padding(.vertical, 10)
-                .padding(.horizontal, 2)
+                .padding(.horizontal, Self.sideMargin + 2)
             }
             .padding(.vertical, -10)
+            .padding(.horizontal, -Self.sideMargin)
         }
     }
 
