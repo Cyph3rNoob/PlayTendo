@@ -800,7 +800,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     rewindCredit -= rewindBuffer.interval
                 }
                 if let target {
-                    if core.loadState(target) { core.runFrame() }
+                    autoreleasepool { if core.loadState(target) { core.runFrame() } }
                 } else if rewindCredit >= rewindBuffer.interval {
                     // Plus loin impossible : la partie reste à la plus ancienne photo (annoncé à l'écran).
                     rewindCredit = 0
@@ -816,9 +816,13 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 rewindCredit = 0
                 rewindExhausted = false
                 let steps = fastForward ? fastForwardSteps : 1
+                // Une réserve d'objets vidée à chaque image : ce fil ne rend jamais la main, les objets « à libérer plus
+                // tard » du moteur s'y entassaient (2026-10-24 : 3 Go après une demi-heure de Pokémon Or).
                 for _ in 0..<steps {
-                    core.runFrame()
-                    if achievementsOn { PTAchievements.shared.doFrame() }
+                    autoreleasepool {
+                        core.runFrame()
+                        if achievementsOn { PTAchievements.shared.doFrame() }
+                    }
                 }
                 framesLock.withLock { producedFrames &+= UInt64(steps) }
                 // Codes de triche : envoyés après la première image (le moteur a fini de démarrer). La PSP ne sait quel
@@ -833,7 +837,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 // Photo de la partie pour pouvoir reculer (toutes les `interval` images).
                 if rewindEnabled {
                     rewindFrame += 1
-                    if rewindFrame >= rewindBuffer.interval, let state = core.saveState() {
+                    // Photo prise dans sa propre réserve d'objets : sans elle, chaque photo (112 Ko pour la Game Boy)
+                    // restait en mémoire même une fois sortie du tampon.
+                    if rewindFrame >= rewindBuffer.interval, let state = autoreleasepool(invoking: { core.saveState() }) {
                         rewindFrame = 0
                         rewindBuffer.push(state)
                     }
@@ -844,7 +850,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             if core.shutdownRequested { break }
             if let state = pendingReloadState {
                 pendingReloadAttempts += 1
-                if core.loadState(state) {
+                if autoreleasepool(invoking: { core.loadState(state) }) {
                     pendingReloadState = nil
                     if resuming {
                         resuming = false
