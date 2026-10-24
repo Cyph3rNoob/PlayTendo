@@ -40,7 +40,7 @@ struct GameScreen {
     }
 
     private func update(_ view: MTKView, _ renderer: GameRenderer) {
-        renderer.configure(source: source, smoothing: smoothing, filter: filter)
+        renderer.configure(source: source, smoothing: smoothing, filter: filter, size: view.drawableSize)
     }
 }
 
@@ -92,6 +92,9 @@ final class GameRenderer: NSObject, MTKViewDelegate, @unchecked Sendable {
         var source = CGRect(x: 0, y: 0, width: 1, height: 1)
         var smoothing = false
         var filter = 0
+        /// Taille de l'image de la vue, en pixels. Lue sur la vue (fil principal) : sa couche annonce 0×0 tant que
+        /// la vue n'a pas dessiné elle-même (MTKView ne la lui donne qu'à ce moment-là).
+        var size = CGSize.zero
     }
     /// Réglages voulus (fil principal), repris au début de chaque dessin.
     private let options = OSAllocatedUnfairLock(initialState: Options())
@@ -136,14 +139,29 @@ final class GameRenderer: NSObject, MTKViewDelegate, @unchecked Sendable {
     func attach(_ view: MTKView) {
         let layer = view.layer as? CAMetalLayer
         renderQueue.async { self.layer = layer }
-        requestRender()
+        resize(view.drawableSize)
     }
 
     /// Fil principal : réglages de l'écran ; redessiné s'ils changent (même en pause).
-    func configure(source: CGRect, smoothing: Bool, filter: Int) {
-        let wanted = Options(source: source, smoothing: smoothing, filter: filter)
+    func configure(source: CGRect, smoothing: Bool, filter: Int, size: CGSize) {
+        change { options in
+            options.source = source
+            options.smoothing = smoothing
+            options.filter = filter
+            options.size = size
+        }
+    }
+
+    /// Fil principal : nouvelle taille de la vue.
+    private func resize(_ size: CGSize) {
+        change { $0.size = size }
+    }
+
+    private func change(_ edit: (inout Options) -> Void) {
         let changed = options.withLock { current -> Bool in
-            guard current != wanted else { return false }
+            var wanted = current
+            edit(&wanted)
+            guard wanted != current else { return false }
             current = wanted
             return true
         }
@@ -164,7 +182,7 @@ final class GameRenderer: NSObject, MTKViewDelegate, @unchecked Sendable {
     }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        requestRender()
+        resize(size)
     }
 
     func draw(in view: MTKView) {
@@ -179,8 +197,9 @@ final class GameRenderer: NSObject, MTKViewDelegate, @unchecked Sendable {
         filter = wanted.filter
         if uploadLatestFrame() { frameNotShown = true }
         guard let layer else { return }
-        let drawableSize = layer.drawableSize
+        let drawableSize = wanted.size
         guard drawableSize.width > 0, drawableSize.height > 0 else { return }
+        if layer.drawableSize != drawableSize { layer.drawableSize = drawableSize }
         // Rien de nouveau (même image, jeu à 30 images/s) : l'écran garde l'image déjà affichée, sans réveiller la
         // puce graphique.
         guard frameNotShown || drawableSize != drawnSize || source != drawnSource || smoothing != drawnSmoothing
