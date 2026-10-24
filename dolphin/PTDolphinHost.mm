@@ -414,6 +414,10 @@ static bool PTDolphinBootFiles(std::vector<std::string> files, bool jit)
     Config::SetBase(Config::GFX_SHADER_COMPILATION_MODE, ShaderCompilationMode::AsynchronousUberShaders);
 #endif
     Config::SetBase(Config::GFX_SHADER_COMPILER_THREADS, -1);
+    // Double cœur (« Dual Core » de DolphiniOS, d'office sur Android) : le processeur de la console et la préparation
+    // des images sur deux fils (2026-10-25 ; avant : un seul, « CPU Thread separate = No »). Les jeux qui ne le
+    // supportent pas le coupent dans leurs réglages (GameSettings), qui passent avant celui-ci.
+    Config::SetBase(Config::MAIN_CPU_THREAD, true);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, 1.0f);
     Config::SetBase(Config::MAIN_AUTO_DISC_CHANGE, files.size() > 1);
     // Codes de triche : ceux de PlayTendo (PTDolphinSetCheats), donnés une fois le jeu lancé.

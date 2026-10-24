@@ -177,6 +177,9 @@ static void PTPS2ApplyFixedSettings(INISettingsInterface* si, const char* biosDi
     si->SetBoolValue("EmuCore/CPU/Recompiler", "EnableVU0", true);
     si->SetBoolValue("EmuCore/CPU/Recompiler", "EnableVU1", true);
     si->SetBoolValue("EmuCore/CPU/Recompiler", "EnableFastmem", true);
+    // VU1 sur son propre fil (MTVU, comme sur iPhone) : un cœur du processeur de plus pour la PS2 (2026-10-25). Les
+    // quelques jeux qui ne le supportent pas le perdent d'office (base de jeux de PCSX2).
+    si->SetBoolValue("EmuCore/Speedhacks", "vuThread", true);
     si->SetIntValue("EmuCore/GS", "Renderer", static_cast<int>(GSRendererType::Metal));
     // Son par Cubeb (CoreAudio), comme PCSX2 sur Mac.
     si->SetStringValue("SPU2/Output", "Backend", "Cubeb");

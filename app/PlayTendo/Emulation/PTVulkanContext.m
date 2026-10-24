@@ -32,10 +32,11 @@ static PFN_vkCreateInstance vkCreateInstance;
 
 static void PTVKSetImage(void *handle, const struct retro_vulkan_image *image, uint32_t numSemaphores,
                          const VkSemaphore *semaphores, uint32_t srcQueueFamily);
-static uint32_t PTVKGetSyncIndex(void *handle) { return 0; }
-static uint32_t PTVKGetSyncIndexMask(void *handle) { return 1; }
+static uint32_t PTVKGetSyncIndex(void *handle);
+/// Deux indices : le moteur 3DS garde deux images en préparation (PresentWindow, « double buffering »).
+static uint32_t PTVKGetSyncIndexMask(void *handle) { return 0x3; }
 static void PTVKSetCommandBuffers(void *handle, uint32_t count, const VkCommandBuffer *buffers);
-static void PTVKWaitSyncIndex(void *handle) {}
+static void PTVKWaitSyncIndex(void *handle);
 static void PTVKLockQueue(void *handle);
 static void PTVKUnlockQueue(void *handle);
 static void PTVKSetSignalSemaphore(void *handle, VkSemaphore semaphore);
@@ -52,11 +53,18 @@ static void PTVKSetSignalSemaphore(void *handle, VkSemaphore semaphore);
     struct retro_hw_render_interface_vulkan _interface;
     pthread_mutex_t _queueLock;
 
+    // Une copie par tampon de sortie, avec sa liste de commandes et sa barrière (2026-10-25) : l'image d'une copie
+    // n'est attendue qu'à l'image suivante, la puce graphique travaille pendant que le moteur prépare la suivante.
     VkCommandPool _commandPool;
-    VkCommandBuffer _commandBuffer;
-    VkFence _fence;
-    /// La dernière copie n'était pas finie au bout d'1 s : liste de commandes et barrière encore occupées.
-    BOOL _copyPending;
+    VkCommandBuffer _commandBuffers[PT_VK_BUFFERS];
+    VkFence _fences[PT_VK_BUFFERS];
+    /// Copie envoyée et pas encore attendue (sa barrière sera signalée une fois finie).
+    BOOL _pending[PT_VK_BUFFERS];
+    /// Copies envoyées depuis le début : la prochaine va dans le tampon `_copies % PT_VK_BUFFERS`, et le moteur
+    /// prépare son image avec l'indice de synchronisation `_copies % 2`.
+    uint64_t _copies;
+    /// Tampon de la copie précédente, montré à l'image suivante (-1 : aucun).
+    int _previous;
 
     // Dernière image du moteur (set_image) et ce qui va avec, gardés jusqu'à la copie.
     pthread_mutex_t _imageLock;
@@ -75,7 +83,6 @@ static void PTVKSetSignalSemaphore(void *handle, VkSemaphore semaphore);
     VkDeviceMemory _outputMemory[PT_VK_BUFFERS];
     unsigned _outputWidth;
     unsigned _outputHeight;
-    int _current;
     BOOL _loggedFirstFrame;
 }
 
@@ -174,18 +181,22 @@ static void PTVKSetSignalSemaphore(void *handle, VkSemaphore semaphore);
         .queueFamilyIndex = _queueFamily,
     };
     VkFenceCreateInfo fenceInfo = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    if (vkCreateCommandPool(_device, &poolInfo, NULL, &_commandPool) != VK_SUCCESS
-        || vkCreateFence(_device, &fenceInfo, NULL, &_fence) != VK_SUCCESS) {
-        PTLogLine(@"Vulkan : préparation des commandes impossible");
-        return NO;
+    BOOL ready = vkCreateCommandPool(_device, &poolInfo, NULL, &_commandPool) == VK_SUCCESS;
+    for (int i = 0; ready && i < PT_VK_BUFFERS; i++) {
+        ready = vkCreateFence(_device, &fenceInfo, NULL, &_fences[i]) == VK_SUCCESS;
     }
     VkCommandBufferAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = _commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
+        .commandBufferCount = PT_VK_BUFFERS,
     };
-    vkAllocateCommandBuffers(_device, &allocInfo, &_commandBuffer);
+    if (!ready || vkAllocateCommandBuffers(_device, &allocInfo, _commandBuffers) != VK_SUCCESS) {
+        PTLogLine(@"Vulkan : préparation des commandes impossible");
+        return NO;
+    }
+    _copies = 0;
+    _previous = -1;
 
     _interface = (struct retro_hw_render_interface_vulkan){
         .interface_type = RETRO_HW_RENDER_INTERFACE_VULKAN,
@@ -278,6 +289,18 @@ static void PTVKSetCommandBuffers(void *handle, uint32_t count, const VkCommandB
     pthread_mutex_unlock(&context->_imageLock);
 }
 
+/// Le moteur prépare l'image suivante avec les ressources de l'indice `_copies % 2` : elles ont servi deux images
+/// plus tôt, dont la copie doit être finie avant (elle l'est presque toujours : chaque copie est attendue à l'image
+/// d'après).
+static uint32_t PTVKGetSyncIndex(void *handle) {
+    return (uint32_t)(((__bridge PTVulkanContext *)handle)->_copies % 2);
+}
+
+static void PTVKWaitSyncIndex(void *handle) {
+    PTVulkanContext *context = (__bridge PTVulkanContext *)handle;
+    if (context->_copies >= 2) [context waitForCopy:(uint32_t)((context->_copies - 2) % PT_VK_BUFFERS)];
+}
+
 static void PTVKLockQueue(void *handle) {
     pthread_mutex_lock(&((__bridge PTVulkanContext *)handle)->_queueLock);
 }
@@ -313,6 +336,7 @@ static void PTVKSetSignalSemaphore(void *handle, VkSemaphore semaphore) {
     if (width == _outputWidth && height == _outputHeight && _buffers[0]) return YES;
     if (_outputWidth) vkDeviceWaitIdle(_device);
     [self destroyOutputs];
+    _previous = -1;
     NSDictionary *attributes = @{
         (id)kCVPixelBufferIOSurfacePropertiesKey: @{},
         (id)kCVPixelBufferMetalCompatibilityKey: @YES,
@@ -393,15 +417,22 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
     };
 }
 
+/// Attend la copie envoyée dans ce tampon (1 s au plus) ; NO si elle n'est toujours pas finie (puce graphique très
+/// en retard : liste de commandes et barrière restent occupées).
+- (BOOL)waitForCopy:(uint32_t)slot {
+    if (!_device || !_pending[slot]) return YES;
+    if (vkWaitForFences(_device, 1, &_fences[slot], VK_TRUE, 1000000000ull) != VK_SUCCESS) return NO;
+    vkResetFences(_device, 1, &_fences[slot]);
+    _pending[slot] = NO;
+    return YES;
+}
+
 - (CVPixelBufferRef)finishFrameWithWidth:(unsigned)width height:(unsigned)height {
     if (!_device || width == 0 || height == 0) return NULL;
-    // Copie précédente pas encore finie (puce graphique très en retard) : elle est attendue avant de reprendre sa liste
-    // de commandes et sa barrière ; toujours pas finie, cette image est sautée (l'image du moteur reste en attente).
-    if (_copyPending) {
-        if (vkWaitForFences(_device, 1, &_fence, VK_TRUE, 1000000000ull) != VK_SUCCESS) return NULL;
-        vkResetFences(_device, 1, &_fence);
-        _copyPending = NO;
-    }
+    // Tampon de cette copie : sa copie d'il y a PT_VK_BUFFERS images est presque toujours finie depuis longtemps ;
+    // toujours pas finie au bout d'1 s, cette image est sautée (l'image du moteur reste en attente).
+    uint32_t slot = (uint32_t)(_copies % PT_VK_BUFFERS);
+    if (![self waitForCopy:slot]) return NULL;
     pthread_mutex_lock(&_imageLock);
     BOOL hasImage = _hasImage;
     struct retro_vulkan_image image = _image;
@@ -419,20 +450,20 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
     if (!hasImage || !image.create_info.image) return NULL;
     if (![self ensureOutputWidth:width height:height]) return NULL;
 
-    _current = (_current + 1) % PT_VK_BUFFERS;
+    VkCommandBuffer commandBuffer = _commandBuffers[slot];
     VkImage source = image.create_info.image;
-    VkImage target = _outputImages[_current];
+    VkImage target = _outputImages[slot];
     VkImageSubresourceRange sourceRange = image.create_info.subresourceRange;
     sourceRange.levelCount = 1;
     sourceRange.layerCount = 1;
     VkImageSubresourceRange targetRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    vkResetCommandBuffer(_commandBuffer, 0);
+    vkResetCommandBuffer(commandBuffer, 0);
     VkCommandBufferBeginInfo begin = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    vkBeginCommandBuffer(_commandBuffer, &begin);
+    vkBeginCommandBuffer(commandBuffer, &begin);
     // L'image du moteur est prête à être lue par un shader : on la passe en source de copie, puis on la lui rend telle
     // qu'il l'a donnée. Les commandes précédentes de la même file sont terminées avant (ALL_COMMANDS).
     VkImageMemoryBarrier before[2] = {
@@ -441,7 +472,7 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
         PTVKBarrier(target, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
                     VK_ACCESS_TRANSFER_WRITE_BIT, targetRange),
     };
-    vkCmdPipelineBarrier(_commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
                          0, NULL, 0, NULL, 2, before);
     VkImageBlit region = {
         .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, sourceRange.baseMipLevel, sourceRange.baseArrayLayer, 1},
@@ -449,7 +480,7 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
         .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
         .dstOffsets = {{0, 0, 0}, {(int32_t)width, (int32_t)height, 1}},
     };
-    vkCmdBlitImage(_commandBuffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target,
+    vkCmdBlitImage(commandBuffer, source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, target,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_NEAREST);
     VkImageMemoryBarrier after[2] = {
         PTVKBarrier(source, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image.image_layout, VK_ACCESS_TRANSFER_READ_BIT,
@@ -457,15 +488,15 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
         PTVKBarrier(target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_ACCESS_MEMORY_READ_BIT, targetRange),
     };
-    vkCmdPipelineBarrier(_commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
                          0, NULL, 0, NULL, 2, after);
-    vkEndCommandBuffer(_commandBuffer);
+    vkEndCommandBuffer(commandBuffer);
 
     // Commandes que le moteur a confiées à PlayTendo (set_command_buffers), puis la copie.
     VkCommandBuffer submitted[9];
     uint32_t submittedCount = 0;
     for (uint32_t i = 0; i < coreCount; i++) submitted[submittedCount++] = coreBuffers[i];
-    submitted[submittedCount++] = _commandBuffer;
+    submitted[submittedCount++] = commandBuffer;
     VkPipelineStageFlags stages[8];
     for (uint32_t i = 0; i < 8; i++) stages[i] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     VkSubmitInfo submit = {
@@ -479,26 +510,30 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
         .pSignalSemaphores = &signal,
     };
     pthread_mutex_lock(&_queueLock);
-    VkResult result = vkQueueSubmit(_queue, 1, &submit, _fence);
+    VkResult result = vkQueueSubmit(_queue, 1, &submit, _fences[slot]);
     pthread_mutex_unlock(&_queueLock);
     if (result != VK_SUCCESS) {
         PTLogLine([NSString stringWithFormat:@"Vulkan : envoi de la copie impossible (%d)", result]);
         return NULL;
     }
-    // Attendue ici : l'image est complète quand l'écran la lit (une copie, très courte). Pas finie au bout d'1 s :
-    // l'image n'est pas montrée, et la barrière n'est remise à zéro qu'une fois la copie finie (image suivante).
-    if (vkWaitForFences(_device, 1, &_fence, VK_TRUE, 1000000000ull) != VK_SUCCESS) {
-        _copyPending = YES;
+    _pending[slot] = YES;
+    _copies++;
+    // Montrée : l'image précédente (sa copie est presque toujours finie pendant que le moteur préparait celle-ci),
+    // comme pour la N64 et la PSP. Avant, chaque copie était attendue tout de suite : le moteur restait arrêté pendant
+    // tout le travail de la puce graphique pour l'image.
+    int shown = _previous;
+    _previous = (int)slot;
+    if (shown < 0) return NULL;
+    if (![self waitForCopy:(uint32_t)shown]) {
         PTLogLine(@"Vulkan : copie de l'image pas finie au bout d'1 s (puce graphique en retard), image sautée");
         return NULL;
     }
-    vkResetFences(_device, 1, &_fence);
     if (!_loggedFirstFrame) {
         _loggedFirstFrame = YES;
         PTLogLine([NSString stringWithFormat:@"Vulkan : première image %u×%u (format %d)", width, height,
                    image.create_info.format]);
     }
-    return _buffers[_current];
+    return _buffers[shown];
 }
 
 #pragma mark Fin
@@ -507,11 +542,14 @@ static VkImageMemoryBarrier PTVKBarrier(VkImage image, VkImageLayout from, VkIma
     if (_device) {
         vkDeviceWaitIdle(_device);
         [self destroyOutputs];
-        if (_fence) vkDestroyFence(_device, _fence, NULL);
+        for (int i = 0; i < PT_VK_BUFFERS; i++) {
+            if (_fences[i]) vkDestroyFence(_device, _fences[i], NULL);
+            _fences[i] = VK_NULL_HANDLE;
+            _pending[i] = NO;
+        }
         if (_commandPool) vkDestroyCommandPool(_device, _commandPool, NULL);
-        _fence = VK_NULL_HANDLE;
-        _copyPending = NO;
         _commandPool = VK_NULL_HANDLE;
+        _previous = -1;
         if (_negotiation && _negotiation->destroy_device) _negotiation->destroy_device();
         vkDestroyDevice(_device, NULL);
         _device = VK_NULL_HANDLE;
