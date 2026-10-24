@@ -18,6 +18,11 @@ consoles) peut exécuter du code. Elle est vue deux fois : une adresse pour écr
 
 Codes de triche : 7. citra_libretro.cpp : retro_cheat_reset et retro_cheat_set étaient vides ; ils remplissent le
    moteur de codes Gateway d'Azahar (lignes « XXXXXXXX YYYYYYYY », une par ligne), appliqués 5 fois par seconde.
+
+Homebrews : 8. vk_pipeline_cache.cpp (2026-10-25, plantage d'Emerald3DS à chaque reprise) : charger une partie
+   reconstruit la console, donc un cache de shaders neuf, au numéro de jeu 0, sans carnet ouvert ; SwitchCache le
+   croyait déjà prêt pour un homebrew (numéro 0 lui aussi) et ne l'ouvrait pas → pointeur vide au premier dessin
+   (ShaderDiskCache::UseProgrammableVertexShader). Il n'est plus sauté tant qu'aucun carnet n'est ouvert.
 """
 import os
 import sys
@@ -165,4 +170,15 @@ patch("src/citra_libretro/citra_libretro.cpp", [
      "    cheat->SetEnabled(enabled);\n"
      "    Core::System::GetInstance().CheatEngine().AddCheat(std::move(cheat));\n"
      "}\n"),
+])
+
+patch("src/video_core/renderer_vulkan/vk_pipeline_cache.cpp", [
+    ("    if (GetProgramID() == title_id) {\n"
+     "        LOG_DEBUG(Render_Vulkan,\n"
+     "                  \"Skipping pipeline cache switch - already using cache for title_id={:016X}\",\n",
+     "    // PlayTendo : après le chargement d'une partie, le cache est neuf (numéro 0, aucun carnet ouvert) ; un\n"
+     "    // homebrew (numéro 0 aussi) doit quand même ouvrir le sien.\n"
+     "    if (GetProgramID() == title_id && curr_disk_cache) {\n"
+     "        LOG_DEBUG(Render_Vulkan,\n"
+     "                  \"Skipping pipeline cache switch - already using cache for title_id={:016X}\",\n"),
 ])

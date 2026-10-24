@@ -434,6 +434,7 @@ enum English {
         "Câble débranché par %@": "Cable disconnected by %@",
         "demande à accepter": "request to accept",
         "CURSEUR 3D": "3D SLIDER",
+        "La reprise avait fait planter le jeu : il démarre du début": "Resuming crashed the game last time: it starts from the beginning",
         "relief : certains jeux changent d'image": "depth: some games change their picture",
         "Baissé": "Down",
         "Levé": "Up",

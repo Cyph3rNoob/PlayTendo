@@ -414,6 +414,43 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
+    // MARK: Garde-fou de la reprise automatique
+
+    /// Fichier posé pendant les premières secondes d'une reprise automatique, retiré ensuite ou en quittant : encore
+    /// là au lancement suivant, il veut dire que l'app est tombée juste après la reprise (2026-10-25 : Emerald3DS
+    /// plantait 4 s après chaque reprise, avant qu'on puisse ouvrir le menu). Cette reprise est alors mise de côté.
+    private var resumeGuard: URL {
+        Paths.resumeFile(for: game).deletingLastPathComponent()
+            .appendingPathComponent(Paths.fileName(for: game) + ".reprise.essai")
+    }
+
+    /// 10 s de jeu sans tomber : la reprise est bonne.
+    private static let resumeWatchFrames = 600
+    private static let resumeWatchSeconds = 10.0
+
+    private func armResumeGuard() {
+        FileManager.default.createFile(atPath: resumeGuard.path, contents: nil)
+    }
+
+    private func disarmResumeGuard() {
+        try? FileManager.default.removeItem(at: resumeGuard)
+    }
+
+    /// Vrai si la dernière reprise automatique a fait tomber l'app : elle est renommée « ….reprise-ecartee.state »
+    /// (gardée, mais plus rechargée d'elle-même) et le jeu démarre du début.
+    private func resumeCrashedLastTime() -> Bool {
+        guard FileManager.default.fileExists(atPath: resumeGuard.path) else { return false }
+        disarmResumeGuard()
+        let resume = Paths.resumeFile(for: game)
+        let aside = resume.deletingLastPathComponent().appendingPathComponent(Paths.fileName(for: game) + ".reprise-ecartee.state")
+        try? FileManager.default.removeItem(at: aside)
+        guard (try? FileManager.default.moveItem(at: resume, to: aside)) != nil else { return false }
+        PTLogLine("Reprise automatique mise de côté (\(aside.lastPathComponent)) : l'app s'était arrêtée juste après "
+                  + "la dernière ; jeu démarré du début")
+        showToast(tr("La reprise avait fait planter le jeu : il démarre du début"))
+        return true
+    }
+
     /// Reprise automatique : la partie au moment de quitter, compressée comme une sauvegarde rapide.
     private func writeResume(_ state: Data?) {
         guard let state else { return }
@@ -696,8 +733,10 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
 
         // Reprise automatique : la partie laissée en quittant, rechargée après les premières images (comme après un
-        // rechargement du moteur : certains moteurs refusent une sauvegarde rapide avant d'avoir tourné).
-        if let file = try? Data(contentsOf: Paths.resumeFile(for: game)), let state = Self.unpackState(file) {
+        // rechargement du moteur : certains moteurs refusent une sauvegarde rapide avant d'avoir tourné). Mise de côté
+        // si la dernière a fait tomber l'app.
+        if !resumeCrashedLastTime(), let file = try? Data(contentsOf: Paths.resumeFile(for: game)),
+           let state = Self.unpackState(file) {
             pendingReloadState = state
             pendingReloadAttempts = 0
             resuming = true
@@ -740,6 +779,8 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var rewindExhausted = false
         var clockReset = false
         var wasPaused = false
+        // Images de jeu restantes avant de retirer le garde-fou de la reprise automatique.
+        var resumeWatch = 0
         // Mesure de vitesse (journal toutes les 10 s si le jeu n'arrive pas à suivre : son haché, ralentis).
         var statStart = clock.now
         var statFrames = 0
@@ -848,12 +889,18 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             statWork += clock.now - workStart
             statFrames += 1
             if core.shutdownRequested { break }
+            if resumeWatch > 0 {
+                resumeWatch -= 1
+                if resumeWatch == 0 { disarmResumeGuard() }
+            }
             if let state = pendingReloadState {
                 pendingReloadAttempts += 1
+                if resuming && pendingReloadAttempts == 1 { armResumeGuard() }
                 if autoreleasepool(invoking: { core.loadState(state) }) {
                     pendingReloadState = nil
                     if resuming {
                         resuming = false
+                        resumeWatch = Self.resumeWatchFrames
                         if achievementsOn { PTAchievements.shared.restoreProgress(nil) }
                         PTLogLine("Reprise automatique : partie reprise après \(pendingReloadAttempts) image(s)")
                         showToast(tr("Partie reprise"))
@@ -865,6 +912,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                     pendingReloadState = nil
                     if resuming {
                         resuming = false
+                        disarmResumeGuard()
                         PTLogLine("Reprise automatique : partie illisible, jeu démarré du début")
                         showToast(tr("Reprise impossible : le jeu démarre du début"))
                     } else {
@@ -926,6 +974,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         saveThumbnail()
         // Reprise pas encore appliquée (jeu quitté tout de suite) : l'ancienne reste.
         if !(resuming && pendingReloadState != nil) { writeResume(core.saveState()) }
+        disarmResumeGuard()
         if achievementsOn { PTAchievements.shared.endGame() }
         core.unloadGame()
         audio.stop()
@@ -1438,16 +1487,19 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         // dessus, sans logo ni son de démarrage ; sinon (moteur d'avant), elle est chargée quelques secondes après.
         // Pas en Hardcore (reprendre une partie sauvegardée y est interdit).
         let resumeFile = Paths.resumeFile(for: game)
+        if !game.system.isVita { _ = resumeCrashedLastTime() }
         let hardcoreWanted = achievementsOn && PTAchievements.shared.hardcore
         if hardcoreWanted && FileManager.default.fileExists(atPath: resumeFile.path) {
             PTLogLine("\(name) : reprise automatique ignorée (Hardcore, RetroAchievements)")
         }
         let hasResume = !game.system.isVita && !hardcoreWanted && FileManager.default.fileExists(atPath: resumeFile.path)
+        if hasResume { armResumeGuard() }
         let resumedAtBoot = engine.prepareBoot(resume: hasResume ? resumeFile.path : nil)
         // Jeu en plusieurs disques (GameCube) : le moteur les reçoit tous, et passe au suivant quand le jeu le demande.
         let booted = game.discs.count > 1 ? engine.boot(discs: game.discs.map(\.path), jit: PTJITIsActive())
                                           : engine.boot(path: bootPath, jit: PTJITIsActive())
         guard booted else {
+            disarmResumeGuard()
             if achievementsOn { stopExternalAchievements(engine) }
             fail(engine.lastError().map(trMessage) ?? tr("Le jeu n'a pas pu démarrer."))
             return
@@ -1461,6 +1513,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         var aspect: CGFloat = 4.0 / 3.0
         var shownDisc: Int?
         var resumeAt: Double?     // reprise automatique à charger à ce moment-là
+        var resumeWatchUntil: Double?   // garde-fou de la reprise retiré à ce moment-là
         var cheatsAt: Double?     // codes de triche à donner à ce moment-là
 
         while true {
@@ -1505,9 +1558,11 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                         if engine.resumeLoaded == false {
                             PTLogLine("\(name) : reprise automatique illisible, jeu démarré du début")
                             showToast(tr("Reprise impossible : le jeu démarre du début"))
+                            disarmResumeGuard()
                         } else {
                             PTLogLine("\(name) : démarré directement sur la reprise automatique")
                             showToast(tr("Partie reprise"))
+                            resumeWatchUntil = clock.now + Self.resumeWatchSeconds
                         }
                         DispatchQueue.main.async { self.state = .running }
                     } else if hasResume {
@@ -1526,14 +1581,20 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                 failure = engine.lastError().map(trMessage) ?? tr("La console s'est arrêtée.")
                 break
             }
+            if let until = resumeWatchUntil, clock.now >= until {
+                resumeWatchUntil = nil
+                disarmResumeGuard()
+            }
             if let at = resumeAt, clock.now >= at {
                 resumeAt = nil
                 if engine.loadState(fromPath: Paths.resumeFile(for: game).path) {
                     PTLogLine("\(name) : reprise automatique chargée")
                     showToast(tr("Partie reprise"))
+                    resumeWatchUntil = clock.now + Self.resumeWatchSeconds
                 } else {
                     PTLogLine("\(name) : reprise automatique illisible (\(engine.lastError() ?? "raison inconnue")), jeu démarré du début")
                     showToast(tr("Reprise impossible : le jeu démarre du début"))
+                    disarmResumeGuard()
                 }
                 setLoadingDetail(nil)
                 DispatchQueue.main.async { self.state = .running }
@@ -1574,6 +1635,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             }
         }
 
+        disarmResumeGuard()
         if started && failure == nil {
             saveEngineThumbnail(engine)
             if !game.system.isVita {
