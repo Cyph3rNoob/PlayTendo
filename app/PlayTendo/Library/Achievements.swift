@@ -158,7 +158,8 @@ final class Achievements: ObservableObject {
         SecItemDelete(query(user: user) as CFDictionary)
         var item = query(user: user)
         item[kSecValueData as String] = Data(token.utf8)
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        // Jamais recopié vers un autre appareil par une sauvegarde ou une restauration.
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(item as CFDictionary, nil)
     }
 
@@ -168,6 +169,9 @@ final class Achievements: ObservableObject {
         item[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         guard SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        // Jeton rangé avant le 2026-10-24 : passé aussi en « cet appareil seulement ».
+        SecItemUpdate(query(user: user) as CFDictionary,
+                      [kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary)
         return String(data: data, encoding: .utf8)
     }
 

@@ -64,6 +64,23 @@ struct LinkCableView: View {
                 }
             }
             Button(tr("Annuler"), role: .destructive) { link.stop() }
+        case .request(let name):
+            Label(tr("\(name) veut se brancher"), systemImage: "cable.connector")
+                .font(.headline)
+            Text(tr("N'accepte que l'appareil de quelqu'un que tu connais, à côté de toi : il pourra échanger avec ton jeu."))
+                .foregroundStyle(.secondary)
+            Button { link.approve(true) } label: {
+                Label(tr("Accepter"), systemImage: "checkmark.circle")
+            }
+            Button(role: .destructive) { link.approve(false) } label: {
+                Label(tr("Refuser"), systemImage: "xmark.circle")
+            }
+        case .waitingApproval(let name):
+            HStack(spacing: 12) {
+                ProgressView()
+                Text(tr("En attente de l'accord de \(name)…"))
+            }
+            Button(tr("Annuler"), role: .destructive) { link.stop() }
         case .connecting(let name):
             HStack(spacing: 12) {
                 ProgressView()

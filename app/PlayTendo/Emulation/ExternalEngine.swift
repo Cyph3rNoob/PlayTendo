@@ -98,9 +98,14 @@ extension PTPS2Engine: ExternalEngine {
         return getFPS(&fps, speed: &speed) ? EnginePerformance(fps: fps, speed: speed) : nil
     }
 
+    /// Numéro lu sur le disque (donc choisi par qui a fait le fichier) : gardé seulement s'il a la forme d'un numéro
+    /// de jeu (lettres, chiffres, « - », « _ »), avant de servir dans une adresse de téléchargement.
     var gameIdentity: (serial: String, crc: UInt32)? {
         var crc: UInt32 = 0
-        return gameSerial(&crc).map { ($0, crc) }
+        guard let serial = gameSerial(&crc), !serial.isEmpty, serial.count <= 32,
+              serial.unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_") })
+        else { return nil }
+        return (serial, crc)
     }
 
     /// Codes de triche : fichier .pnach du jeu (gardé par le moteur pour ses prochains lancements).

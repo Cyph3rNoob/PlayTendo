@@ -484,6 +484,19 @@ final class GameLibrary: ObservableObject {
     }
 
 #if PLAYTENDO_VITA
+    /// Un lien symbolique dans un dossier glissé pourrait pointer n'importe où sur l'appareil (fichiers personnels) et
+    /// être suivi plus tard par le moteur : un jeu extrait d'une console n'en a jamais, le dossier est écarté.
+    nonisolated private static func containsSymbolicLink(_ folder: URL) -> Bool {
+        let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isSymbolicLinkKey])
+        while let item = enumerator?.nextObject() as? URL {
+            if (try? item.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
+                PTLogLine("Import : dossier écarté, il contient un lien vers un autre endroit (\(item.lastPathComponent)) : \(folder.lastPathComponent)")
+                return true
+            }
+        }
+        return false
+    }
+
     /// Dossier glissé (sur Mac surtout, sans app Fichiers) : les jeux, DLC et mises à jour PS Vita extraits de la console
     /// (dossier avec sce_sys/param.sfo), le dossier lui-même ou jusqu'à trois niveaux dessous (« VitaiOS/app/PCSA00011 »,
     /// « addcont/PCSA00011/<DLC> »), et les .PUP et .vpk qu'il contient. Copie du système : sur le même disque (APFS), un clone immédiat qui ne prend pas de place.
@@ -509,6 +522,7 @@ final class GameLibrary: ObservableObject {
                 present.append(target)
                 continue
             }
+            guard !containsSymbolicLink(folder) else { continue }
             let destination = uniqueFolderURL(named: folder.lastPathComponent)
             guard update(.copying, folder.lastPathComponent, 0, 0) else { throw PTArchiveError(.cancelled) }
             try manager.copyItem(at: folder, to: destination)
@@ -523,6 +537,7 @@ final class GameLibrary: ObservableObject {
                 present.append(rePatch)
                 continue
             }
+            guard !containsSymbolicLink(rePatch) else { continue }
             guard update(.copying, "rePatch \(rePatch.lastPathComponent)", 0, 0) else { throw PTArchiveError(.cancelled) }
             try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
@@ -621,6 +636,9 @@ final class GameLibrary: ObservableObject {
             let fileName = target.lastPathComponent
             guard update(.extracting, fileName, 0, size) else { throw PTArchiveError(.cancelled) }
             var written: Int64 = 0
+            // Jamais plus que la taille annoncée (une archive piégée peut mentir et remplir l'appareil) ; taille
+            // inconnue : la place libre, moins 1 Go.
+            archive.maximumEntrySize = archive.entrySize >= 0 ? archive.entrySize : Self.freeSpaceForArchives()
             try archive.extractEntry(to: target) { done in
                 written = done
                 return update(.extracting, fileName, done, size)
@@ -736,6 +754,13 @@ final class GameLibrary: ObservableObject {
     }
 
     /// Refuse d'avance un fichier plus gros que la place libre (sinon l'erreur n'arriverait qu'au bout de la décompression).
+    /// Place libre de l'appareil, moins 1 Go gardé pour le système (limite d'un fichier d'archive de taille inconnue).
+    nonisolated private static func freeSpaceForArchives() -> Int64 {
+        let free = (try? Paths.games.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+            .volumeAvailableCapacityForImportantUsage ?? 0
+        return max(0, free - (1 << 30))
+    }
+
     nonisolated private static func checkFreeSpace(for size: Int64) throws {
         guard size > 0,
               let free = try? Paths.games.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
@@ -941,7 +966,12 @@ final class GameLibrary: ObservableObject {
                 }
             }
         }
-        return names.map { folder.appendingPathComponent($0).standardizedFileURL }
+        // Seulement des fichiers du même dossier (ou de ses sous-dossiers) : un .cue ou un .m3u piégé qui citerait
+        // « ../Autre jeu.iso » ne doit pas emporter un autre jeu quand on le supprime (audit de sécurité du 2026-10-24).
+        return names.filter { name in
+            let parts = name.split(whereSeparator: { $0 == "/" || $0 == "\\" })
+            return !name.hasPrefix("/") && !name.hasPrefix("\\") && !name.contains(":") && !parts.contains("..")
+        }.map { folder.appendingPathComponent($0).standardizedFileURL }
     }
 
     /// Fichiers cités par les autres .cue et .m3u du dossier (à ne pas supprimer).

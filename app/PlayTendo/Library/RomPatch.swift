@@ -10,6 +10,10 @@ enum RomPatch {
     static let extensions: Set<String> = ["ips", "bps", "ups"]
     /// Consoles à cartouche : le jeu entier tient en mémoire, le patch s'applique d'un coup.
     static let systems: Set<GameSystem> = [.nes, .snes, .n64, .gb, .gbc, .gba, .nds]
+    /// Plus gros jeu patché accepté (une ROM DS fait au plus 512 Mo) et plus gros patch : au-delà, le fichier est piégé
+    /// ou abîmé, refusé au lieu d'épuiser la mémoire (audit de sécurité du 2026-10-24).
+    private static let maxGameSize = 512 << 20
+    private static let maxPatchSize = 256 << 20
 
     enum Failure: LocalizedError {
         case unreadable
@@ -104,8 +108,10 @@ enum RomPatch {
         if manager.fileExists(atPath: output.path), modified(output) > max(modified(game.url), modified(base)) {
             return output
         }
-        guard let patch = try? Data(contentsOf: game.url),
-              let original = try? Data(contentsOf: base, options: .alwaysMapped) else { throw Failure.unreadable }
+        let patchSize = (try? game.url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        guard patchSize <= maxPatchSize, let patch = try? Data(contentsOf: game.url),
+              let original = try? Data(contentsOf: base, options: .alwaysMapped),
+              original.count <= maxGameSize else { throw Failure.unreadable }
         var lastError = Failure.wrongSource
         for source in sources(original, system: game.system) {
             do {
@@ -182,7 +188,7 @@ enum RomPatch {
         guard GameIdentifier.crc32(source) == littleEndian(patch, at: end) else { throw Failure.wrongSource }
         var reader = Reader(bytes: patch, offset: 4)
         guard let sourceSize = reader.number(), let targetSize = reader.number(), let metadata = reader.number(),
-              sourceSize == source.count else { throw Failure.damaged }
+              sourceSize == source.count, targetSize <= maxGameSize, metadata <= end else { throw Failure.damaged }
         reader.offset += metadata
         var target = [UInt8](repeating: 0, count: targetSize)
         var written = 0, sourceOffset = 0, targetOffset = 0
@@ -224,12 +230,12 @@ enum RomPatch {
         guard GameIdentifier.crc32(source) == littleEndian(patch, at: end) else { throw Failure.wrongSource }
         var reader = Reader(bytes: patch, offset: 4)
         guard let sourceSize = reader.number(), let targetSize = reader.number(),
-              sourceSize == source.count else { throw Failure.damaged }
+              sourceSize == source.count, targetSize <= maxGameSize else { throw Failure.damaged }
         var target = Array(source.prefix(targetSize))
         if target.count < targetSize { target += [UInt8](repeating: 0, count: targetSize - target.count) }
         var offset = 0
         while reader.offset < end {
-            guard let skip = reader.number() else { throw Failure.damaged }
+            guard let skip = reader.number(), skip <= maxGameSize else { throw Failure.damaged }
             offset += skip
             while reader.offset < end {
                 let byte = patch[reader.offset]
@@ -252,15 +258,22 @@ enum RomPatch {
         let bytes: [UInt8]
         var offset: Int
 
+        /// nil si le nombre dépasse ce qu'un Int peut contenir (patch piégé) : jamais de plantage par débordement.
         mutating func number() -> Int? {
             var value = 0, shift = 1
-            while offset < bytes.count, shift < 1 << 56 {
+            while offset < bytes.count {
                 let byte = Int(bytes[offset])
                 offset += 1
-                value += (byte & 0x7F) * shift
+                let (part, overflow1) = (byte & 0x7F).multipliedReportingOverflow(by: shift)
+                let (sum, overflow2) = value.addingReportingOverflow(part)
+                guard !overflow1, !overflow2 else { return nil }
+                value = sum
                 if byte & 0x80 != 0 { return value }
-                shift <<= 7
-                value += shift
+                let (next, overflow3) = shift.multipliedReportingOverflow(by: 128)
+                let (total, overflow4) = value.addingReportingOverflow(next)
+                guard !overflow3, !overflow4 else { return nil }
+                shift = next
+                value = total
             }
             return nil
         }

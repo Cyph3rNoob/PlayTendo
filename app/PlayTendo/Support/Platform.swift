@@ -79,18 +79,35 @@ enum ImageCoding {
         decode(data) != nil
     }
 
+    /// Plus grand côté d'une image décodée : une jaquette fait 1 000 à 2 000 pixels. Une image plus grande (piégée, ou
+    /// énorme photo) est décodée réduite à cette taille au lieu d'épuiser la mémoire (audit de sécurité du 2026-10-24).
+    static let maxPixelSize = 4096
+
     static func decode(_ data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else {
             return nil
         }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        return image(from: source)
     }
 
     static func load(_ url: URL) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0 else {
             return nil
         }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        return image(from: source)
+    }
+
+    /// Première image, en taille réelle si elle reste raisonnable, sinon réduite (sans jamais la décoder en entier).
+    private static func image(from source: CGImageSource) -> CGImage? {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let width = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
+        let height = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
+        guard width > 0, height > 0 else { return nil }
+        if max(width, height) <= maxPixelSize { return CGImageSourceCreateImageAtIndex(source, 0, nil) }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                                        kCGImageSourceCreateThumbnailWithTransform: true]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     /// Image réduite à `width` pixels de large (gardée telle quelle si elle est déjà plus petite).

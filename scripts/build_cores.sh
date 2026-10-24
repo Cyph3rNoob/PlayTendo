@@ -110,6 +110,7 @@ build_mgba() {
 # réseau (HAVE_NETWORK, posé par la cible ios-arm64), relié d'un appareil à l'autre par PlayTendo.
 build_gambatte() {
   cd "$SRC/gambatte"
+  python3 "$ROOT/scripts/patch_gambatte.py" "$SRC/gambatte"
   run gambatte-ios make -f Makefile platform=ios-arm64 clean
   run gambatte-ios make -j$JOBS -f Makefile platform=ios-arm64 CC="$CC_IOS" CXX="$CXX_IOS" IOSSDK="$SDK"
   wrap gambatte "$SRC/gambatte/gambatte_libretro_ios.dylib"

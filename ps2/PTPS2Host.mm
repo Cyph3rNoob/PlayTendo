@@ -583,7 +583,11 @@ PTPS2_EXPORT void PTPS2SetCheats(const char* pnach)
         if (!VMManager::HasValidVM())
             return;
         const std::string serial = VMManager::GetDiscSerial();
-        if (serial.empty())
+        // Numéro lu sur le disque : un fichier piégé pourrait y mettre « ../ » et faire écrire ailleurs.
+        const bool plain = !serial.empty() && serial.size() <= 32 && std::all_of(serial.begin(), serial.end(), [](char c) {
+            return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+        });
+        if (!plain)
             return;
         FileSystem::EnsureDirectoryExists(EmuFolders::Cheats.c_str(), true);
         const std::string path = Path::Combine(EmuFolders::Cheats, serial + "_PlayTendo.pnach");

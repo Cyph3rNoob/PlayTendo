@@ -29,6 +29,9 @@ typedef NS_ERROR_ENUM(PTArchiveErrorDomain, PTArchiveError) {
 @property (nonatomic, readonly, copy) NSString *entryPath;
 /// Taille du fichier courant une fois décompressé, -1 si l'archive ne la donne pas.
 @property (nonatomic, readonly) int64_t entrySize;
+/// Taille au-delà de laquelle l'extraction s'arrête (erreur « trop gros ») : une archive piégée peut annoncer peu et
+/// écrire beaucoup plus, jusqu'à remplir l'appareil. Par défaut, aucune limite.
+@property (nonatomic) int64_t maximumEntrySize;
 /// Format reconnu par libarchive (« ZIP 2.0 (deflation) », « 7-Zip », « RAR5 »…), connu après le premier fichier.
 @property (nonatomic, readonly, copy) NSString *formatName;
 /// Octets de l'archive lus jusqu'ici, et sa taille.

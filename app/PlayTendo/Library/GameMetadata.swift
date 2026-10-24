@@ -431,7 +431,7 @@ final class GameMetadata: ObservableObject {
             var request = URLRequest(url: url, timeoutInterval: 20)
             request.setValue("PlayTendo", forHTTPHeaderField: "User-Agent")
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await CappedDownload.data(for: request, limit: CappedDownload.imageLimit)
                 guard let http = response as? HTTPURLResponse else { outcome.result = .offline; return outcome }
                 if http.statusCode == 404 { continue }
                 guard http.statusCode == 200, ImageCoding.isImage(data),

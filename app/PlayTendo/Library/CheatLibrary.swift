@@ -518,7 +518,7 @@ enum CheatLibrary {
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue("PlayTendo", forHTTPHeaderField: "User-Agent")
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await CappedDownload.data(for: request, limit: CappedDownload.textLimit)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
             return data
         } catch {

@@ -56,6 +56,9 @@ Dans le code : `PLAYTENDO` = moteur de PlayTendo (iPhone et Mac), `PLAYTENDO_IOS
      calculé ici : il fixe la taille des flux de sommets) ; tampons tournants créés aussi dans ce mode (creation.cpp) ;
    - le pilote demande la méthode à chaque partie (PTVitaHost.cpp) ; le cache des shaders change de lui-même
      (`use_memory_mapping` est dans sa signature).
+17. interface.cpp (2026-10-24, audit de sécurité) : installation d'un .vpk, une entrée dont le nom remonte (« ../ »)
+   ou est absolu sortait du dossier du jeu (« zip slip ») ; sur Mac, l'app n'étant pas isolée, un .vpk piégé aurait pu
+   écrire n'importe où dans le dossier de l'utilisateur. Ces entrées sont ignorées.
 """
 import os
 import sys
@@ -892,4 +895,20 @@ patch("external/psvpfstools/psvpfsparser/PfsFilesystem.cpp", [
      "         m_output << \"failed to find page \" << t->get_icv_salt() << \" in map\" << std::endl;\n"
      "         return -1;\n"
      "      }\n"),
+])
+
+
+# 17. Installation d'un .vpk : pas d'écriture hors du dossier du jeu (« zip slip »).
+patch("vita3k/interface.cpp", [
+    ("""            std::string replace_filename = m_filename.substr(content_path.size());
+            const fs::path file_output = (output_path / fs_utils::utf8_to_path(replace_filename)).generic_path();""",
+     """            std::string replace_filename = m_filename.substr(content_path.size());
+            // PlayTendo : une entrée dont le nom remonte (« ../ ») ou est absolu sortirait du dossier du jeu.
+            const fs::path relative_output = fs_utils::utf8_to_path(replace_filename).lexically_normal();
+            if (relative_output.empty() || relative_output.is_absolute() || relative_output.has_root_name()
+                || relative_output.has_root_directory() || *relative_output.begin() == "..") {
+                LOG_WARN("PlayTendo : entrée d'archive ignorée (chemin hors du jeu) : {}", m_filename);
+                continue;
+            }
+            const fs::path file_output = (output_path / relative_output).generic_path();"""),
 ])

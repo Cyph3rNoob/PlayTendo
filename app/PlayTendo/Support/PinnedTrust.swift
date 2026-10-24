@@ -5,8 +5,8 @@ import Security
 /// Épinglage du certificat d'un service qui reçoit une clé de PlayTendo (SteamGridDB, ScreenScraper) : en plus de la
 /// vérification normale du système, la chaîne du certificat doit mener à l'une des autorités racines attendues. Un
 /// serveur intermédiaire installé pour espionner les échanges (avec son propre certificat racine) est refusé : la clé
-/// ne lui est jamais envoyée.
-final class PinnedTrust: NSObject, URLSessionDelegate {
+/// ne lui est jamais envoyée. Une redirection vers un autre site que ceux du service est refusée.
+final class PinnedTrust: NSObject, URLSessionTaskDelegate {
     /// Let's Encrypt (racines ISRG). Empreintes = SHA-256 de la clé publique (SecKeyCopyExternalRepresentation),
     /// calculées sur leurs certificats publiés (letsencrypt.org/certs, vérifiées le 2026-10-22).
     static let isrgRootX1 = "9Fk6HgfMnM7/vtnBHcUhg1b3gU2bIpSd50XmKZkMbGA="
@@ -16,10 +16,21 @@ final class PinnedTrust: NSObject, URLSessionDelegate {
 
     private let service: String
     private let pins: Set<String>
+    let hosts: [String]
 
-    init(service: String, pins: Set<String>) {
+    init(service: String, pins: Set<String>, hosts: [String]) {
         self.service = service
         self.pins = pins
+        self.hosts = hosts
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        guard let url = request.url, CappedDownload.isSecure(url, on: hosts) else {
+            PTLogLine("\(service) : redirection vers un autre site refusée")
+            return nil
+        }
+        return request
     }
 
     func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge)

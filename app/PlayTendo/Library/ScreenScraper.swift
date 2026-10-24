@@ -81,7 +81,8 @@ enum ScreenScraper {
               var components = URLComponents(string: media.url) else { return .missing(details: details) }
         components.queryItems = (components.queryItems ?? []).filter { $0.name != "maxwidth" }
             + [URLQueryItem(name: "maxwidth", value: "\(imageWidth)")]
-        guard let url = components.url else { return .missing(details: details) }
+        // Adresse donnée par la réponse : seulement chez ScreenScraper.
+        guard let url = components.url, CappedDownload.isSecure(url, on: hosts) else { return .missing(details: details) }
         switch await download(url) {
         case .ok(let data):
             let is3D = media.type == "box-3D"
@@ -313,7 +314,8 @@ enum ScreenScraper {
     /// Session sans cache ni cookies (les adresses contiennent les identifiants), certificat épinglé : Let's Encrypt.
     private static let session = URLSession(configuration: .ephemeral, delegate: PinnedTrust(service: "ScreenScraper", pins: [
         PinnedTrust.isrgRootX1, PinnedTrust.isrgRootX2, PinnedTrust.isrgRootYE, PinnedTrust.isrgRootYR,
-    ]), delegateQueue: nil)
+    ], hosts: hosts), delegateQueue: nil)
+    private static let hosts = ["screenscraper.fr"]
 
     private static func request<Value: Decodable>(_ type: Value.Type, endpoint: String,
                                                   parameters: [URLQueryItem]) async -> Fetch<Value> {
@@ -335,7 +337,7 @@ enum ScreenScraper {
     }
 
     private static func download(_ url: URL) async -> Fetch<Data> {
-        switch await get(url, timeout: 60) {
+        switch await get(url, timeout: 60, limit: CappedDownload.imageLimit) {
         case .ok(let data):
             guard ImageCoding.isImage(data) else { return .missing }
             return .ok(data)
@@ -346,12 +348,12 @@ enum ScreenScraper {
 
     /// Une demande, avec les réponses d'erreur de ScreenScraper traduites. Une seule nouvelle tentative quand il dit
     /// que trop de demandes sont en cours.
-    private static func get(_ url: URL, timeout: TimeInterval = 30) async -> Fetch<Data> {
+    private static func get(_ url: URL, timeout: TimeInterval = 30, limit: Int = CappedDownload.textLimit) async -> Fetch<Data> {
         for attempt in 0..<2 {
             var request = URLRequest(url: url, timeoutInterval: timeout)
             request.setValue("PlayTendo", forHTTPHeaderField: "User-Agent")
             do {
-                let (data, response) = try await session.data(for: request)
+                let (data, response) = try await CappedDownload.data(for: request, session: session, limit: limit)
                 guard let http = response as? HTTPURLResponse else { return .offline }
                 switch http.statusCode {
                 case 200:

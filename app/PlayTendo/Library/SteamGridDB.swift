@@ -40,9 +40,10 @@ enum SteamGridDB {
         }
         // Les grilles arrivent de la mieux notée à la moins bien notée. L'image elle-même est publique (sans clé).
         guard let grid = grids.first(where: { $0.nsfw != true && $0.humor != true }),
-              let imageURL = URL(string: grid.url) else { return .missing }
+              let imageURL = URL(string: grid.url), CappedDownload.isSecure(imageURL, on: hosts) else { return .missing }
         do {
-            let (data, response) = try await URLSession.shared.data(from: imageURL)
+            let (data, response) = try await CappedDownload.data(for: URLRequest(url: imageURL, timeoutInterval: 30),
+                                                                 limit: CappedDownload.imageLimit)
             guard (response as? HTTPURLResponse)?.statusCode == 200, let image = ImageCoding.decode(data),
                   let jpeg = ImageCoding.jpeg(ImageCoding.resized(image, width: 512), quality: 0.88) else { return .offline }
             return .found(jpeg, gameName: game.name)
@@ -87,7 +88,9 @@ enum SteamGridDB {
         "3Ih5Szl7yUenUxOk1rFJyZFbhmX4GDHH+feTff87TFM=", // SSL.com Root Certification Authority RSA
         "DfKSu5l3Mdq5eX76p6abH+wW0tz0SnLzXgYuxXtS7aA=", // SSL.com TLS ECC Root CA 2022
         "RfPd63uYzm1+Fe1Uh9qtBun/kl4LgkngHee3WAs6C4M=", // SSL.com TLS RSA Root CA 2022
-    ]), delegateQueue: nil)
+    ], hosts: hosts), delegateQueue: nil)
+    /// Sites de SteamGridDB : l'API (avec la clé) et le CDN des images (sans clé).
+    private static let hosts = ["steamgriddb.com"]
 
     private static func fetch<Value: Decodable>(_ type: Value.Type, from url: URL) async -> Fetch<Value> {
         guard let key = PTSteamGridDBKey() else { return .missing }
@@ -95,7 +98,8 @@ enum SteamGridDB {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("PlayTendo", forHTTPHeaderField: "User-Agent")
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await CappedDownload.data(for: request, session: session,
+                                                                 limit: CappedDownload.textLimit)
             guard let http = response as? HTTPURLResponse else { return .offline }
             switch http.statusCode {
             case 200: break

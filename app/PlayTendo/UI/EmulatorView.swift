@@ -1362,11 +1362,14 @@ private struct LinkCableButton: View {
     let action: () -> Void
 
     var body: some View {
-        let connected: Bool = {
-            if case .connected = link.state { return true }
-            return false
+        let status: String? = {
+            switch link.state {
+            case .connected: return tr("branché")
+            case .request: return tr("demande à accepter")
+            default: return nil
+            }
         }()
-        MenuButton(title: connected ? tr("Câble link") + " · " + tr("branché") : tr("Câble link"),
+        MenuButton(title: status.map { tr("Câble link") + " · " + $0 } ?? tr("Câble link"),
                    icon: "cable.connector", action: action)
     }
 }

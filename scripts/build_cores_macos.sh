@@ -97,6 +97,7 @@ for core in $CORES; do
     gambatte)
       # Game Boy / Game Boy Color, avec le câble link par le réseau (HAVE_NETWORK, posé par la cible osx).
       cd "$SRC/gambatte"
+      python3 "$ROOT/scripts/patch_gambatte.py" "$SRC/gambatte"
       run gambatte-macos make -f Makefile platform=osx clean
       run gambatte-macos make -j$JOBS -f Makefile platform=osx ARCHFLAGS="-arch arm64" \
         CC="clang -arch arm64 -mmacosx-version-min=$MIN_MACOS" CXX="clang++ -arch arm64 -mmacosx-version-min=$MIN_MACOS"

@@ -56,6 +56,7 @@ static locale_t PTUTF8Locale(void) {
     _archiveSize = stat(url.fileSystemRepresentation, &info) == 0 ? info.st_size : 0;
     _entryPath = @"";
     _entrySize = -1;
+    _maximumEntrySize = INT64_MAX;
     _archive = archive_read_new();
     if (!_archive) {
         if (error) *error = PTArchiveWriteError(ENOMEM);
@@ -164,7 +165,8 @@ static locale_t PTUTF8Locale(void) {
         return NO;
     }
     const char *path = destination.fileSystemRepresentation;
-    int file = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    // O_NOFOLLOW : jamais à travers un lien symbolique posé à cet endroit.
+    int file = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0644);
     if (file < 0) {
         if (error) *error = PTArchiveWriteError(errno);
         return NO;
@@ -181,6 +183,11 @@ static locale_t PTUTF8Locale(void) {
         // Un ARCHIVE_WARN ici veut dire une somme de contrôle fausse : le jeu serait abîmé.
         if (result != ARCHIVE_OK) {
             failure = [self currentError];
+            break;
+        }
+        // Plus que la taille permise (archive piégée, « bombe de décompression ») ou position impossible : arrêt.
+        if (offset < 0 || (int64_t)size > _maximumEntrySize || offset > _maximumEntrySize - (int64_t)size) {
+            failure = PTArchiveMakeError(PTArchiveErrorTooLarge, @"contenu plus gros que prévu", nil);
             break;
         }
         // Écrit à la position donnée (les trous d'un fichier « creux » ne sont pas écrits).
@@ -211,7 +218,8 @@ static locale_t PTUTF8Locale(void) {
     }
     PT_UTF8_END
     // Fichier qui finit par un trou : il garde sa taille.
-    if (!failure && _entrySize > written && ftruncate(file, _entrySize) != 0) failure = PTArchiveWriteError(errno);
+    if (!failure && _entrySize > written && _entrySize <= _maximumEntrySize && ftruncate(file, _entrySize) != 0)
+        failure = PTArchiveWriteError(errno);
     if (close(file) != 0 && !failure) failure = PTArchiveWriteError(errno);
     if (failure) {
         unlink(path);

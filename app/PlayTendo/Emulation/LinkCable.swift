@@ -13,8 +13,10 @@ import UIKit
 ///   voisins (`_playtendo-link._tcp`).
 /// - Invité : PlayTendo écoute en local (127.0.0.1:56401), Gambatte s'y branche en client, et PlayTendo relaie vers
 ///   l'hôte choisi.
-/// L'invité commence par envoyer son nom (« PTLINK1 nom » et un retour à la ligne), que l'hôte affiche ; ensuite, seuls
-/// les octets du câble passent.
+/// L'invité commence par envoyer son nom (« PTLINK1 nom » et un retour à la ligne) ; l'hôte le montre au joueur, qui
+/// accepte ou refuse (audit de sécurité du 2026-10-24 : avant, n'importe quel appareil proche se branchait seul). Accepté,
+/// l'hôte répond « PTLINK1 OK » et se branche alors seulement sur son Gambatte ; refusé, il coupe. Ensuite, seuls les
+/// octets du câble passent. Gambatte n'écoute que l'appareil lui-même (127.0.0.1, scripts/patch_gambatte.py).
 ///
 /// Les réponses du réseau arrivent sur la file `queue` ; l'état publié change sur le thread principal.
 final class LinkCable: ObservableObject, @unchecked Sendable {
@@ -25,6 +27,10 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
         /// Invité : liste des appareils proches.
         case searching
         case connecting(String)
+        /// Hôte : un appareil demande à se brancher ; le joueur accepte ou refuse.
+        case request(String)
+        /// Invité : en attente de l'accord de l'hôte.
+        case waitingApproval(String)
         case connected(String)
         case failed(String)
     }
@@ -32,7 +38,7 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
     struct Peer: Identifiable, Hashable {
         let name: String
         let endpoint: NWEndpoint
-        var id: String { name }
+        var id: String { endpoint.debugDescription }
     }
 
     @Published private(set) var state: State = .off
@@ -58,7 +64,10 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
     private var handshaken = false
     private var pendingToLocal = Data()
     private var retries = 0
+    /// Change à chaque appareil reçu : un délai d'un appareil parti ne touche pas le suivant.
+    private var attempt = 0
     private static let header = "PTLINK1 "
+    private static let approval = "PTLINK1 OK"
 
     init(session: EmulatorSession) {
         self.session = session
@@ -104,22 +113,56 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Un invité arrive : branché sur Gambatte (serveur) de cet appareil. Un seul à la fois.
+    /// Un invité arrive. Un seul à la fois ; il a 10 secondes pour donner son nom, puis le joueur décide (`approve`).
     private func acceptRemote(_ connection: NWConnection) {
-        guard remote == nil else {
+        guard remote == nil, isHost else {
             connection.cancel()
             return
         }
         remote = connection
         remoteName = Self.name(of: connection.endpoint)
-        publish(.connecting(remoteName))
+        attempt += 1
+        let current = attempt
         watch(connection, side: tr("l'autre appareil"))
         connection.start(queue: queue)
-        let local = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: Self.serverPort)!,
-                                 using: Self.localParameters())
-        self.local = local
-        watch(local, side: tr("le jeu"))
-        local.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self, attempt == current, remote === connection, !handshaken else { return }
+            dropGuest(log: "pas de nom reçu en 10 s")
+        }
+    }
+
+    /// Réponse du joueur (hôte) à une demande de branchement.
+    func approve(_ accepted: Bool) {
+        queue.async { [self] in
+            guard isHost, handshaken, !piping, local == nil, let remote else { return }
+            guard accepted else {
+                dropGuest(log: "refusé par le joueur")
+                return
+            }
+            PTLogLine("Câble link : « \(remoteName) » accepté")
+            remote.send(content: Data((Self.approval + "\n").utf8), completion: .contentProcessed { _ in })
+            publish(.connecting(remoteName))
+            let local = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: Self.serverPort)!,
+                                     using: Self.localParameters())
+            self.local = local
+            watch(local, side: tr("le jeu"))
+            local.start(queue: queue)
+        }
+    }
+
+    /// Hôte : l'invité refusé, muet ou parti est coupé ; l'annonce continue pour un autre. Sur `queue`.
+    private func dropGuest(log: String) {
+        PTLogLine("Câble link : appareil « \(remoteName) » écarté (\(log))")
+        attempt += 1
+        piping = false
+        handshaken = false
+        pendingToLocal = Data()
+        retries = 0
+        for connection in [remote, local] { connection?.stateUpdateHandler = nil; connection?.cancel() }
+        remote = nil
+        local = nil
+        remoteName = ""
+        publish(.hosting)
     }
 
     // MARK: Invité
@@ -133,7 +176,7 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
             browser.browseResultsChangedHandler = { [weak self] results, _ in
                 let list = results.compactMap { result -> Peer? in
                     guard case let .service(name, _, _, _) = result.endpoint else { return nil }
-                    return Peer(name: name, endpoint: result.endpoint)
+                    return Peer(name: Self.cleanName(name), endpoint: result.endpoint)
                 }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 DispatchQueue.main.async { self?.peers = list }
             }
@@ -158,7 +201,10 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
                 let parameters = Self.localParameters()
                 parameters.requiredInterfaceType = .loopback
                 parameters.allowLocalEndpointReuse = true
-                let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: Self.clientPort)!)
+                // Liée à 127.0.0.1 : rien d'autre que l'appareil ne peut s'y brancher.
+                parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback),
+                                                             port: NWEndpoint.Port(rawValue: Self.clientPort)!)
+                let listener = try NWListener(using: parameters)
                 listener.newConnectionHandler = { [weak self] connection in self?.acceptLocal(connection) }
                 listener.start(queue: queue)
                 localListener = listener
@@ -175,7 +221,7 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
     }
 
     private func acceptLocal(_ connection: NWConnection) {
-        guard local == nil else {
+        guard local == nil, Self.isLoopback(connection.endpoint) else {
             connection.cancel()
             return
         }
@@ -197,12 +243,20 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
                 // Le jeu n'écoute pas encore (partie en pause : le moteur prend le câble à la reprise) ou l'autre
                 // appareil n'est pas encore joignable : nouvel essai chaque seconde, une minute au plus.
                 retries += 1
+                if isHost, connection === remote, !piping {
+                    dropGuest(log: error.localizedDescription)
+                    return
+                }
                 guard retries <= 60 else {
                     fail(tr("Câble débranché (\(side) : \(error.localizedDescription))"))
                     return
                 }
                 queue.asyncAfter(deadline: .now() + 1) { [weak connection] in connection?.restart() }
             case .failed(let error):
+                if isHost, connection === remote, !piping {
+                    dropGuest(log: error.localizedDescription)
+                    return
+                }
                 fail(tr("Câble débranché (\(side) : \(error.localizedDescription))"))
             case .cancelled:
                 if piping { fail(tr("Câble débranché par \(side)")) }
@@ -212,37 +266,69 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Connexion prête : l'invité envoie son nom à l'hôte, l'hôte le lit ; le reste attend que tout soit prêt.
+    /// Connexion prête : l'invité envoie son nom puis attend l'accord de l'hôte ; l'hôte lit le nom et le montre au
+    /// joueur. Le reste attend que tout soit prêt.
     private func ready(_ connection: NWConnection) {
         guard connection === remote, !handshaken else {
             startPiping()
             return
         }
         if isHost {
-            readHeader(from: connection, buffer: Data())
+            readLine(from: connection, buffer: Data()) { [self] line, rest in
+                guard let line, line.hasPrefix(Self.header) else {
+                    dropGuest(log: "pas PlayTendo")
+                    return
+                }
+                remoteName = Self.cleanName(String(line.dropFirst(Self.header.count)))
+                pendingToLocal = rest
+                handshaken = true
+                PTLogLine("Câble link : « \(remoteName) » demande à se brancher")
+                publish(.request(remoteName))
+                let name = remoteName
+                DispatchQueue.main.async {
+                    self.session?.showMessage(tr("\(name) veut se brancher : menu pause › Câble link"))
+                }
+                // Sans réponse du joueur en une minute : refusé.
+                let current = attempt
+                queue.asyncAfter(deadline: .now() + 60) { [weak self] in
+                    guard let self, attempt == current, remote === connection, local == nil else { return }
+                    dropGuest(log: "pas de réponse du joueur")
+                }
+            }
         } else {
             connection.send(content: Data((Self.header + myName + "\n").utf8), completion: .contentProcessed { _ in })
-            handshaken = true
-            startPiping()
+            publish(.waitingApproval(remoteName))
+            readLine(from: connection, buffer: Data()) { [self] line, rest in
+                guard line == Self.approval else {
+                    fail(tr("\(remoteName) a refusé le câble link"))
+                    return
+                }
+                pendingToLocal = rest
+                handshaken = true
+                startPiping()
+            }
+            let current = attempt
+            queue.asyncAfter(deadline: .now() + 75) { [weak self] in
+                guard let self, attempt == current, remote === connection, !handshaken else { return }
+                fail(tr("\(remoteName) n'a pas accepté le câble link"))
+            }
         }
     }
 
-    private func readHeader(from connection: NWConnection, buffer: Data) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] data, _, finished, error in
-            guard let self else { return }
+    /// Lit une ligne (512 octets au plus) ; `nil` si la connexion se coupe ou si la ligne est trop longue. Le reste
+    /// (octets du câble déjà arrivés derrière) est rendu avec elle. Sur `queue`.
+    private func readLine(from connection: NWConnection, buffer: Data, then done: @escaping @Sendable (String?, Data) -> Void) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 512) { [weak self] data, _, finished, error in
+            guard let self, remote === connection else { return }
             var buffer = buffer
             if let data { buffer.append(data) }
-            if let end = buffer.firstIndex(of: 0x0A) {
+            if let end = buffer.firstIndex(of: 0x0A), end - buffer.startIndex <= 512 {
                 let line = String(decoding: buffer[buffer.startIndex..<end], as: UTF8.self)
-                if line.hasPrefix(Self.header) { remoteName = String(line.dropFirst(Self.header.count)) }
-                pendingToLocal = Data(buffer[buffer.index(after: end)...])
-                handshaken = true
-                publish(.connecting(remoteName))
-                startPiping()
+                done(line, Data(buffer[buffer.index(after: end)...]))
             } else if finished || error != nil || buffer.count > 512 {
-                fail(tr("L'autre appareil n'est pas PlayTendo"))
+                done(nil, Data())
             } else {
-                readHeader(from: connection, buffer: buffer)
+                readLine(from: connection, buffer: buffer, then: done)
             }
         }
     }
@@ -297,6 +383,7 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
 
     /// Sur `queue`.
     private func closeAll() {
+        attempt += 1
         piping = false
         handshaken = false
         pendingToLocal = Data()
@@ -338,7 +425,29 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
     }
 
     private static func name(of endpoint: NWEndpoint) -> String {
-        if case let .service(name, _, _, _) = endpoint { return name }
+        if case let .service(name, _, _, _) = endpoint { return cleanName(name) }
         return tr("un autre appareil")
+    }
+
+    /// Nom venu d'un autre appareil, avant de l'afficher : sans caractères de contrôle ni d'inversion du sens du texte
+    /// (qui maquilleraient le nom), 48 caractères au plus.
+    static func cleanName(_ name: String) -> String {
+        let hidden = CharacterSet.controlCharacters
+            .union(CharacterSet(charactersIn: "\u{200B}\u{200C}\u{200D}\u{200E}\u{200F}\u{2060}\u{FEFF}"))
+            .union(CharacterSet(charactersIn: "\u{202A}"..."\u{202E}"))
+            .union(CharacterSet(charactersIn: "\u{2066}"..."\u{2069}"))
+        let scalars = name.unicodeScalars.filter { !hidden.contains($0) }
+        var clean = String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.count > 48 { clean = String(clean.prefix(47)) + "…" }
+        return clean.isEmpty ? tr("un autre appareil") : clean
+    }
+
+    private static func isLoopback(_ endpoint: NWEndpoint) -> Bool {
+        guard case let .hostPort(host, _) = endpoint else { return false }
+        switch host {
+        case .ipv4(let address): return address.isLoopback
+        case .ipv6(let address): return address.isLoopback
+        default: return false
+        }
     }
 }
