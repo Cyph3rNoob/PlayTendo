@@ -504,6 +504,8 @@ private struct PauseMenu: View {
     /// 3DS : résolution et lissage des textures (gardés pour tous ses jeux).
     @AppStorage(N3DSSettings.resolutionKey) private var n3dsResolution = N3DSSettings.Resolution.x1.rawValue
     @AppStorage(N3DSSettings.smoothingKey) private var n3dsSmoothing = N3DSSettings.Smoothing.off.rawValue
+    /// 3DS : curseur 3D choisi pendant que le menu est ouvert (sinon celui retenu pour le jeu).
+    @State private var n3dsSliderChoice: Int?
     /// DS : résolution (gardée pour tous ses jeux).
     @AppStorage(DSSettings.resolutionKey) private var dsResolution = DSSettings.Resolution.x2.rawValue
 #if PLAYTENDO_VITA
@@ -1044,6 +1046,13 @@ private struct PauseMenu: View {
                                         options: N3DSSettings.Smoothing.allCases.map { ($0.rawValue, $0.label) },
                                         selection: n3dsSmoothing) { value in
                     choose { n3dsSmoothing = value }
+                },
+                slider: NeonSegments(title: tr("CURSEUR 3D"), detail: tr("relief : certains jeux changent d'image"),
+                                     options: N3DSSettings.Slider.allCases.map { ($0.rawValue, $0.label) },
+                                     selection: n3dsSliderChoice ?? N3DSSettings.slider(for: session.game).rawValue) { value in
+                    pick { n3dsSliderChoice = value }
+                    N3DSSettings.setSlider(N3DSSettings.Slider(rawValue: value) ?? .down, for: session.game)
+                    session.applyOptions(N3DSSettings.sliderOptions(for: session.game))
                 })
         } else if session.game.system == .nds {
             imageSettings(
@@ -1093,10 +1102,12 @@ private struct PauseMenu: View {
     /// `resolution` : premier réglage ; `smoothing` : second (le format pour la N64) ; `format` : troisième (PS2).
     @ViewBuilder private func imageSettings(resolution resolutionPicker: NeonSegments,
                                             smoothing smoothingPicker: NeonSegments? = nil,
-                                            format formatPicker: NeonSegments? = nil) -> some View {
+                                            format formatPicker: NeonSegments? = nil,
+                                            slider sliderPicker: NeonSegments? = nil) -> some View {
         resolutionPicker
         if let smoothingPicker { smoothingPicker }
         if let formatPicker { formatPicker }
+        if let sliderPicker { sliderPicker }
     }
 
     /// Réglage de l'écran de jeu (taille, filtre, écran tactile, manette) : rien à renvoyer au moteur.

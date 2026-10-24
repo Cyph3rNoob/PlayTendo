@@ -1058,8 +1058,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
             if !self.fastForward && !self.rewindingNow { PTAudioRingWrite(ring, samples, frames) }
         }
 
+        // 3DS : curseur 3D du jeu ; fichier du son des homebrews sur la carte SD.
+        var gameOptions: [String: String] = [:]
+        if system == .n3ds {
+            gameOptions = N3DSSettings.sliderOptions(for: game)
+            N3DSSettings.prepareSoundFirmware()
+        }
         condition.lock()
-        let options = system.coreOptions.merging(optionOverrides) { $1 }
+        let options = system.coreOptions.merging(gameOptions) { $1 }.merging(optionOverrides) { $1 }
         condition.unlock()
         // Patch de romhack : le jeu patché (refait dans Caches si besoin), pas le .ips/.bps/.ups.
         try core.loadGame(atPath: RomPatch.prepare(game).path,
