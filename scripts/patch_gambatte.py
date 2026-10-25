@@ -12,6 +12,12 @@ déjà faite est sautée.
    câble ; pendant ce temps, l'autre Game Boy attendait sa réponse, bloqué. Décrochage essayé toutes les 50 ms de vraie
    durée (select à 0 : rien n'attend), nouvelle connexion du client toutes les 2 s, et octets envoyés sans délai
    (TCP_NODELAY) sur les deux bouts.
+4. net_serial.cpp/.h, libretro.cpp (2026-10-25, son essai : quand l'autre quitte la salle d'échange, ce Game Boy figeait
+   jusqu'à ce qu'il reparle à l'hôtesse) : Gambatte fait attendre un Game Boy qui envoie un octet jusqu'à la réponse de
+   l'autre, qui ne répond que quand son jeu attend un transfert. Un vrai Game Boy dont le partenaire n'est pas prêt
+   reçoit 0xFF et continue. `NetSerial::idle()`, appelé à chaque image : un octet de l'autre arrivé alors que ce jeu
+   n'attend aucun transfert depuis 10 images (≈ 1/6 s) reçoit la réponse « vide » 0xFF. Pendant un échange, les deux
+   jeux attendent leurs octets : rien ne change.
 
 Usage : python3 scripts/patch_gambatte.py <sources/gambatte>
 """
@@ -84,3 +90,85 @@ for old, new in patches:
     text = text.replace(old, new)
 path.write_text(text, encoding="utf-8")
 print("net_serial.cpp : décrochage sans attente, envoi sans délai")
+
+# Retouche 4 : réponse « vide » aux octets que ce jeu n'attend pas.
+header = root / "libgambatte" / "libretro" / "net_serial.h"
+htext = header.read_text(encoding="utf-8")
+hold = "\t\tvirtual unsigned char send(unsigned char data, bool fastCgb);\n"
+hnew = (hold + "\t\t/// PlayTendo : à chaque image, réponse « vide » (0xFF) aux octets de l'autre Game Boy que ce jeu n'attend pas.\n"
+        "\t\tvoid idle();\n")
+hold2 = "\t\tclock_t lastConnectAttempt_;\n"
+hnew2 = hold2 + "\t\tbool waitedThisFrame_;\n\t\tint idleFrames_;\n"
+for old, new in ((hold, hnew), (hold2, hnew2)):
+    if new in htext:
+        continue
+    if htext.count(old) != 1:
+        raise SystemExit("net_serial.h : retouche 4 impossible (le fichier a changé)")
+    htext = htext.replace(old, new)
+header.write_text(htext, encoding="utf-8")
+
+idle = (
+    "\n"
+    "// PlayTendo : un vrai Game Boy dont le partenaire n'attend pas de transfert reçoit 0xFF et continue ; Gambatte,\n"
+    "// lui, ferait attendre l'autre Game Boy (jeu figé) jusqu'à ce que ce jeu-ci se serve du câble. Un octet arrivé alors\n"
+    "// que ce jeu n'attend aucun transfert depuis 10 images reçoit donc la réponse « vide ».\n"
+    "void NetSerial::idle()\n"
+    "{\n"
+    "\tif (is_stopped_ || sockfd_ < 0 || waitedThisFrame_) {\n"
+    "\t\twaitedThisFrame_ = false;\n"
+    "\t\tidleFrames_ = 0;\n"
+    "\t\treturn;\n"
+    "\t}\n"
+    "\tint bytes_avail = 0;\n"
+    "\tif (ioctl(sockfd_, FIONREAD, &bytes_avail) < 0 || bytes_avail < 2) {\n"
+    "\t\tidleFrames_ = 0;\n"
+    "\t\treturn;\n"
+    "\t}\n"
+    "\tif (++idleFrames_ < 10) {\n"
+    "\t\treturn;\n"
+    "\t}\n"
+    "\tidleFrames_ = 0;\n"
+    "\tunsigned char buffer[2];\n"
+    "\tif (read(sockfd_, buffer, 2) <= 0) {\n"
+    "\t\tgambatte_log(RETRO_LOG_ERROR, \"Error reading from socket: %s\\n\", strerror(errno));\n"
+    "\t\tclose(sockfd_);\n"
+    "\t\tsockfd_ = -1;\n"
+    "\t\treturn;\n"
+    "\t}\n"
+    "\tbuffer[0] = 0xFF;\n"
+    "\tbuffer[1] = 128;\n"
+    "\tif (write(sockfd_, buffer, 2) <= 0) {\n"
+    "\t\tgambatte_log(RETRO_LOG_ERROR, \"Error writing to socket: %s\\n\", strerror(errno));\n"
+    "\t\tclose(sockfd_);\n"
+    "\t\tsockfd_ = -1;\n"
+    "\t}\n"
+    "}\n"
+)
+patches = [
+    (", lastConnectAttempt_(0)\n", ", lastConnectAttempt_(0)\n, waitedThisFrame_(false)\n, idleFrames_(0)\n"),
+    ("bool NetSerial::check(unsigned char out, unsigned char& in, bool& fastCgb)\n{\n",
+     "bool NetSerial::check(unsigned char out, unsigned char& in, bool& fastCgb)\n{\n"
+     "\twaitedThisFrame_ = true; // PlayTendo : ce jeu attend un transfert (voir idle)\n"),
+]
+for old, new in patches:
+    if new in text:
+        continue
+    if text.count(old) != 1:
+        raise SystemExit("net_serial.cpp : retouche 4 impossible (le fichier a changé) :\n" + old)
+    text = text.replace(old, new)
+if "void NetSerial::idle()" not in text:
+    text = text.rstrip("\n") + "\n" + idle
+path.write_text(text, encoding="utf-8")
+
+core = root / "libgambatte" / "libretro" / "libretro.cpp"
+ctext = core.read_text(encoding="utf-8")
+cold = "#ifdef DUAL_MODE\n   while (gb2.runFor("
+cnew = ("#ifdef HAVE_NETWORK\n"
+        "   // PlayTendo : réponse « vide » aux octets de l'autre Game Boy que ce jeu n'attend pas (NetSerial::idle).\n"
+        "   gb_net_serial.idle();\n"
+        "#endif\n" + cold)
+if cnew not in ctext:
+    if ctext.count(cold) != 1:
+        raise SystemExit("libretro.cpp : retouche 4 impossible (le fichier a changé)")
+    core.write_text(ctext.replace(cold, cnew), encoding="utf-8")
+print("net_serial.cpp, libretro.cpp : réponse « vide » aux octets que ce jeu n'attend pas")
