@@ -47,6 +47,9 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
 
     @Published private(set) var state: State = .off
     @Published private(set) var peers: [Peer] = []
+    /// Câble branché, mais le jeu ne produit plus d'image depuis plus d'une seconde : Gambatte attend, bloqué, la
+    /// réponse de l'autre Game Boy (qui ne répond que quand son jeu se sert aussi du câble). Bandeau dans l'écran de jeu.
+    @Published private(set) var waitingForOther = false
 
     static let service = "_playtendo-link._tcp"
     static let serverPort: UInt16 = 56400
@@ -68,6 +71,10 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
     private var handshaken = false
     private var pendingToLocal = Data()
     private var retries = 0
+    // Surveillance du jeu pendant que le câble est branché (fil principal).
+    private var watchTimer: Timer?
+    private var watchedFrames: UInt64 = 0
+    private var framesChangedAt = Date()
     /// Change à chaque appareil reçu : un délai d'un appareil parti ne touche pas le suivant.
     private var attempt = 0
     private static let header = "PTLINK1 "
@@ -391,6 +398,30 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
             self.session?.setLinkMode(.off)
             self.state = .failed(message)
             self.peers = []
+            self.updateWatch()
+        }
+    }
+
+    /// Fil principal : surveillance du jeu tant que le câble est branché.
+    private func updateWatch() {
+        guard case .connected = state else {
+            watchTimer?.invalidate()
+            watchTimer = nil
+            waitingForOther = false
+            return
+        }
+        guard watchTimer == nil else { return }
+        watchedFrames = session?.frameCount ?? 0
+        framesChangedAt = Date()
+        watchTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self, let session = self.session else { return }
+            let frames = session.frameCount
+            if frames != self.watchedFrames || session.state != .running {
+                self.watchedFrames = frames
+                self.framesChangedAt = Date()
+            }
+            let waiting = Date().timeIntervalSince(self.framesChangedAt) > 1
+            if waiting != self.waitingForOther { self.waitingForOther = waiting }
         }
     }
 
@@ -416,6 +447,7 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async {
             self.state = state
             if state != .searching { self.peers = [] }
+            self.updateWatch()
         }
     }
 

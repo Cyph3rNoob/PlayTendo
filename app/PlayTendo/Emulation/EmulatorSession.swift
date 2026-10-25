@@ -240,6 +240,9 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Images produites depuis le début de la partie (moteurs libretro).
+    var frameCount: UInt64 { framesLock.withLock { producedFrames } }
+
     /// Affichage des performances : mesures du moteur en cours (nil avant le démarrage).
     func performanceSample() -> EnginePerformance? {
         if let external { return external.performance }

@@ -244,6 +244,11 @@ struct EmulatorView: View {
                 ToastView(text: toast)
                     .position(x: bounds.midX, y: max(layout.gameRect.minY, 20) + 34)
             }
+            // Câble link : le Game Boy attend la réponse de l'autre (jeu figé).
+            if !showingMenu {
+                LinkWaitBanner(link: session.linkCable)
+                    .position(x: bounds.midX, y: max(layout.gameRect.minY, 20) + 52)
+            }
             // Succès RetroAchievements débloqués, en haut de l'image.
             AchievementBanners()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -1380,6 +1385,37 @@ private struct KeyboardPanel: View {
     }
 }
 #endif
+
+/// Câble link branché, jeu figé : Gambatte attend la réponse de l'autre Game Boy. Rien quand tout va bien.
+private struct LinkWaitBanner: View {
+    @ObservedObject var link: LinkCable
+
+    var body: some View {
+        if link.waitingForOther {
+            VStack(spacing: 6) {
+                Label(tr("En attente de l'autre Game Boy…"), systemImage: "cable.connector")
+                    .font(Neon.mono(13, weight: .semibold))
+                    .foregroundStyle(Neon.cyan)
+                Text(tr("Ce jeu attend la réponse de l'autre appareil : parle aussi à l'hôtesse du Club Câble de son côté, et ne mets pas sa partie en pause."))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Neon.text)
+                    .multilineTextAlignment(.center)
+                Button(tr("Débrancher"), role: .destructive) { link.stop() }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Neon.magenta)
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 360)
+            .background(Chamfer(cut: 8).fill(Neon.panel.opacity(0.95)))
+            .overlay(Chamfer(cut: 8).stroke(Neon.cyan.opacity(0.7), lineWidth: 1))
+            .neonGlow(Neon.cyan, radius: 6)
+            .transition(.opacity)
+        }
+    }
+}
 
 /// Menu pause › Câble link, avec son état (« branché »).
 private struct LinkCableButton: View {

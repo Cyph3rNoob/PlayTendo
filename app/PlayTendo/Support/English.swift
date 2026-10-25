@@ -438,6 +438,8 @@ enum English {
         "Câble débranché par %@": "Cable disconnected by %@",
         "demande à accepter": "request to accept",
         "CURSEUR 3D": "3D SLIDER",
+        "En attente de l'autre Game Boy…": "Waiting for the other Game Boy…",
+        "Ce jeu attend la réponse de l'autre appareil : parle aussi à l'hôtesse du Club Câble de son côté, et ne mets pas sa partie en pause.": "This game is waiting for the other device to answer: talk to the Cable Club attendant on that side too, and don't pause that game.",
         "Jouer": "Playing",
         "Avance rapide et retour en arrière : de ×2 à ×5, au choix par un appui long sur leur bouton du menu pause.": "Fast forward and rewind: from ×2 to ×5, chosen with a long press on their button in the pause menu.",
         "Avance rapide et retour en arrière : de ×2 à ×5, au choix par un clic droit sur leur bouton du menu pause.": "Fast forward and rewind: from ×2 to ×5, chosen with a right-click on their button in the pause menu.",
