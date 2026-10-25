@@ -507,7 +507,7 @@ private struct PauseMenu: View {
     /// 3DS : curseur 3D choisi pendant que le menu est ouvert (sinon celui retenu pour le jeu).
     @State private var n3dsSliderChoice: Int?
     /// DS : résolution (gardée pour tous ses jeux).
-    @AppStorage(DSSettings.resolutionKey) private var dsResolution = DSSettings.Resolution.x2.rawValue
+    @AppStorage(DSSettings.resolutionKey) private var dsResolution = DSSettings.Resolution.x1.rawValue
 #if PLAYTENDO_VITA
     @AppStorage(VitaSettings.resolutionKey) private var vitaResolution = VitaSettings.Resolution.standard.rawValue
 #endif
@@ -1057,10 +1057,10 @@ private struct PauseMenu: View {
         } else if session.game.system == .nds {
             imageSettings(
                 resolution: NeonSegments(title: tr("RÉSOLUTION"),
-                                         detail: (DSSettings.Resolution(rawValue: dsResolution) ?? .x2).detail,
+                                         detail: (DSSettings.Resolution(rawValue: dsResolution) ?? .x1).detail,
                                          options: DSSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: dsResolution) { value in
-                    let renderer = { (raw: Int) in (DSSettings.Resolution(rawValue: raw) ?? .x2).isSoftware }
+                    let renderer = { (raw: Int) in (DSSettings.Resolution(rawValue: raw) ?? .x1).isSoftware }
                     if renderer(value) != renderer(dsResolution) {
                         // Passage du rendu logiciel à l'OpenGL (ou l'inverse) : moteur rechargé à la reprise.
                         pick { dsResolution = value }

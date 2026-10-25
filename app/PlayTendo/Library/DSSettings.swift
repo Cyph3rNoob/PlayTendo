@@ -22,9 +22,10 @@ enum DSSettings {
 
     static let resolutionKey = "resolutionDS"
 
-    /// x2 par défaut pendant l'essai.
+    /// x1 par défaut (2026-10-25) : le rendu logiciel est le plus fidèle ; l'OpenGL (x2 à x4) étire certaines textures
+    /// sur Apple (arbres et hautes herbes de Pokémon Noire).
     static var resolution: Resolution {
-        Resolution(rawValue: UserDefaults.standard.integer(forKey: resolutionKey)) ?? .x2
+        Resolution(rawValue: UserDefaults.standard.integer(forKey: resolutionKey)) ?? .x1
     }
 
     /// Jeu en ligne (2026-10-24) : la Connexion Wi-Fi Nintendo, fermée en 2014, est remplacée par des serveurs de fans
