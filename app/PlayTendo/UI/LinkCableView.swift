@@ -81,6 +81,12 @@ struct LinkCableView: View {
                 Text(tr("En attente de l'accord de \(name)…"))
             }
             Button(tr("Annuler"), role: .destructive) { link.stop() }
+        case .linking(let name):
+            HStack(spacing: 12) {
+                ProgressView()
+                Text(tr("Accepté : branchement à \(name)… La partie reprend : le câble se branche quand les deux jeux tournent."))
+            }
+            Button(tr("Annuler"), role: .destructive) { link.stop() }
         case .connecting(let name):
             HStack(spacing: 12) {
                 ProgressView()
@@ -90,7 +96,7 @@ struct LinkCableView: View {
         case .connected(let name):
             Label(tr("Branché à \(name)"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-            Text(tr("Reprends la partie : le câble reste branché tant que les deux jeux sont ouverts."))
+            Text(tr("Le câble reste branché tant que les deux jeux sont ouverts. Pendant un échange, ne mets pas un jeu en pause : l'autre attendrait, figé."))
                 .foregroundStyle(.secondary)
             Button(tr("Débrancher"), role: .destructive) { link.stop() }
         }

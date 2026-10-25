@@ -607,6 +607,13 @@ private struct PauseMenu: View {
         .sheet(isPresented: $showingLink) {
             LinkCableView(link: session.linkCable, gameTitle: metadata.display(for: session.game).title)
         }
+        // Câble link accepté : Gambatte n'ouvre son câble que pendant que le jeu tourne, la partie reprend d'elle-même
+        // (le premier état reçu est celui d'avant l'ouverture du menu : ignoré).
+        .onReceive(session.linkCable.$state.dropFirst()) { state in
+            guard case .linking = state else { return }
+            showingLink = false
+            onResume()
+        }
         .sheet(isPresented: $showingAchievements) {
             AchievementsListView(title: metadata.display(for: session.game).title, hardcore: session.achievementsHardcore)
         }
@@ -1383,6 +1390,7 @@ private struct LinkCableButton: View {
         let status: String? = {
             switch link.state {
             case .connected: return tr("branché")
+            case .linking: return tr("branchement")
             case .request: return tr("demande à accepter")
             default: return nil
             }

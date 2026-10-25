@@ -152,7 +152,7 @@ struct AboutView: View {
                 if EmulatorSession.engineInstalled(for: .gb) || EmulatorSession.engineInstalled(for: .nds) {
                     Section(tr("Jouer à plusieurs")) {
                         if EmulatorSession.engineInstalled(for: .gb) {
-                            Label(tr("Game Boy et Color : câble link entre deux appareils proches (même pièce, Wi-Fi et Bluetooth activés, pas besoin du même réseau). L'un héberge, l'autre rejoint (menu pause › Câble link) ; l'hôte accepte ou refuse chaque appareil."),
+                            Label(tr("Game Boy et Color : câble link entre deux appareils proches (même pièce, Wi-Fi et Bluetooth activés, pas besoin du même réseau). L'un héberge, l'autre rejoint (menu pause › Câble link) ; l'hôte accepte ou refuse chaque appareil. Une fois accepté, les deux parties reprennent et le câble se branche ; pendant un échange, ne mets pas un jeu en pause (l'autre attendrait, figé)."),
                                   systemImage: "cable.connector")
                         }
                         if EmulatorSession.engineInstalled(for: .nds) {

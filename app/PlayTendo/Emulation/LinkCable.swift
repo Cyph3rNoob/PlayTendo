@@ -17,6 +17,8 @@ import UIKit
 /// accepte ou refuse (audit de sécurité du 2026-10-24 : avant, n'importe quel appareil proche se branchait seul). Accepté,
 /// l'hôte répond « PTLINK1 OK » et se branche alors seulement sur son Gambatte ; refusé, il coupe. Ensuite, seuls les
 /// octets du câble passent. Gambatte n'écoute que l'appareil lui-même (127.0.0.1, scripts/patch_gambatte.py).
+/// Gambatte n'ouvre son câble que pendant que le jeu tourne : une fois l'accord donné (état `.linking`), le menu pause
+/// se ferme et la partie reprend d'elle-même des deux côtés (PauseMenu), sinon rien ne se branchait (2026-10-25).
 ///
 /// Les réponses du réseau arrivent sur la file `queue` ; l'état publié change sur le thread principal.
 final class LinkCable: ObservableObject, @unchecked Sendable {
@@ -31,6 +33,8 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
         case request(String)
         /// Invité : en attente de l'accord de l'hôte.
         case waitingApproval(String)
+        /// Accord donné : les deux jeux doivent tourner pour que le câble se branche.
+        case linking(String)
         case connected(String)
         case failed(String)
     }
@@ -141,7 +145,7 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
             }
             PTLogLine("Câble link : « \(remoteName) » accepté")
             remote.send(content: Data((Self.approval + "\n").utf8), completion: .contentProcessed { _ in })
-            publish(.connecting(remoteName))
+            announceLinking()
             let local = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: Self.serverPort)!,
                                      using: Self.localParameters())
             self.local = local
@@ -305,6 +309,8 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
                 }
                 pendingToLocal = rest
                 handshaken = true
+                PTLogLine("Câble link : accepté par « \(remoteName) »")
+                announceLinking()
                 startPiping()
             }
             let current = attempt
@@ -331,6 +337,13 @@ final class LinkCable: ObservableObject, @unchecked Sendable {
                 readLine(from: connection, buffer: buffer, then: done)
             }
         }
+    }
+
+    /// Accord donné : l'écran le dit, et la partie va reprendre (PauseMenu) pour que Gambatte ouvre son câble. Sur `queue`.
+    private func announceLinking() {
+        publish(.linking(remoteName))
+        let name = remoteName
+        DispatchQueue.main.async { self.session?.showMessage(tr("Câble link : branchement à \(name)…")) }
     }
 
     private func startPiping() {
