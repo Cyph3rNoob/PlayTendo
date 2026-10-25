@@ -16,6 +16,8 @@ Il faut un Mac avec puce Apple (M1 ou plus récent) et macOS 14 ou plus récent.
 4. Au clavier, Échap met le jeu en pause. Chaque console a ses touches : elles se changent dans les
    Réglages (⌘,) › Clavier, ou pendant une partie dans le menu pause › Touches clavier.
    Une manette Bluetooth ou USB marche aussi.
+5. La présentation fait le tour de l'app (bouton « i » de la bibliothèque › Revoir la présentation) : thèmes, codes de
+   triche, romhacks, câble link Game Boy, DS en ligne, RetroAchievements…
 
 Aucun jeu ni BIOS n'est fourni : utilise les tiens.
 App personnelle, non affiliée à Nintendo ni à Sony.
@@ -38,6 +40,8 @@ Requires a Mac with Apple silicon (M1 or later) and macOS 14 or later.
 4. On the keyboard, Esc pauses the game. Each console has its own keys: change them in
    Settings (⌘,) › Keyboard, or during a game in the pause menu › Keyboard keys.
    A Bluetooth or USB controller works too.
+5. The introduction gives a tour of the app (the library's “i” button › Show the introduction again): themes, cheat codes,
+   romhacks, Game Boy link cable, DS online play, RetroAchievements…
 
 No games or BIOS files are included: use your own.
 Personal app, not affiliated with Nintendo or Sony.

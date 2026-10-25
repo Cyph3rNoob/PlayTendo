@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// « À propos » : l'essentiel pour se servir de l'app (jeux, BIOS, turbo, sauvegardes, dépannage), puis les crédits.
+/// « À propos » : l'essentiel pour se servir de l'app (jeux, BIOS, jeu, jeu à plusieurs, succès, turbo, sauvegardes,
+/// confidentialité, dépannage), puis les crédits.
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(WelcomeView.seenKey) private var welcomeSeen = 0
@@ -132,6 +133,54 @@ struct AboutView: View {
                     }
                 }
 
+                Section(tr("Jouer")) {
+#if os(iOS)
+                    Label(tr("Avance rapide et retour en arrière : de ×2 à ×5, au choix par un appui long sur leur bouton du menu pause."),
+                          systemImage: "forward")
+#else
+                    Label(tr("Avance rapide et retour en arrière : de ×2 à ×5, au choix par un clic droit sur leur bouton du menu pause."),
+                          systemImage: "forward")
+#endif
+                    Label(tr("« Continuer » reprend la partie là où tu l'as quittée. Si une reprise fait planter le jeu, elle est mise de côté et le jeu repart du début la fois suivante."),
+                          systemImage: "clock.arrow.circlepath")
+                    if EmulatorSession.engineInstalled(for: .nds) {
+                        Label(tr("DS : RÉSOLUTION x1 (par défaut) dessine la 3D exactement comme la console ; x2 à x4 sont plus nets, mais quelques jeux y montrent des textures étirées (Pokémon Noire)."),
+                              systemImage: "rectangle.split.1x2")
+                    }
+                }
+
+                if EmulatorSession.engineInstalled(for: .gb) || EmulatorSession.engineInstalled(for: .nds) {
+                    Section(tr("Jouer à plusieurs")) {
+                        if EmulatorSession.engineInstalled(for: .gb) {
+                            Label(tr("Game Boy et Color : câble link entre deux appareils proches (même pièce, Wi-Fi et Bluetooth activés, pas besoin du même réseau). L'un héberge, l'autre rejoint (menu pause › Câble link) ; l'hôte accepte ou refuse chaque appareil."),
+                                  systemImage: "cable.connector")
+                        }
+                        if EmulatorSession.engineInstalled(for: .nds) {
+                            Label(tr("DS en ligne : la Connexion Wi-Fi Nintendo est remplacée par des serveurs de passionnés (Réglages › Nintendo DS en ligne ; Kaeru WFC pour les Pokémon)."),
+                                  systemImage: "wifi")
+                        }
+                        Label(tr("Deux manettes : la deuxième joue le joueur 2 sur les consoles de salon."), systemImage: "person.2")
+                    }
+                }
+
+                Section("RetroAchievements") {
+                    Label(tr("Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org (Réglages › RetroAchievements). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe."),
+                          systemImage: "trophy")
+                    Label(tr("Il faut la version exacte du jeu reconnue par RetroAchievements (No-Intro, Redump) : sinon, un message le dit au lancement."),
+                          systemImage: "checkmark.seal")
+                    Label(tr("Hardcore : les succès comptent davantage, mais chargement des sauvegardes rapides, retour arrière et codes de triche sont coupés."),
+                          systemImage: "flame")
+                }
+
+                if EmulatorSession.engineInstalled(for: .n3ds) {
+                    Section(tr("Homebrews 3DS")) {
+                        Label(tr("Importe leur archive telle quelle : le .3dsx va dans la bibliothèque, et leur dossier 3ds/ sur la carte SD de la 3DS (Sauvegardes › 3DS › Azahar › sdmc)."),
+                              systemImage: "sdcard")
+                        Label(tr("Le son des homebrews marche sans rien ajouter. Certains changent d'image quand le relief est activé : menu pause › CURSEUR 3D › Levé (Emerald3DS : son monde en voxels, avec aussi ses propres réglages sur l'écran du bas)."),
+                              systemImage: "cube")
+                    }
+                }
+
                 Section("BIOS") {
                     if EmulatorSession.engineInstalled(for: .ps2) {
                         Label(tr("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) : Réglages › BIOS PS2 › Importer, ou copié dans le dossier BIOS."),
@@ -183,6 +232,12 @@ struct AboutView: View {
                     Label(tr("Mise à jour : remplace l'app par la nouvelle version. Tes jeux et sauvegardes restent dans le dossier PlayTendo."),
                           systemImage: "arrow.down.app")
 #endif
+                }
+
+                Section(tr("Confidentialité")) {
+                    Label(tr("Tes jeux, BIOS et sauvegardes ne quittent jamais ton appareil."), systemImage: "lock.shield")
+                    Label(tr("Internet sert seulement à : jaquettes et fiches des jeux (le nom du jeu), codes de triche téléchargés, RetroAchievements (si tu te connectes), jeu en ligne DS et câble link (si tu t'en sers). Toujours par connexion chiffrée."),
+                          systemImage: "network")
                 }
 
                 Section(tr("Un souci ?")) {

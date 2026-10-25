@@ -1,17 +1,17 @@
 import SwiftUI
 
-/// Présentation de PlayTendo en 5 cartes (demandée le 2026-10-07, carte « À ta façon » et nouveautés le 2026-10-23) :
-/// montrée une fois après l'animation de démarrage (premier lancement, et à chaque nouvelle version de la
-/// présentation), et depuis « À propos ».
+/// Présentation de PlayTendo en 6 cartes (demandée le 2026-10-07, carte « À ta façon » et nouveautés le 2026-10-23,
+/// carte « Ensemble » et nouveautés le 2026-10-25) : montrée une fois après l'animation de démarrage (premier
+/// lancement, et à chaque nouvelle version de la présentation), et depuis « À propos ».
 struct WelcomeView: View {
     /// Version de la présentation déjà vue : l'augmenter la remontre une fois à tout le monde.
     static let seenKey = "presentationVue"
-    static let version = 2
+    static let version = 3
 
     let onFinish: () -> Void
 
     @State private var page = 0
-    private var pageCount: Int { showsTurbo ? 5 : 4 }
+    private var pageCount: Int { showsTurbo ? 6 : 5 }
 
 #if os(iOS)
     private var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
@@ -46,7 +46,8 @@ struct WelcomeView: View {
                     games.tag(1)
                     play.tag(2)
                     yourWay.tag(3)
-                    turbo.tag(4)
+                    together.tag(4)
+                    turbo.tag(5)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 #else
@@ -57,6 +58,7 @@ struct WelcomeView: View {
                     case 1: games
                     case 2: play
                     case 3: yourWay
+                    case 4: together
                     default: turbo
                     }
                 }
@@ -202,6 +204,10 @@ struct WelcomeView: View {
                 WelcomeLine(icon: "bandage",
                             text: tr("Romhacks : pose le patch (.ips, .bps, .ups) avec le jeu d'origine, il apparaît comme un jeu à part."))
             }
+            if EmulatorSession.engineInstalled(for: .n3ds) {
+                WelcomeLine(icon: "sdcard",
+                            text: tr("Homebrews 3DS : importe leur archive telle quelle, leurs données vont toutes seules sur la carte SD de la 3DS."))
+            }
 #if PLAYTENDO_VITA
             if EmulatorSession.engineInstalled(for: .vita) {
                 WelcomeLine(icon: "exclamationmark.triangle",
@@ -225,6 +231,11 @@ struct WelcomeView: View {
             WelcomeLine(icon: "gamecontroller", text: tr("Une manette Bluetooth ou USB (Switch, Xbox, PlayStation) marche aussi."))
             WelcomeLine(icon: "pause.circle",
                         text: tr("Échap met le jeu en pause : sauvegarde rapide, avance rapide, retour en arrière (de la NES à la N64, PS1), options, plein écran, quitter."))
+#endif
+#if os(iOS)
+            WelcomeLine(icon: "forward", text: tr("Avance rapide et retour en arrière de ×2 à ×5 : appui long sur leur bouton du menu pause."))
+#else
+            WelcomeLine(icon: "forward", text: tr("Avance rapide et retour en arrière de ×2 à ×5 : clic droit sur leur bouton du menu pause."))
 #endif
             if GameSystem.allCases.contains(where: { Cheats.supported($0) && EmulatorSession.engineInstalled(for: $0) }) {
                 WelcomeLine(icon: "wand.and.stars",
@@ -252,12 +263,28 @@ struct WelcomeView: View {
 #endif
             WelcomeLine(icon: "gamecontroller",
                         text: tr("Manette : les touches à ta façon (menu pause › Touches de la manette) et les vibrations."))
+            WelcomeLine(icon: "gauge.with.dots.needle.33percent",
+                        text: tr("Les performances en direct (images par seconde, processeur…) : Réglages › Afficher les performances."))
+        }
+    }
+
+    private var together: some View {
+        WelcomeCard {
+            WelcomeTitle(icon: "person.2.fill", title: tr("ENSEMBLE"), color: Neon.cyan)
+            if EmulatorSession.engineInstalled(for: .gb) {
+                WelcomeLine(icon: "cable.connector",
+                            text: tr("Game Boy et Color : le câble link entre deux appareils proches, pour échanger et combattre (menu pause › Câble link). Tu acceptes chaque appareil qui se branche."))
+            }
+            if EmulatorSession.engineInstalled(for: .nds) {
+                WelcomeLine(icon: "wifi",
+                            text: tr("DS en ligne : échanges et combats Pokémon, Mario Kart DS…, par des serveurs de passionnés (Réglages › Nintendo DS en ligne)."))
+            }
             if let last = twoPlayerNames.last {
                 let names = twoPlayerNames.count > 1 ? twoPlayerNames.dropLast().joined(separator: ", ") + tr(" et ") + last : last
                 WelcomeLine(icon: "person.2", text: tr("À deux avec deux manettes : \(names)."))
             }
-            WelcomeLine(icon: "gauge.with.dots.needle.33percent",
-                        text: tr("Les performances en direct (images par seconde, processeur…) : Réglages › Afficher les performances."))
+            WelcomeLine(icon: "trophy",
+                        text: tr("RetroAchievements : des succès à débloquer dans tes jeux, avec ton compte gratuit (Réglages › RetroAchievements)."))
         }
     }
 

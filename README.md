@@ -25,7 +25,8 @@ Les versions prêtes à installer sont dans **[Releases](../../releases)** :
 | NES | Mesen | 0.9.9 |
 | Super Nintendo | bsnes | v115 |
 | Nintendo 64 | Mupen64Plus-Next | commit 12edd2c |
-| Game Boy, Game Boy Color, Game Boy Advance | mGBA | 0.10.5 |
+| Game Boy, Game Boy Color | Gambatte | commit 7809bb6 |
+| Game Boy Advance | mGBA | 0.10.5 |
 | Nintendo DS | melonDS DS | 1.4.0 |
 | Nintendo 3DS | Azahar | 2126.1.2 |
 | GameCube, Wii | Dolphin (DolphiniOS) | 5.0.0b6 |
@@ -40,6 +41,24 @@ le mode turbo (StikDebug).
 
 La liste des formats acceptés et des BIOS est dans le fichier **Lisez-moi.txt** que l'app crée dans ses
 Documents.
+
+## Fonctions
+
+- **Bibliothèque** : jeux reconnus tout seuls, jaquettes en boîtes 3D (ScreenScraper, libretro, SteamGridDB), fiches
+  des jeux, favoris et tri ; archives .zip/.7z/.rar ; jaquette perso ; patchs de romhacks .ips/.bps/.ups ;
+  homebrews 3DS (dossier `3ds/` posé sur la carte SD de la 3DS).
+- **Image** : jusqu'à 4 fois la résolution (N64, DS, 3DS, PS2, PSP…), 16:9 (N64, PS2, GameCube), filtres CRT/LCD
+  pour les consoles 2D ; DS en x1 = rendu fidèle de melonDS.
+- **Menu pause** : sauvegarde rapide, reprise automatique (« Continuer »), avance rapide et retour en arrière de ×2 à
+  ×5, codes de triche (à taper ou à télécharger), curseur 3D de la 3DS.
+- **Commandes** : boutons à l'écran déplaçables (iPhone, iPad), clavier par console (Mac), manettes avec touches sur
+  mesure, vibrations et deux joueurs.
+- **Ensemble** : câble link Game Boy / Color entre deux appareils proches (l'hôte accepte chaque appareil), DS en
+  ligne par des serveurs de passionnés (Kaeru WFC), succès RetroAchievements.
+- **À ta façon** : 4 thèmes, affichage des performances, app en français ou en anglais.
+- **Mode turbo** (JIT) : PSP, PS2, GameCube, Wii, 3DS, PS Vita (sur iPhone avec StikDebug ; tout seul sur Mac).
+- **Sécurité** : jeux, BIOS et sauvegardes ne quittent jamais l'appareil ; réseau toujours chiffré ; archives,
+  patchs et images piégés refusés.
 
 ## Compiler
 

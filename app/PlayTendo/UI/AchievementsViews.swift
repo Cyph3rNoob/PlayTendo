@@ -45,7 +45,7 @@ struct RetroAchievementsSection: View {
         } header: {
             Text("RetroAchievements")
         } footer: {
-            Text(tr("Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org : NES, Super Nintendo, N64, Game Boy, GBA, DS, PS1, PSP, PS2 et GameCube. Il faut la bonne version du jeu (No-Intro, Redump). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe."))
+            Text(tr("Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org : NES, Super Nintendo, N64, Game Boy, GBA, DS, PS1, PSP, PS2, GameCube et Wii. Il faut la bonne version du jeu (No-Intro, Redump). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe."))
             Text(tr("Hardcore : les succès comptent davantage, mais le chargement des sauvegardes rapides, le retour arrière et les codes de triche sont coupés. Pris en compte au prochain jeu lancé."))
         }
     }
