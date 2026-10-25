@@ -1057,10 +1057,17 @@ private struct PauseMenu: View {
         } else if session.game.system == .nds {
             imageSettings(
                 resolution: NeonSegments(title: tr("RÉSOLUTION"),
-                                         detail: (DSSettings.Resolution(rawValue: dsResolution) ?? .x2).size,
+                                         detail: (DSSettings.Resolution(rawValue: dsResolution) ?? .x2).detail,
                                          options: DSSettings.Resolution.allCases.map { ($0.rawValue, $0.label) },
                                          selection: dsResolution) { value in
-                    choose { dsResolution = value }
+                    let renderer = { (raw: Int) in (DSSettings.Resolution(rawValue: raw) ?? .x2).isSoftware }
+                    if renderer(value) != renderer(dsResolution) {
+                        // Passage du rendu logiciel à l'OpenGL (ou l'inverse) : moteur rechargé à la reprise.
+                        pick { dsResolution = value }
+                        session.requestCoreReload(options: DSSettings.coreOptions)
+                    } else {
+                        choose { dsResolution = value }
+                    }
                 })
         } else if session.game.system == .ps2 {
             imageSettings(

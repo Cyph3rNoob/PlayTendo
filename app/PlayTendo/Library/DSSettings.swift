@@ -1,8 +1,9 @@
 import Foundation
 
-/// Image de la DS (essai du 2026-10-11) : rendu OpenGL de melonDS adapté à l'OpenGL ES de l'iPhone (ds/PTGLESCompat),
-/// réglé dans le menu pause et gardé pour tous les jeux DS. La 3D est dessinée plus finement ; les décors et personnages
-/// en 2D gardent leurs pixels d'origine. Le moteur applique le changement dès la reprise.
+/// Image de la DS (essai du 2026-10-11) : en x2 à x4, rendu OpenGL de melonDS adapté à l'OpenGL ES de l'iPhone
+/// (ds/PTGLESCompat), la 3D dessinée plus finement ; en x1, rendu logiciel (2026-10-25). Réglé dans le menu pause et
+/// gardé pour tous les jeux DS ; les décors et personnages en 2D gardent leurs pixels d'origine. Le moteur applique le
+/// changement dès la reprise (rechargé, partie gardée, quand on passe de l'un à l'autre rendu).
 enum DSSettings {
     /// Définition de rendu, en multiple de l'écran de la DS (256×192, pour chacun des deux écrans).
     enum Resolution: Int, CaseIterable, Identifiable {
@@ -11,6 +12,12 @@ enum DSSettings {
         var id: Int { rawValue }
         var label: String { "x\(rawValue)" }
         var size: String { "\(256 * rawValue)×\(192 * rawValue)" }
+
+        /// x1 : rendu logiciel de melonDS (le plus fidèle, sur son propre fil) ; x2 à x4 : rendu OpenGL, seul à monter
+        /// en définition (2026-10-25 : Pokémon Noire montrait des textures étirées en OpenGL, en x1 comme ailleurs).
+        var isSoftware: Bool { self == .x1 }
+        /// Ligne sous RÉSOLUTION dans le menu pause.
+        var detail: String { isSoftware ? size + " · " + tr("rendu fidèle") : size }
     }
 
     static let resolutionKey = "resolutionDS"
@@ -56,7 +63,8 @@ enum DSSettings {
     /// Réglages correspondants du moteur melonDS DS (OpenGL ES sur iPhone, OpenGL « core » sur Mac).
     static var coreOptions: [String: String] {
         [
-            "melonds_render_mode": "opengl",
+            "melonds_render_mode": resolution.isSoftware ? "software" : "opengl",
+            "melonds_threaded_renderer": "enabled",
             "melonds_opengl_resolution": "\(resolution.rawValue)",
             "melonds_network_mode": wifiServer == .off ? "disabled" : "indirect",
             "melonds_firmware_wfc_dns": wifiServer.dns,

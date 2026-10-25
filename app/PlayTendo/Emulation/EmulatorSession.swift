@@ -314,9 +314,14 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
                                 widescreen: PS2Settings.format == .wide)
     }
 
-    /// Réglages que le moteur ne lit qu'au démarrage du jeu (image N64) : à la reprise, le moteur est rechargé avec
-    /// eux, la partie étant gardée par une sauvegarde rapide.
-    func requestCoreReload() {
+    /// Réglages que le moteur ne lit qu'au démarrage du jeu (image N64), ou qui changent sa façon de dessiner (DS :
+    /// rendu logiciel ou OpenGL) : à la reprise, le moteur est rechargé avec eux, la partie étant gardée par une
+    /// sauvegarde rapide. `options` remplacent les réglages déjà changés en cours de partie (pas envoyées au moteur
+    /// avant le rechargement).
+    func requestCoreReload(options: [String: String] = [:]) {
+        condition.lock()
+        optionOverrides.merge(options) { $1 }
+        condition.unlock()
         perform { [self] in coreReloadRequested = true }
     }
 
