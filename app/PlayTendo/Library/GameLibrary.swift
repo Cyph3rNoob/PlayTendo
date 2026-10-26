@@ -462,11 +462,9 @@ final class GameLibrary: ObservableObject {
     /// Copie un fichier dans Jeux (ou BIOS), en décompressant les archives.
     nonisolated private static func importFile(_ url: URL, stats: inout ImportStats,
                                                update: ImportUpdate) throws -> ImportResult {
-#if PLAYTENDO_VITA
         if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-            return try importVitaFolder(url, stats: &stats, update: update)
+            return try importFolder(url, stats: &stats, update: update)
         }
-#endif
         let ext = url.pathExtension.lowercased()
         if archiveExtensions.contains(ext) {
             return try importArchive(url, stats: &stats, update: update)
@@ -489,7 +487,6 @@ final class GameLibrary: ObservableObject {
         return .added(1, moveIfPS2BIOS(target) ? [] : [target])
     }
 
-#if PLAYTENDO_VITA
     /// Un lien symbolique dans un dossier glissé pourrait pointer n'importe où sur l'appareil (fichiers personnels) et
     /// être suivi plus tard par le moteur : un jeu extrait d'une console n'en a jamais, le dossier est écarté.
     nonisolated private static func containsSymbolicLink(_ folder: URL) -> Bool {
@@ -503,21 +500,55 @@ final class GameLibrary: ObservableObject {
         return false
     }
 
-    /// Dossier glissé (sur Mac surtout, sans app Fichiers) : les jeux, DLC et mises à jour PS Vita extraits de la console
-    /// (dossier avec sce_sys/param.sfo), le dossier lui-même ou jusqu'à trois niveaux dessous (« VitaiOS/app/PCSA00011 »,
-    /// « addcont/PCSA00011/<DLC> »), et les .PUP et .vpk qu'il contient. Copie du système : sur le même disque (APFS), un clone immédiat qui ne prend pas de place.
-    nonisolated private static func importVitaFolder(_ url: URL, stats: inout ImportStats,
-                                                     update: ImportUpdate) throws -> ImportResult {
+    /// Dossier choisi avec « + » (2026-10-26 : avant, le sélecteur n'acceptait que des fichiers) ou glissé sur Mac,
+    /// jusqu'à trois niveaux dessous :
+    /// - jeux, DLC et mises à jour PS Vita extraits de la console (dossier avec sce_sys/param.sfo : « VitaiOS/app/PCSA00011 »,
+    ///   « addcont/PCSA00011/<DLC> »), mods rePatch, .PUP et .vpk ;
+    /// - archives (décompressées comme d'habitude) et BIOS (rangés dans BIOS) ;
+    /// - les autres jeux, copiés dans Jeux sous un dossier au nom du dossier choisi, avec leurs sous-dossiers : un .cue
+    ///   ou un .m3u y retrouve ses pistes, et deux « Track 01.bin » de jeux différents ne se gênent pas.
+    /// Copie du système : sur le même disque (APFS), un clone immédiat qui ne prend pas de place.
+    nonisolated private static func importFolder(_ url: URL, stats: inout ImportStats,
+                                                 update: ImportUpdate) throws -> ImportResult {
         stats.format = "dossier"
         var folders: [URL] = []
         var files: [URL] = []
+        var gameFiles: [URL] = []
         var rePatches: [URL] = []
-        collectVitaContent(url, depth: 0, folders: &folders, files: &files, rePatches: &rePatches)
+        collectFolderContent(url, depth: 0, folders: &folders, files: &files, gameFiles: &gameFiles,
+                             rePatches: &rePatches)
         let manager = FileManager.default
         let games = Paths.games.resolvingSymlinksInPath().path + "/"
         var added = 0
         var kept: [URL] = []
         var present: [URL] = []
+        // Jeux ordinaires : rangés sous Jeux/<nom du dossier choisi>/<chemin dans le dossier>.
+        let root = url.resolvingSymlinksInPath().path + "/"
+        let rootName = folderName(forArchive: url.appendingPathExtension("dossier"))
+        for file in gameFiles {
+            let real = file.resolvingSymlinksInPath().path
+            if real.hasPrefix(games) {
+                present.append(file)
+                continue
+            }
+            guard real.hasPrefix(root), let relative = safeRelativePath(String(real.dropFirst(root.count))) else { continue }
+            let target = Paths.games.appendingPathComponent(rootName, isDirectory: true).appendingPathComponent(relative)
+            let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? -1
+            if isSameFile(target, size: size) {
+                present.append(target)
+                continue
+            }
+            try checkFreeSpace(for: size)
+            try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if manager.fileExists(atPath: target.path) { try manager.removeItem(at: target) }
+            let name = target.lastPathComponent
+            try PTFileCopy.copyItem(at: file, to: target) { copied, total in update(.copying, name, copied, total) }
+            stats.written += max(size, 0)
+            stats.files += 1
+            added += 1
+            if !moveIfPS2BIOS(target) { kept.append(target) }
+        }
+#if PLAYTENDO_VITA
         for folder in folders {
             if folder.resolvingSymlinksInPath().path.hasPrefix(games) {
                 present.append(folder)
@@ -551,6 +582,7 @@ final class GameLibrary: ObservableObject {
             stats.files += 1
             added += 1
         }
+#endif
         for file in files {
             switch try importFile(file, stats: &stats, update: update) {
             case .added(let count, let urls):
@@ -562,12 +594,17 @@ final class GameLibrary: ObservableObject {
                 break
             }
         }
+        // Une archive du dossier a écrit son propre format : le journal garde « dossier ».
+        stats.format = "dossier"
         if added > 0 { return .added(added, kept) }
         return present.isEmpty ? .unsupported : .alreadyThere(present)
     }
 
-    nonisolated private static func collectVitaContent(_ url: URL, depth: Int, folders: inout [URL], files: inout [URL],
-                                                       rePatches: inout [URL]) {
+    /// Contenu d'un dossier choisi (voir importFolder) : dossiers de jeux PS Vita, mods rePatch, fichiers à importer un à
+    /// un (archives, BIOS, .PUP, .vpk) et autres jeux. Liens symboliques et fichiers cachés sautés.
+    nonisolated private static func collectFolderContent(_ url: URL, depth: Int, folders: inout [URL], files: inout [URL],
+                                                         gameFiles: inout [URL], rePatches: inout [URL]) {
+#if PLAYTENDO_VITA
         if VitaGame.isGameFolder(url) {
             folders.append(url)
             return
@@ -579,18 +616,29 @@ final class GameLibrary: ObservableObject {
             rePatches += entries.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
             return
         }
+#endif
         guard depth < 3,
-              let entries = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey],
-                                                                         options: [.skipsHiddenFiles]) else { return }
+              let entries = try? FileManager.default.contentsOfDirectory(
+                at: url, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles])
+        else { return }
         for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            if (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-                collectVitaContent(entry, depth: depth + 1, folders: &folders, files: &files, rePatches: &rePatches)
-            } else if ["pup", "vpk"].contains(entry.pathExtension.lowercased()) {
+            let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            if values?.isSymbolicLink == true { continue }
+            let ext = entry.pathExtension.lowercased()
+            if values?.isDirectory == true {
+                collectFolderContent(entry, depth: depth + 1, folders: &folders, files: &files, gameFiles: &gameFiles,
+                                     rePatches: &rePatches)
+            } else if archiveExtensions.contains(ext) || ["pup", "vpk"].contains(ext) {
                 files.append(entry)
+            } else if let destination = destination(forFileNamed: entry.lastPathComponent) {
+                if destination.deletingLastPathComponent() == Paths.bios {
+                    files.append(entry)
+                } else {
+                    gameFiles.append(entry)
+                }
             }
         }
     }
-#endif
 
     /// Décompresse chaque jeu, BIOS ou piste de l'archive ; le reste est sauté. Les BIOS vont dans BIOS. Les autres
     /// fichiers passent par un dossier caché de Jeux, puis : un seul fichier va à la racine de Jeux ; plusieurs, ou des
