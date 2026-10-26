@@ -44,14 +44,14 @@ enum PTStikJITExtensionHost {
                         pairingData: Data?,
                         forceScript: Bool) async throws -> PTJITHelperResponse {
         guard let identifier = helperBundleIdentifier else {
-            throw failure(1, "L'extension StikJIT de PlayTendo manque dans PlugIns. Réinstalle l'app en conservant ses extensions.")
+            throw failure(1, tr("L'extension StikJIT de PlayTendo manque dans PlugIns. Réinstalle l'app en conservant ses extensions."))
         }
 
         if NSClassFromString("NSExtension") == nil {
             dlopen("/System/Library/Frameworks/ExtensionFoundation.framework/ExtensionFoundation", RTLD_NOW)
         }
         guard let extensionClass = NSClassFromString("NSExtension") else {
-            throw failure(2, "iOS ne fournit pas l'API d'extension nécessaire à StikJIT.")
+            throw failure(2, tr("iOS ne fournit pas l'API d'extension nécessaire à StikJIT."))
         }
 
         let factory = unsafeBitCast(extensionClass as AnyObject, to: PTNSExtensionFactory.self)
@@ -59,7 +59,7 @@ enum PTStikJITExtensionHost {
         do {
             extensionObject = try factory.extension(withIdentifier: identifier)
         } catch {
-            throw failure(3, "Le helper StikJIT (\(identifier)) est introuvable : \(error.localizedDescription)")
+            throw failure(3, tr("Le helper StikJIT (\(identifier)) est introuvable : \(error.localizedDescription)"))
         }
 
         let request = PTJITHelperRequest(action: action,
@@ -114,17 +114,17 @@ private final class PTStikJITExtensionRequest {
             }
         }
         shim.setRequestCancellationBlock { [weak self] _, error in
-            let reason = error?.localizedDescription ?? "la requête a été annulée"
+            let reason = error?.localizedDescription ?? tr("la requête a été annulée")
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self?.finish(.failure(PTStikJITExtensionHost.failure(4, "Le helper StikJIT s'est arrêté : \(reason)")))
+                    self?.finish(.failure(PTStikJITExtensionHost.failure(4, tr("Le helper StikJIT s'est arrêté : \(reason)"))))
                 }
             }
         }
         shim.setRequestInterruptionBlock { [weak self] _ in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self?.finish(.failure(PTStikJITExtensionHost.failure(5, "Le helper StikJIT s'est interrompu. Réessaie.")))
+                    self?.finish(.failure(PTStikJITExtensionHost.failure(5, tr("Le helper StikJIT s'est interrompu. Réessaie."))))
                 }
             }
         }
@@ -136,7 +136,7 @@ private final class PTStikJITExtensionRequest {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     guard let requestIdentifier else {
-                        self.finish(.failure(PTStikJITExtensionHost.failure(6, "Le helper StikJIT n'a pas démarré. Réinstalle l'app en conservant ses extensions.")))
+                        self.finish(.failure(PTStikJITExtensionHost.failure(6, tr("Le helper StikJIT n'a pas démarré. Réinstalle l'app en conservant ses extensions."))))
                         return
                     }
                     let processID = self.shim.pid(forRequestIdentifier: requestIdentifier)
@@ -148,7 +148,7 @@ private final class PTStikJITExtensionRequest {
 
     private func complete(_ data: Data?) {
         guard let data, let response = try? JSONDecoder().decode(PTJITHelperResponse.self, from: data) else {
-            finish(.failure(PTStikJITExtensionHost.failure(7, "Le helper StikJIT s'est terminé sans réponse exploitable.")))
+            finish(.failure(PTStikJITExtensionHost.failure(7, tr("Le helper StikJIT s'est terminé sans réponse exploitable."))))
             return
         }
         PTLogLine("[jit-helper] \(action) : terminé (succès \(response.ok ? 1 : 0))")

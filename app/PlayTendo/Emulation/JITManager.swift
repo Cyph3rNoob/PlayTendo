@@ -195,7 +195,7 @@ final class JITManager: ObservableObject {
             let response = try await requestStikJIT(action: "prepare", pairingData: pairingData)
             txmPresence = response.txm
             guard response.ok else {
-                throw Failure(message: response.error ?? tr("Préparation StikJIT impossible."))
+                throw Failure(message: trMessage(response.error ?? tr("Préparation StikJIT impossible.")))
             }
             preparationStatus = tr("iPhone prêt pour le JIT.")
             status = .inactive
@@ -216,7 +216,7 @@ final class JITManager: ObservableObject {
         }
         let response = try await requestStikJIT(action: "reset")
         guard response.ok else {
-            throw Failure(message: response.error ?? tr("Réinitialisation du Developer Disk Image impossible."))
+            throw Failure(message: trMessage(response.error ?? tr("Réinitialisation du Developer Disk Image impossible.")))
         }
         preparationStatus = tr("Cache du Developer Disk Image effacé.")
 #else
@@ -310,7 +310,7 @@ final class JITManager: ObservableObject {
         let preparation = try await requestStikJIT(action: "prepare", pairingData: pairingData)
         txmPresence = preparation.txm
         guard preparation.ok else {
-            throw Failure(message: preparation.error ?? tr("Préparation StikJIT impossible."))
+            throw Failure(message: trMessage(preparation.error ?? tr("Préparation StikJIT impossible.")))
         }
         guard txmPresence != nil || forceStikJITScript else {
             throw Failure(message: tr("iOS n'a pas permis de détecter TXM/SPTM. Active « Forcer le script JIT » pour continuer."))
@@ -398,7 +398,7 @@ final class JITManager: ObservableObject {
 
     nonisolated private static func requireSuccess(_ response: PTJITHelperResponse, fallback: String) throws {
         guard response.ok else {
-            throw Failure(message: response.error ?? fallback)
+            throw Failure(message: trMessage(response.error ?? fallback))
         }
     }
 #endif
