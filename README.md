@@ -60,7 +60,8 @@ Documents.
 - **Sauvegardes** : celles du jeu s'enregistrent toutes seules ; « Continuer » reprend la partie là où tu l'as
   quittée, et une reprise qui fait planter le jeu est mise de côté.
 - **Commandes** : boutons à l'écran déplaçables et redimensionnables (iPhone, iPad), clavier par console (Mac),
-  manettes Bluetooth ou USB (Switch, Xbox, PlayStation) avec touches sur mesure, vibrations et deux joueurs.
+  manettes Bluetooth ou USB (Switch, Xbox, PlayStation) avec touches sur mesure, vibrations.
+- **2 Joueurs** : branche une deuxième manette et elle joue le joueur 2 sur les consoles de salon (NES, Super Nintendo, N64, PlayStation, PS2, GameCube, Wii).
 - **Ensemble** : câble link Game Boy / Color entre deux appareils proches (l'hôte accepte chaque appareil), DS en
   ligne par des serveurs de passionnés (Kaeru WFC), succès RetroAchievements.
 - **À ta façon** : 4 thèmes, affichage des performances, app en français ou en anglais.
