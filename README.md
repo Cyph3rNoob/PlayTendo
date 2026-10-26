@@ -43,15 +43,24 @@ Documents.
 
 ## Fonctions
 
-- **Bibliothèque** : jeux reconnus tout seuls, jaquettes en boîtes 3D (ScreenScraper, libretro, SteamGridDB), fiches
-  des jeux, favoris et tri ; archives .zip/.7z/.rar ; jaquette perso ; patchs de romhacks .ips/.bps/.ups ;
-  homebrews 3DS (dossier `3ds/` posé sur la carte SD de la 3DS).
-- **Image** : jusqu'à 4 fois la résolution (N64, DS, 3DS, PS2, PSP…), 16:9 (N64, PS2, GameCube), filtres CRT/LCD
-  pour les consoles 2D ; DS en x1 = rendu fidèle de melonDS.
-- **Menu pause** : sauvegarde rapide, reprise automatique (« Continuer »), avance rapide et retour en arrière de ×2 à
-  ×5, codes de triche (à taper ou à télécharger), curseur 3D de la 3DS.
-- **Commandes** : boutons à l'écran déplaçables (iPhone, iPad), clavier par console (Mac), manettes avec touches sur
-  mesure, vibrations et deux joueurs.
+- **Ajouter des jeux** : app Fichiers (iPhone, iPad), glisser-déposer dans la fenêtre (Mac), ou bouton « + » :
+  plusieurs fichiers à la fois, un dossier entier (sous-dossiers compris) et les archives .zip/.7z/.rar,
+  décompressées toutes seules. BIOS PS2 importé depuis les Réglages.
+- **Bibliothèque** : jeux reconnus tout seuls (No-Intro, Redump), jaquettes en boîtes 3D (ScreenScraper, libretro,
+  SteamGridDB), fiches des jeux, favoris et tri (nom, dernière partie, ajout récent) ; jeux en plusieurs disques
+  regroupés (PS1, GameCube) ; jaquette perso ; patchs de romhacks .ips/.bps/.ups (le jeu d'origine n'est jamais
+  modifié) ; homebrews 3DS (dossier `3ds/` posé sur la carte SD de la 3DS). Reste rapide avec des centaines de jeux.
+- **Image** : jusqu'à 4 fois la résolution (N64, DS, 3DS, PS2, PSP…), 16:9 (N64, PS2, GameCube), filtres
+  net/lissé/CRT/LCD pour les consoles 2D ; DS en x1 = rendu fidèle de melonDS ; plein écran sur Mac.
+- **Fluidité** : moins d'à-coups en 3DS, GameCube et Wii (effets graphiques préparés en arrière-plan), GameCube et
+  Wii sur deux cœurs du processeur ; en pause, le son et l'image s'arrêtent et l'écran peut s'éteindre (batterie).
+- **Menu pause** : sauvegarde rapide, avance rapide et retour en arrière de ×2 à ×5, codes de triche (à taper ou à
+  télécharger), changement de disque, curseur 3D de la 3DS.
+- **Sauvegardes** : celles du jeu s'enregistrent toutes seules ; « Continuer » reprend la partie là où tu l'as
+  quittée, et une reprise qui fait planter le jeu est mise de côté.
+- **Commandes** : boutons à l'écran déplaçables et redimensionnables (iPhone, iPad), clavier par console (Mac),
+  manettes Bluetooth ou USB (Switch, Xbox, PlayStation) avec touches sur mesure, vibrations.
+- **2 Joueurs** : branche une deuxième manette et elle joue le joueur 2 sur les consoles de salon (NES, Super Nintendo, N64, PlayStation, PS2, GameCube, Wii).
 - **Ensemble** : câble link Game Boy / Color entre deux appareils proches (l'hôte accepte chaque appareil), DS en
   ligne par des serveurs de passionnés (Kaeru WFC), succès RetroAchievements.
 - **À ta façon** : 4 thèmes, affichage des performances, app en français ou en anglais.
@@ -90,8 +99,7 @@ zsh scripts/build_app.sh            # app iPhone → PlayTendo.ipa
 zsh scripts/build_mac.sh            # app Mac → PlayTendo-Mac/PlayTendo.dmg
 ```
 
-La première fois, les moteurs PS2, GameCube/Wii et PS Vita prennent 20 à 30 minutes chacun ; ensuite, seul ce qui
-change est recompilé.
+Ensuite, seul ce qui change est recompilé.
 
 Les clés des services de jaquettes vont dans `secrets/` : `screenscraper_devid` et `screenscraper_devpassword`
 (ScreenScraper, boîtes 3D, source principale), `steamgriddb.key` (SteamGridDB, secours). Ce dossier n'est jamais
