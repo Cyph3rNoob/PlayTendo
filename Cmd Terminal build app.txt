@@ -1,5 +1,0 @@
-MAC : /Users/toons/Desktop/PlayTendo/scripts/build_mac.sh
-
-IPA : /Users/toons/Desktop/PlayTendo/scripts/build_app.sh
-
-ALL : /Users/toons/Desktop/PlayTendo/scripts/build_app.sh && /Users/toons/Desktop/PlayTendo/scripts/build_mac.sh
