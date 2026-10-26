@@ -304,9 +304,10 @@ struct WelcomeView: View {
 #else
             WelcomeLine(icon: "bolt", text: tr("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; il accélère aussi la PSP. Les autres consoles s'en passent."))
 #endif
-            WelcomeLine(icon: "square.stack.3d.up", text: tr("Il faut deux apps à part : StikDebug et LocalDevVPN."))
+            WelcomeLine(icon: "square.stack.3d.up",
+                        text: tr("iOS 26 ou plus : StikJIT intégré. iOS précédent ou LiveContainer : StikDebug et LocalDevVPN (réglages)."))
             WelcomeLine(icon: "arrow.triangle.2.circlepath",
-                        text: tr("Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo : StikDebug s'ouvre quelques secondes puis te ramène ici."))
+                        text: tr("Le JIT s'active tout seul quand un jeu qui en a besoin démarre."))
             WelcomeLine(icon: "gearshape", text: tr("Tout est expliqué dans la roue dentée de la bibliothèque."))
 #endif
         }

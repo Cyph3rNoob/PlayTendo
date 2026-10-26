@@ -23,6 +23,9 @@ bool PTJITPreparePool(size_t size, char *error, size_t errorSize);
 /// Simulateur et Mac : même réserve à deux vues, sans débogueur (au simulateur, pour tester les moteurs).
 bool PTJITPrepareSimulatedPool(size_t size, char *error, size_t errorSize);
 
+/// Appareil iOS sans TXM : après un attach/detach réussi, prépare la réserve par mprotect comme le simulateur.
+bool PTJITPrepareUnrestrictedPool(size_t size, char *error, size_t errorSize);
+
 // Exportées pour les moteurs (PPSSPP les retrouve par dlsym, voir scripts/patch_ppsspp_jit.py).
 
 /// La réserve JIT est prête.

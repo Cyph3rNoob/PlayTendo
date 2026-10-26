@@ -257,6 +257,35 @@ bool PTJITPrepareSimulatedPool(size_t size, char *error, size_t errorSize) {
 #endif
 }
 
+bool PTJITPrepareUnrestrictedPool(size_t size, char *error, size_t errorSize) {
+    if (atomic_load(&gActive)) return true;
+    size = PTJITRound(size);
+    void *executable = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (executable == MAP_FAILED) {
+        PTJITSetError(error, errorSize, @"mémoire indisponible.");
+        return false;
+    }
+
+    NSString *failure = nil;
+    vm_address_t writable = PTJITMapWritable(executable, size, &failure);
+    if (!writable || mprotect(executable, size, PROT_READ | PROT_EXEC) != 0) {
+        if (writable) vm_deallocate(mach_task_self(), writable, size);
+        munmap(executable, size);
+        PTJITSetError(error, errorSize, failure ?: @"zone exécutable refusée.");
+        return false;
+    }
+    if (!PTJITSelfTest(executable, (uint8_t *)writable)) {
+        vm_deallocate(mach_task_self(), writable, size);
+        munmap(executable, size);
+        PTJITSetError(error, errorSize, @"le code ne s'exécute pas correctement.");
+        return false;
+    }
+
+    PTLogLine(@"JIT : réserve préparée après l'activation du débogueur (sans TXM)");
+    PTJITActivate(executable, (uint8_t *)writable, size);
+    return true;
+}
+
 #pragma mark - Allocation pour les moteurs
 
 __attribute__((visibility("default"), used))

@@ -6,7 +6,21 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* StikJIT.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* StikJIT.xcframework */; };
+		A10000000000000000000002 /* StikJIT.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* StikJIT.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000003 /* PTJITHelperService.swift in PlayTendo */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* PTJITHelperService.swift */; };
+		A10000000000000000000004 /* PTJITHelperService.swift in PlayTendoJITHelper */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* PTJITHelperService.swift */; };
+		A10000000000000000000005 /* PlayTendoJITHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* PlayTendoJITHelper.swift */; };
+		A10000000000000000000006 /* PlayTendoJITHelper.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* PlayTendoJITHelper.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		A10000000000000000000007 /* PTJITHelperService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JITHelper/PTJITHelperService.swift; sourceTree = "<group>"; };
+		A10000000000000000000008 /* PlayTendoJITHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JITHelper/PlayTendoJITHelper.swift; sourceTree = "<group>"; };
+		A10000000000000000000009 /* StikJIT.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Vendor/StikJIT.xcframework; sourceTree = "<group>"; };
+		A1000000000000000000000A /* PlayTendoJITHelper.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = PlayTendoJITHelper.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000000000000000000001A /* JITHelper Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = JITHelper/Info.plist; sourceTree = "<group>"; };
 		7F0000000000000000000005 /* PlayTendo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlayTendo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F0000000000000000000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7F0000000000000000000021 /* PlayTendo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlayTendo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -32,6 +46,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000000E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* StikJIT.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -39,6 +61,10 @@
 			isa = PBXGroup;
 			children = (
 				7F0000000000000000000004 /* PlayTendo */,
+				A10000000000000000000007 /* PTJITHelperService.swift */,
+				A10000000000000000000008 /* PlayTendoJITHelper.swift */,
+				A1000000000000000000001A /* JITHelper Info.plist */,
+				A10000000000000000000009 /* StikJIT.xcframework */,
 				7F0000000000000000000011 /* Info.plist */,
 				7F0000000000000000000022 /* Info-Mac.plist */,
 				7F0000000000000000000003 /* Products */,
@@ -50,6 +76,7 @@
 			children = (
 				7F0000000000000000000005 /* PlayTendo.app */,
 				7F0000000000000000000021 /* PlayTendo.app */,
+				A1000000000000000000000A /* PlayTendoJITHelper.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -66,10 +93,12 @@
 				7F0000000000000000000008 /* Frameworks */,
 				7F0000000000000000000009 /* Resources */,
 				7F000000000000000000000A /* Embed cores */,
+				A10000000000000000000011 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A10000000000000000000014 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7F0000000000000000000004 /* PlayTendo */,
@@ -101,7 +130,43 @@
 			productReference = 7F0000000000000000000021 /* PlayTendo.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1000000000000000000000C /* PlayTendoJITHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000018 /* Build configuration list for PBXNativeTarget \"PlayTendoJITHelper\" */;
+			buildPhases = (
+				A1000000000000000000000D /* Sources */,
+				A1000000000000000000000E /* Frameworks */,
+				A1000000000000000000000F /* Resources */,
+				A10000000000000000000010 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PlayTendoJITHelper;
+			productName = PlayTendoJITHelper;
+			productReference = A1000000000000000000000A /* PlayTendoJITHelper.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7F0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000000000000000000000C;
+			remoteInfo = PlayTendoJITHelper;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000014 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000000000000000000000C /* PlayTendoJITHelper */;
+			targetProxy = A10000000000000000000013 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		7F0000000000000000000001 /* Project object */ = {
@@ -115,6 +180,9 @@
 						CreatedOnToolsVersion = 26.0;
 					};
 					7F0000000000000000000020 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					A1000000000000000000000C = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -135,6 +203,7 @@
 			targets = (
 				7F0000000000000000000006 /* PlayTendo */,
 				7F0000000000000000000020 /* PlayTendo Mac */,
+					A1000000000000000000000C /* PlayTendoJITHelper */,
 			);
 		};
 /* End PBXProject section */
@@ -154,7 +223,39 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000000F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A10000000000000000000010 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				A10000000000000000000002 /* StikJIT.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000011 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A10000000000000000000006 /* PlayTendoJITHelper.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		7F00000000000000000000A1 /* Clés masquées */ = {
@@ -242,6 +343,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000003 /* PTJITHelperService.swift in PlayTendo */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -249,6 +351,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000000D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000004 /* PTJITHelperService.swift in PlayTendoJITHelper */,
+				A10000000000000000000005 /* PlayTendoJITHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +519,52 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				FRAMEWORK_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/Vendor", );
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JITHelper/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.playtendo.app.jithelper;
+				PRODUCT_NAME = PlayTendoJITHelper;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000000000000000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				FRAMEWORK_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/Vendor", );
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JITHelper/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", );
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.playtendo.app.jithelper;
+				PRODUCT_NAME = PlayTendoJITHelper;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		7F0000000000000000000028 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -520,6 +677,15 @@
 			buildConfigurations = (
 				7F0000000000000000000028 /* Debug */,
 				7F0000000000000000000029 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000018 /* Build configuration list for PBXNativeTarget "PlayTendoJITHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000016 /* Debug */,
+				A10000000000000000000017 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

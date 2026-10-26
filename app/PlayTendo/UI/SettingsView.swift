@@ -33,7 +33,7 @@ struct SettingsView: View {
     @State private var vitaBusy = false
 #endif
 
-    private enum ImportKind { case ps2BIOS, vitaFirmware }
+    private enum ImportKind { case ps2BIOS, vitaFirmware, stikJITPairing }
 #if os(macOS)
     /// Mac : page affichée (Général, Clavier, Jeux et BIOS), retenue d'une ouverture à l'autre.
     @AppStorage("pageReglagesMac") private var page = "general"
@@ -50,6 +50,7 @@ struct SettingsView: View {
 #else
                 case .vitaFirmware: break
 #endif
+                case .stikJITPairing: importStikJITPairing(url)
                 }
             }
             .alert(biosAlert?.title ?? "", isPresented: Binding(get: { biosAlert != nil },
@@ -66,6 +67,9 @@ struct SettingsView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { refreshChecks() }
+            }
+            .onChange(of: jit.method) { _, method in
+                if method == .stikJIT { Task { await jit.refreshTXMPresence() } }
             }
             .tint(Neon.tint)
             .preferredColorScheme(theme.colorScheme)
@@ -125,6 +129,7 @@ struct SettingsView: View {
             Picker(tr("Activation"), selection: $jit.method) {
                 ForEach(JITManager.Method.allCases) { method in
                     Text(method.label).tag(method)
+                        .disabled(method == .stikJIT && !JITManager.canUseStikJIT)
                 }
             }
 
@@ -154,6 +159,62 @@ struct SettingsView: View {
                 Text(tr("Ce qu'il faut"))
             } footer: {
                 Text(tr("Au lancement d'un jeu PSP, PS2, GameCube, Wii ou 3DS, StikDebug s'ouvre quelques secondes puis te ramène dans PlayTendo. LocalDevVPN ne sert qu'à ce moment-là. PlayTendo ne peut pas lire le fichier de jumelage ni le mode développeur : leurs cases se cochent dès qu'un turbo a réussi."))
+            }
+        }
+
+        if jit.method == .stikJIT {
+            Section {
+                LabeledContent(tr("TXM/SPTM")) {
+                    Text(txmStatusText).foregroundStyle(.secondary)
+                }
+                Requirement(text: tr("Fichier de jumelage importé dans PlayTendo"), done: jit.hasPairingFile)
+                Requirement(text: tr("Installation signée avec get-task-allow et mode développeur activé"), done: jit.hasWorked ? true : nil)
+                Requirement(text: tr("LocalDevVPN connecté (Wi-Fi de préférence)"), done: vpnConnected ? true : nil)
+
+                Button {
+                    importKind = .stikJITPairing
+                    importingBIOS = true
+                } label: {
+                    Label(jit.hasPairingFile ? tr("Remplacer le fichier de jumelage…") : tr("Importer le fichier de jumelage…"),
+                          systemImage: "key.horizontal")
+                }
+
+                Toggle(tr("Forcer le script JIT"), isOn: $jit.forceStikJITScript)
+
+                if let preparationStatus = jit.preparationStatus {
+                    Text(preparationStatus)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    Task { try? await jit.prepareStikJIT() }
+                } label: {
+                    Label(tr("Préparer le Developer Disk Image"), systemImage: "arrow.down.circle")
+                }
+                .disabled(isActivating || !JITManager.canUseStikJIT || !jit.hasPairingFile)
+
+                Button(role: .destructive) {
+                    Task {
+                        do { try await jit.resetStikJITCache() }
+                        catch { biosAlert = (tr("Réinitialisation impossible"), error.localizedDescription) }
+                    }
+                } label: {
+                    Label(tr("Effacer le cache du Developer Disk Image"), systemImage: "trash")
+                }
+                .disabled(isActivating || !JITManager.canUseStikJIT)
+
+                if !JITManager.canUseStikJIT {
+                    Text(JITManager.isRunningInLiveContainer
+                         ? tr("StikJIT intégré ne fonctionne pas dans LiveContainer. Choisis StikDebug.")
+                         : tr("StikJIT intégré demande iOS 26 ou plus."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text(tr("StikJIT intégré"))
+            } footer: {
+                Text(tr("Importe un fichier de jumelage obtenu avec Finder/AFC ou idevice_pair. Active le mode développeur et connecte LocalDevVPN; le Wi-Fi est préférable. Le fichier reste dans le stockage privé de PlayTendo et son contenu n'est jamais journalisé. Sans Wi-Fi, active les données cellulaires, connecte LocalDevVPN, puis active le mode avion avant de revenir ici. Si le montage échoue plusieurs fois, redémarre l'iPhone ou efface le cache du Developer Disk Image."))
             }
         }
     }
@@ -474,7 +535,23 @@ struct SettingsView: View {
     private func refreshChecks() {
         stikDebugInstalled = jit.isStikDebugInstalled
         vpnConnected = JITManager.isLocalDevVPNConnected
+        jit.refreshPairingFileStatus()
+        if jit.method == .stikJIT { Task { await jit.refreshTXMPresence() } }
         refreshBIOS()
+    }
+
+    private var txmStatusText: String {
+        guard let present = jit.txmPresence else { return tr("Inconnu") }
+        return present ? tr("Présent") : tr("Absent")
+    }
+
+    private func importStikJITPairing(_ url: URL) {
+        do {
+            try jit.importPairingFile(from: url)
+            biosAlert = (tr("Fichier de jumelage importé"), tr("Le fichier a été copié dans le stockage privé de PlayTendo."))
+        } catch {
+            biosAlert = (tr("Import impossible"), error.localizedDescription)
+        }
     }
 
     private func refreshBIOS() {

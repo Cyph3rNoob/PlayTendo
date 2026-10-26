@@ -36,8 +36,7 @@ Les versions prêtes à installer sont dans **[Releases](../../releases)** :
 | PS Vita (**expérimental**) | Vita3K | build 4135 |
 
 **PS Vita : expérimental.** Le moteur Vita3K n'a pas encore de version stable : certains jeux plantent, s'affichent
-mal ou ne démarrent pas. Il faut le firmware de ta console (`PSVUPDAT.PUP`, dans le dossier BIOS) et, sur iPhone,
-le mode turbo (StikDebug).
+mal ou ne démarrent pas. Il faut le firmware de ta console (`PSVUPDAT.PUP`, dans le dossier BIOS) et le mode turbo.
 
 La liste des formats acceptés et des BIOS est dans le fichier **Lisez-moi.txt** que l'app crée dans ses
 Documents.
@@ -56,9 +55,20 @@ Documents.
 - **Ensemble** : câble link Game Boy / Color entre deux appareils proches (l'hôte accepte chaque appareil), DS en
   ligne par des serveurs de passionnés (Kaeru WFC), succès RetroAchievements.
 - **À ta façon** : 4 thèmes, affichage des performances, app en français ou en anglais.
-- **Mode turbo** (JIT) : PSP, PS2, GameCube, Wii, 3DS, PS Vita (sur iPhone avec StikDebug ; tout seul sur Mac).
+- **Mode turbo** (JIT) : PSP, PS2, GameCube, Wii, 3DS, PS Vita (StikJIT intégré sur iOS 26 ou plus ; StikDebug sur les versions précédentes et dans LiveContainer ; tout seul sur Mac).
 - **Sécurité** : jeux, BIOS et sauvegardes ne quittent jamais l'appareil ; réseau toujours chiffré ; archives,
   patchs et images piégés refusés.
+
+## JIT sur iPhone et iPad
+
+Sur iOS 26 ou plus, PlayTendo peut activer le JIT avec StikJIT depuis son extension d'aide intégrée. Il faut le mode
+Développeur, un fichier de jumelage valide et LocalDevVPN; une connexion Wi-Fi est préférable. Le jumelage est gardé
+dans le stockage privé protégé de l'app, transmis en mémoire à l'extension d'aide `PlayTendoJITHelper.appex` et retiré
+de son fichier temporaire après l'opération. L'extension garde son cache du Developer Disk Image dans son propre conteneur.
+
+Le parcours StikDebug reste disponible pour les versions d'iOS antérieures à iOS 26 et pour LiveContainer. Le Mac
+continue de préparer automatiquement sa réserve JIT. La version binaire StikJIT utilisée, son code source et sa
+licence MPL-2.0 sont indiqués dans [app/Vendor/StikJIT-README.md](app/Vendor/StikJIT-README.md).
 
 ## Compiler
 

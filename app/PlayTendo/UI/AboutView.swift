@@ -208,10 +208,10 @@ struct AboutView: View {
 #else
                     Label(tr("Indispensable pour la PS2, la GameCube, la Wii et la 3DS ; accélère la PSP."), systemImage: "bolt.fill")
 #endif
-                    // Liens : site officiel de StikDebug (celui de son dépôt GitHub) et page App Store de LocalDevVPN
-                    // (vérifiés le 2026-10-07).
+                    // StikDebug reste le parcours de compatibilité pour les versions d'iOS antérieures à iOS 26
+                    // et pour LiveContainer.
                     Label {
-                        Text(markdown: tr("Il faut [StikDebug](https://stikdebug.xyz/) et [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044). Il s'active tout seul au lancement d'un de ces jeux, une fois par ouverture de PlayTendo (détails dans la roue dentée)."))
+                        Text(markdown: tr("Sur iOS 26 ou plus, choisis StikJIT intégré dans les réglages; avant iOS 26 ou dans LiveContainer, il faut [StikDebug](https://stikdebug.xyz/) et [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044). Le JIT s'active tout seul au lancement d'un jeu compatible."))
                     } icon: {
                         Image(systemName: "gearshape")
                     }
@@ -269,11 +269,11 @@ struct AboutView: View {
                         }
                     }
 #if os(iOS)
-                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Codes de triche : libretro-database (cht, CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection et CheatDevicePS2 (GPL-3.0). Succès : rcheevos de RetroAchievements (MIT). Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikDebug (app à part)."))
+                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Codes de triche : libretro-database (cht, CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection et CheatDevicePS2 (GPL-3.0). Succès : rcheevos de RetroAchievements (MIT). Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikJIT intégré (MPL-2.0) et StikDebug."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 #else
-                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Codes de triche : libretro-database (cht, CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection et CheatDevicePS2 (GPL-3.0). Succès : rcheevos de RetroAchievements (MIT). Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL)."))
+                    Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Codes de triche : libretro-database (cht, CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection et CheatDevicePS2 (GPL-3.0). Succès : rcheevos de RetroAchievements (MIT). Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikJIT intégré (MPL-2.0) et StikDebug."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 #endif

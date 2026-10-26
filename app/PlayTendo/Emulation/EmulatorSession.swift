@@ -1227,7 +1227,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
     private func prepareVita(_ vita: PTVitaEngine) -> String? {
         // Vita3K n'a pas d'interpréteur : sans la réserve JIT de l'app, aucun jeu ne peut tourner.
         guard PTJITIsActive() else {
-            fail(tr("La PS Vita a besoin du mode turbo : sans lui, aucun jeu ne peut démarrer. Vérifie StikDebug et LocalDevVPN (roue dentée de la bibliothèque), puis relance le jeu."))
+            fail(tr("La PS Vita a besoin du mode turbo : sans lui, aucun jeu ne peut démarrer. Vérifie le mode turbo et ses prérequis dans Réglages, puis relance le jeu."))
             return nil
         }
         let clock = MachClock()

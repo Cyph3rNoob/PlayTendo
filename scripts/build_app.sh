@@ -9,6 +9,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build/xcode"
 LOG="$ROOT/build/logs/app.log"
 mkdir -p "$ROOT/build/logs"
+mkdir -p "$BUILD/ModuleCache.noindex"
 
 # PS Vita : incluse par défaut depuis le 2026-10-12 (mémoire mappée : Gravity Rush jouable), dans le projet lui-même
 # depuis le 2026-10-20 (une compilation lancée depuis Xcode l'a aussi). Son moteur se compile d'abord avec
@@ -43,7 +44,7 @@ else
 fi
 echo ">>> Compilation de l'app…"
 if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -target PlayTendo -configuration Release -sdk iphoneos \
-    SYMROOT="$BUILD" OBJROOT="$BUILD/obj" \
+    SYMROOT="$BUILD" OBJROOT="$BUILD/obj" CLANG_MODULE_CACHE_PATH="$BUILD/ModuleCache.noindex" \
     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" "${VITA_SETTINGS[@]}" \
     build > "$LOG" 2>&1; then
   echo "!!! ECHEC — erreurs :"
@@ -70,6 +71,14 @@ rm -f "$PAYLOAD_APP"/Frameworks/DolphinCore.framework/Sys/wiitdb-*.txt \
       "$PAYLOAD_APP"/Frameworks/DolphinCore.framework/Sys/totaldb.dsy
 for fw in "$PAYLOAD_APP"/Frameworks/*.framework; do
   codesign --force --sign - --timestamp=none "$fw" >> "$LOG" 2>&1
+done
+for extension in "$PAYLOAD_APP"/Extensions/*.appex(N) "$PAYLOAD_APP"/PlugIns/*.appex(N); do
+  [ -d "$extension" ] || continue
+  for fw in "$extension"/Frameworks/*.framework; do
+    [ -d "$fw" ] || continue
+    codesign --force --sign - --timestamp=none "$fw" >> "$LOG" 2>&1
+  done
+  codesign --force --sign - --timestamp=none "$extension" >> "$LOG" 2>&1
 done
 codesign --force --sign - --timestamp=none --entitlements "$ROOT/app/PlayTendo.entitlements" "$PAYLOAD_APP" >> "$LOG" 2>&1
 rm -f "$ROOT/PlayTendo.ipa"
