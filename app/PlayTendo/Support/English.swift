@@ -41,7 +41,7 @@ enum English {
         "Annulation…": "Cancelling…",
         "Annuler": "Cancel",
         "ANNULER": "CANCEL",
-        "App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque (.zip, .7z et .rar acceptés).": "Files app › On My iPhone › PlayTendo › Jeux, or the “+” button in the library (.zip, .7z and .rar accepted).",
+        "App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque : fichiers, dossiers, .zip, .7z et .rar.": "Files app › On My iPhone › PlayTendo › Jeux, or the “+” button in the library: files, folders, .zip, .7z and .rar.",
         "Application construite uniquement avec des logiciels libres. Aucun jeu ni BIOS n'est fourni.": "App built only with free software. No games or BIOS are provided.",
         "Entrée (pavé)": "Enter (keypad)",
         "Espace": "Space",

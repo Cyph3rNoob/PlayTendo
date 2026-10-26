@@ -86,7 +86,8 @@ struct LibraryView: View {
             }
             .allowsHitTesting(false)
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: coverFileGame == nil ? [.item] : [.image],
+        // Jeux : fichiers, archives et dossiers (jeu PS Vita extrait, dossier de jeux) ; jaquette : une image.
+        .fileImporter(isPresented: $importing, allowedContentTypes: coverFileGame == nil ? [.item, .folder] : [.image],
                       allowsMultipleSelection: coverFileGame == nil) { result in
             guard case .success(let urls) = result else { return }
             if let game = coverFileGame {

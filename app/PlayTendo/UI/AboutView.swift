@@ -93,7 +93,7 @@ struct AboutView: View {
 
                 Section(tr("Ajouter des jeux")) {
 #if os(iOS)
-                    Label(tr("App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque (.zip, .7z et .rar acceptés)."),
+                    Label(tr("App Fichiers › Sur mon iPhone › PlayTendo › Jeux, ou le bouton « + » de la bibliothèque : fichiers, dossiers, .zip, .7z et .rar."),
                           systemImage: "folder")
 #else
                     Label(tr("Le bouton « + » de la bibliothèque, ou glisse-les dans la fenêtre (.zip, .7z et .rar acceptés). Ils sont rangés dans le dossier Jeux (Réglages › Dossiers)."),
