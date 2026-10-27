@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// RetroAchievements côté interface (Réglages › RetroAchievements) : compte du joueur, mode Hardcore et notifications
+/// RetroAchievements côté interface (Réglages › En ligne) : compte du joueur, mode Hardcore et notifications
 /// pendant la partie. Le joueur se connecte avec son propre compte retroachievements.org ; l'app ne garde que le jeton
 /// de connexion, dans le Trousseau (jamais le mot de passe). Le suivi des succès est fait par PTAchievements (rcheevos).
 @MainActor

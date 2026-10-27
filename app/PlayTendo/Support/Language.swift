@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Langue de l'interface (Réglages › Langue) : français ou anglais. « Automatique » suit les langues de l'iPhone (ou
+/// Langue de l'interface (Réglages › Apparence) : français ou anglais. « Automatique » suit les langues de l'iPhone (ou
 /// celle choisie pour PlayTendo dans les réglages d'iOS) : français s'il passe avant l'anglais, anglais sinon, et pour
 /// toute autre langue. Le Journal reste en français.
 enum AppLanguage: String, CaseIterable, Identifiable, Sendable {

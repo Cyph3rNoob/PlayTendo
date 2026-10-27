@@ -7,6 +7,8 @@
 App d'émulation pour **iPhone, iPad et Mac** : une seule bibliothèque pour les consoles Nintendo et Sony,
 de la NES à la PS Vita. App personnelle, installée sur iPhone avec AltStore.
 
+Site : **[playtendo.me](https://playtendo.me)**
+
 > Aucun jeu ni BIOS n'est fourni : utilise les tiens. App non affiliée à Nintendo ni à Sony.
 
 ## Télécharger

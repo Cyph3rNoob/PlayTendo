@@ -1453,7 +1453,7 @@ final class EmulatorSession: ObservableObject, @unchecked Sendable {
 #if os(iOS)
                 fail(tr("Aucun BIOS PS2 trouvé. Importe celui de ta PS2 dans Réglages (roue dentée) › BIOS PS2, ou copie-le (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier BIOS de PlayTendo avec l'app Fichiers."))
 #else
-                fail(tr("Aucun BIOS PS2 trouvé. Importe celui de ta PS2 dans Réglages › BIOS PS2, ou copie-le (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier BIOS de PlayTendo (Réglages › Dossiers)."))
+                fail(tr("Aucun BIOS PS2 trouvé. Importe celui de ta PS2 dans Réglages › BIOS et firmwares, ou copie-le (fichier .bin de 4 Mo, « SCPH-… ») dans le dossier BIOS de PlayTendo (Réglages › Dossiers)."))
 #endif
                 return
             }

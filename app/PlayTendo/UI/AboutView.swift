@@ -156,7 +156,7 @@ struct AboutView: View {
                                   systemImage: "cable.connector")
                         }
                         if EmulatorSession.engineInstalled(for: .nds) {
-                            Label(tr("DS en ligne : la Connexion Wi-Fi Nintendo est remplacée par des serveurs de passionnés (Réglages › Nintendo DS en ligne ; Kaeru WFC pour les Pokémon)."),
+                            Label(tr("DS en ligne : la Connexion Wi-Fi Nintendo est remplacée par des serveurs de passionnés (Réglages › En ligne ; Kaeru WFC pour les Pokémon)."),
                                   systemImage: "wifi")
                         }
                         Label(tr("Deux manettes : la deuxième joue le joueur 2 sur les consoles de salon."), systemImage: "person.2")
@@ -164,7 +164,7 @@ struct AboutView: View {
                 }
 
                 Section("RetroAchievements") {
-                    Label(tr("Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org (Réglages › RetroAchievements). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe."),
+                    Label(tr("Des succès à débloquer en jouant, avec ton compte gratuit retroachievements.org (Réglages › En ligne). PlayTendo garde seulement un jeton de connexion, jamais ton mot de passe."),
                           systemImage: "trophy")
                     Label(tr("Il faut la version exacte du jeu reconnue par RetroAchievements (No-Intro, Redump) : sinon, un message le dit au lancement."),
                           systemImage: "checkmark.seal")
@@ -183,7 +183,7 @@ struct AboutView: View {
 
                 Section("BIOS") {
                     if EmulatorSession.engineInstalled(for: .ps2) {
-                        Label(tr("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) : Réglages › BIOS PS2 › Importer, ou copié dans le dossier BIOS."),
+                        Label(tr("PlayStation 2 : obligatoire. Le BIOS de ta console (fichier .bin de 4 Mo) : Réglages › BIOS et firmwares › Importer, ou copié dans le dossier BIOS."),
                               systemImage: "exclamationmark.circle")
                     }
 #if PLAYTENDO_VITA

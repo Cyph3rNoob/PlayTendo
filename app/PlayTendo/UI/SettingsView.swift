@@ -1,8 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Réglages de l'app : la langue, le mode turbo (JIT) de la PSP, de la PS2, de la PS Vita, de la GameCube/Wii et de la 3DS, le BIOS PS2,
-/// le firmware de la PS Vita et le son du démarrage. Sur Mac, en trois pages (Général, Clavier, Jeux et BIOS) avec les touches de chaque console.
+/// Réglages de l'app, rangés en rubriques (`Page`) : Apparence, En jeu, Mode turbo (JIT), En ligne, BIOS et firmwares.
+/// iPhone/iPad : un accueil d'une ligne par rubrique, avec son état. Mac : une barre de gauche, plus Clavier et Dossiers.
 struct SettingsView: View {
     @AppStorage(PerformanceSettings.key) private var showPerformance = false
     @AppStorage(RumbleSettings.key) private var rumbleEnabled = true
@@ -12,6 +12,8 @@ struct SettingsView: View {
     /// DS : serveur du jeu en ligne (DSSettings.WiFiServer).
     @AppStorage(DSSettings.wifiServerKey) private var dsWiFiServer = DSSettings.WiFiServer.kaeru.rawValue
     @EnvironmentObject private var jit: JITManager
+    /// Compte RetroAchievements, affiché sur la ligne « En ligne ».
+    @ObservedObject private var achievements = Achievements.shared
     @AppStorage(BootSound.enabledKey) private var bootSound = true
     @AppStorage(AppLanguage.key) private var language = AppLanguage.automatic
     @AppStorage(AppTheme.key) private var theme = AppTheme.neon
@@ -35,8 +37,8 @@ struct SettingsView: View {
 
     private enum ImportKind { case ps2BIOS, vitaFirmware, stikJITPairing }
 #if os(macOS)
-    /// Mac : page affichée (Général, Clavier, Jeux et BIOS), retenue d'une ouverture à l'autre.
-    @AppStorage("pageReglagesMac") private var page = "general"
+    /// Mac : rubrique affichée, retenue d'une ouverture à l'autre.
+    @AppStorage("pageReglagesMac") private var page = "appearance"
 #endif
 
     var body: some View {
@@ -75,25 +77,145 @@ struct SettingsView: View {
             .preferredColorScheme(theme.colorScheme)
     }
 
+    /// Rubriques des Réglages : une ligne par rubrique sur l'accueil (iPhone, iPad), une page dans la barre de gauche (Mac).
+    private enum Page: String, CaseIterable, Identifiable {
+        case appearance, play, turbo, online, keyboard, systemFiles, folders
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .appearance: tr("Apparence")
+            case .play: tr("En jeu")
+            case .turbo: tr("Mode turbo (JIT)")
+            case .online: tr("En ligne")
+            case .keyboard: tr("Clavier")
+            case .systemFiles: tr("BIOS et firmwares")
+            case .folders: tr("Dossiers")
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .appearance: tr("Langue, thème, son au démarrage")
+            case .play: tr("Performances, vibrations, Rumble Pak N64")
+            case .turbo: tr("État, activation, ce qu'il faut")
+            case .online: EmulatorSession.engineInstalled(for: .nds) ? tr("RetroAchievements, DS en ligne") : "RetroAchievements"
+            case .keyboard, .folders: ""
+            case .systemFiles: systemFilesSubtitle
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .appearance: "paintpalette"
+            case .play: "gamecontroller"
+            case .turbo: "bolt"
+            case .online: "globe"
+            case .keyboard: "keyboard"
+            case .systemFiles: "cpu"
+            case .folders: "folder"
+            }
+        }
+
+        /// Ce que contient « BIOS et firmwares », selon les consoles présentes dans l'app.
+        private var systemFilesSubtitle: String {
+            var vita = false
+#if PLAYTENDO_VITA
+            vita = EmulatorSession.engineInstalled(for: .vita)
+#endif
+            let ps2 = EmulatorSession.engineInstalled(for: .ps2)
+            if ps2 && vita { return tr("BIOS PS2, firmware PS Vita") }
+            return ps2 ? tr("BIOS PS2") : tr("Firmware PS Vita")
+        }
+
+        /// BIOS PS2 ou firmware de la PS Vita : seulement si leur console est dans l'app.
+        static var hasSystemFiles: Bool {
+#if PLAYTENDO_VITA
+            if EmulatorSession.engineInstalled(for: .vita) { return true }
+#endif
+            return EmulatorSession.engineInstalled(for: .ps2)
+        }
+
+#if os(iOS)
+        static var visible: [Page] { [.appearance, .play, .turbo, .online] + (hasSystemFiles ? [.systemFiles] : []) }
+#else
+        static var visible: [Page] { [.appearance, .play, .online, .keyboard] + (hasSystemFiles ? [.systemFiles] : []) + [.folders] }
+#endif
+    }
+
+    /// Ce qu'affiche la ligne d'une rubrique à droite (thème choisi, état du turbo, compte, fichier manquant).
+    private func status(of page: Page) -> (text: String, color: Color)? {
+        switch page {
+        case .appearance: return (theme.label, Neon.dim)
+        case .turbo: return (statusTitle, statusColor)
+        case .online:
+            guard let name = achievements.userName else { return nil }
+            return (name, Neon.dim)
+        case .systemFiles: return missingSystemFile ? (tr("Manquant"), Neon.magenta) : nil
+        case .play, .keyboard, .folders: return nil
+        }
+    }
+
+    /// Un fichier obligatoire manque : BIOS PS2, ou firmware de la PS Vita (ni installé ni prêt à l'être).
+    private var missingSystemFile: Bool {
+        if EmulatorSession.engineInstalled(for: .ps2) && biosList.isEmpty { return true }
+#if PLAYTENDO_VITA
+        if EmulatorSession.engineInstalled(for: .vita) && !vitaHasFirmware && vitaFiles.isEmpty { return true }
+#endif
+        return false
+    }
+
+    /// Les sections d'une rubrique (communes à l'iPhone et au Mac, sauf le mode turbo et les dossiers).
+    @ViewBuilder private func sections(of page: Page) -> some View {
+        switch page {
+        case .appearance:
+            languageSection
+            bootSection
+        case .play:
+            playSection
+#if os(macOS)
+            macTurboSection
+#endif
+        case .turbo:
+#if os(iOS)
+            jitSections
+#else
+            EmptyView()
+#endif
+        case .online:
+            RetroAchievementsSection()
+            dsOnlineSection
+        case .systemFiles:
+            biosSection
+#if PLAYTENDO_VITA
+            vitaSection
+#endif
+        case .keyboard, .folders:
+            EmptyView()
+        }
+    }
+
 #if os(iOS)
     private var layout: some View {
         NavigationStack {
             List {
-                languageSection
-                playSection
-                RetroAchievementsSection()
-                dsOnlineSection
-                jitSections
-                biosSection
-#if PLAYTENDO_VITA
-                vitaSection
-#endif
-                bootSection
+                Section {
+                    ForEach(Page.visible) { page in
+                        NavigationLink(value: page) { pageRow(page) }
+                    }
+                }
             }
             // Thème changé : la liste est refaite avec ses nouvelles couleurs.
             .id(theme)
             .navigationTitle(tr("Réglages"))
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: Page.self) { page in
+                List { sections(of: page) }
+                    .id(theme)
+                    .navigationTitle(page.title)
+                    .navigationBarTitleDisplayMode(.inline)
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("OK") { dismiss() }
@@ -107,6 +229,30 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    /// Ligne d'une rubrique sur l'accueil : icône, titre, ce qu'elle contient, et son état à droite.
+    private func pageRow(_ page: Page) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: page.icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Neon.tint)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(page.title)
+                Text(page.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if let status = status(of: page) {
+                Text(status.text)
+                    .font(.subheadline)
+                    .foregroundStyle(status.color)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder private var jitSections: some View {
@@ -219,53 +365,31 @@ struct SettingsView: View {
         }
     }
 #else
-    /// Pages des Réglages sur Mac, dans la barre de gauche.
-    private enum MacPage: String, CaseIterable, Identifiable {
-        case general, keyboard, games
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .general: tr("Général")
-            case .keyboard: tr("Clavier")
-            // Le BIOS PS2 n'y est que si la PS2 est dans l'app.
-            case .games: hasSystemFiles ? tr("Jeux et BIOS") : tr("Jeux")
-            }
-        }
-
-        /// BIOS PS2 ou firmware de la PS Vita (seulement si leur console est dans l'app).
-        private var hasSystemFiles: Bool {
-#if PLAYTENDO_VITA
-            if EmulatorSession.engineInstalled(for: .vita) { return true }
-#endif
-            return EmulatorSession.engineInstalled(for: .ps2)
-        }
-
-        var icon: String {
-            switch self {
-            case .general: "gearshape"
-            case .keyboard: "keyboard"
-            case .games: "folder"
-            }
-        }
-    }
-
-    /// Mac : une barre de gauche (Général, Clavier, Jeux et BIOS) et la page choisie, au style des réglages de macOS.
+    /// Mac : une barre de gauche (les rubriques) et la page choisie, au style des réglages de macOS.
     private var layout: some View {
         HStack(spacing: 0) {
-            List(selection: Binding(get: { MacPage(rawValue: page) }, set: { if let choice = $0 { page = choice.rawValue } })) {
-                ForEach(MacPage.allCases) { item in
-                    Label(item.title, systemImage: item.icon).tag(item)
+            List(selection: Binding(get: { currentPage }, set: { if let choice = $0 { page = choice.rawValue } })) {
+                ForEach(Page.visible) { item in
+                    HStack {
+                        Label(item.title, systemImage: item.icon)
+                        Spacer(minLength: 4)
+                        // Seul un fichier manquant est signalé dans la barre (la place y est comptée).
+                        if item == .systemFiles, let status = status(of: item) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(status.color)
+                                .help(status.text)
+                        }
+                    }
+                    .tag(item)
                 }
             }
             .listStyle(.sidebar)
-            .frame(width: 190)
+            .frame(width: 200)
 
             Divider()
 
             VStack(spacing: 0) {
-                let current = MacPage(rawValue: page) ?? .general
+                let current = currentPage
                 Text(current.title)
                     .font(.title2.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -289,30 +413,17 @@ struct SettingsView: View {
         .frame(minWidth: 760, idealWidth: 820, minHeight: 540, idealHeight: 640)
     }
 
-    @ViewBuilder private func macPage(_ current: MacPage) -> some View {
+    /// Page retenue ; une ancienne valeur (« general », « games ») ou une rubrique masquée ramène à la première.
+    private var currentPage: Page {
+        guard let saved = Page(rawValue: page), Page.visible.contains(saved) else { return .appearance }
+        return saved
+    }
+
+    @ViewBuilder private func macPage(_ current: Page) -> some View {
         switch current {
-        case .general:
-            Form {
-                languageSection
-                playSection
-                RetroAchievementsSection()
-                dsOnlineSection
-                bootSection
-                if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
-                    Section {
-                        LabeledContent(tr("Mode turbo (JIT)")) {
-                            Label(jit.isActive ? tr("Actif") : statusTitle, systemImage: jit.isActive ? "bolt.fill" : statusIcon)
-                                .foregroundStyle(statusColor)
-                        }
-                    } footer: {
-                        Text(tr("Sur Mac, le mode turbo s'active tout seul : rien à installer."))
-                    }
-                }
-            }
-            .formStyle(.grouped)
         case .keyboard:
             KeyboardSettingsPage()
-        case .games:
+        case .folders:
             Form {
                 Section {
                     LabeledContent(tr("Dossier des jeux")) {
@@ -326,17 +437,28 @@ struct SettingsView: View {
                         Text(tr("Dossier PlayTendo"))
                         Text(tr("Jeux, BIOS, sauvegardes"))
                     }
-                } header: {
-                    Text(tr("Dossiers"))
                 } footer: {
                     Text(tr("Les jeux posés dans le dossier Jeux apparaissent dans la bibliothèque, comme ceux ajoutés avec le bouton +."))
                 }
-                biosSection
-#if PLAYTENDO_VITA
-                vitaSection
-#endif
             }
             .formStyle(.grouped)
+        default:
+            Form { sections(of: current) }
+                .formStyle(.grouped)
+        }
+    }
+
+    /// Mac : état du mode turbo, dans « En jeu » (il s'active tout seul, rien à régler).
+    @ViewBuilder private var macTurboSection: some View {
+        if GameSystem.allCases.contains(where: { JITManager.benefits($0) && EmulatorSession.engineInstalled(for: $0) }) {
+            Section {
+                LabeledContent(tr("Mode turbo (JIT)")) {
+                    Label(jit.isActive ? tr("Actif") : statusTitle, systemImage: jit.isActive ? "bolt.fill" : statusIcon)
+                        .foregroundStyle(statusColor)
+                }
+            } footer: {
+                Text(tr("Sur Mac, le mode turbo s'active tout seul : rien à installer."))
+            }
         }
     }
 #endif
