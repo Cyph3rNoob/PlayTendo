@@ -28,3 +28,5 @@ cores/mac/
 libs/libarchive/ios/
 libs/libarchive/sim/
 libs/libarchive/mac/
+# Notes privées (journal complet, règles, appareils) : jamais publiées
+notes-privees/

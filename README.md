@@ -116,7 +116,7 @@ envoyé sur GitHub ; les clés sont masquées dans l'app à la compilation.
 | `scripts/` | Compilation, retouches des moteurs (`patch_*.py`) et bancs d'essai (`test/`) |
 | `art/` | Logo |
 | `vitrine/` | Page de présentation |
-| `CLAUDE.md` | Notes de travail détaillées (choix, pièges, historique) |
+| `CLAUDE.md` | Notes techniques : organisation, fonctionnement des moteurs, retouches, pièges |
 
 ## Licences
 
