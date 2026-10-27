@@ -337,7 +337,7 @@ enum Paths {
       Game Boy Advance : gba_bios.bin
       PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo
         (« SCPH-70004… », n'importe quel nom, PlayTendo le reconnaît),
-        ou dans l'app : Réglages › BIOS PS2 › Importer un BIOS PS2
+        ou dans l'app : Réglages › BIOS et firmwares › Importer un BIOS PS2
 
     """ + readmeVitaBIOS + """
 
@@ -375,7 +375,7 @@ enum Paths {
       Game Boy Advance: gba_bios.bin
       PlayStation 2 (required): your console's BIOS, a 4 MB .bin file
         (“SCPH-70004…”, any name, PlayTendo recognizes it),
-        or in the app: Settings › PS2 BIOS › Import a PS2 BIOS
+        or in the app: Settings › BIOS and firmware › Import a PS2 BIOS
 
     """ + readmeVitaBIOSEnglish + """
 
@@ -413,8 +413,8 @@ enum Paths {
             ([.psx], "PlayStation : scph5501.bin (ou scph1001.bin…)", "PlayStation: scph5501.bin (or scph1001.bin…)"),
             ([.nds], "Nintendo DS : bios7.bin, bios9.bin, firmware.bin", "Nintendo DS: bios7.bin, bios9.bin, firmware.bin"),
             ([.gba], "Game Boy Advance : gba_bios.bin", "Game Boy Advance: gba_bios.bin"),
-            ([.ps2], "PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo\n    (« SCPH-70004… », n'importe quel nom), ou Réglages › BIOS PS2 › Importer un BIOS PS2",
-             "PlayStation 2 (required): your console's BIOS, a 4 MB .bin file\n    (“SCPH-70004…”, any name), or Settings › PS2 BIOS › Import a PS2 BIOS"),
+            ([.ps2], "PlayStation 2 (obligatoire) : le BIOS de ta console, fichier .bin de 4 Mo\n    (« SCPH-70004… », n'importe quel nom), ou Réglages › BIOS et firmwares › Importer un BIOS PS2",
+             "PlayStation 2 (required): your console's BIOS, a 4 MB .bin file\n    (“SCPH-70004…”, any name), or Settings › BIOS and firmware › Import a PS2 BIOS"),
         ]
 #if PLAYTENDO_VITA
         games.append(([.vita],

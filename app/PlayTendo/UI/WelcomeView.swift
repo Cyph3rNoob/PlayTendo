@@ -193,7 +193,7 @@ struct WelcomeView: View {
             WelcomeLine(icon: "plus.circle", text: tr("Ou clique sur « + » dans la bibliothèque (les .zip, .7z et .rar marchent aussi)."))
 #endif
             if EmulatorSession.engineInstalled(for: .ps2) {
-                WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS PS2)."))
+                WelcomeLine(icon: "cpu", text: tr("PlayStation 2 : importe aussi le BIOS de ta console (Réglages › BIOS et firmwares)."))
             }
 #if os(iOS)
             WelcomeLine(icon: "photo", text: tr("Pas de jaquette ? Appui long sur le jeu › Choisir une jaquette, avec ta propre image."))
@@ -254,7 +254,7 @@ struct WelcomeView: View {
     private var yourWay: some View {
         WelcomeCard {
             WelcomeTitle(icon: "slider.horizontal.3", title: tr("À TA FAÇON"), color: LibraryView.favoriteColor)
-            WelcomeLine(icon: "paintpalette", text: tr("4 thèmes : Néon, Rétro 8-bit, Minimal sombre et Pixel Art (Réglages › Thème)."))
+            WelcomeLine(icon: "paintpalette", text: tr("4 thèmes : Néon, Rétro 8-bit, Minimal sombre et Pixel Art (Réglages › Apparence)."))
 #if os(iOS)
             WelcomeLine(icon: "hand.draw",
                         text: tr("Les boutons à l'écran se déplacent et changent de taille comme tu veux (menu pause › Modifier les boutons)."))
@@ -264,7 +264,7 @@ struct WelcomeView: View {
             WelcomeLine(icon: "gamecontroller",
                         text: tr("Manette : les touches à ta façon (menu pause › Touches de la manette) et les vibrations."))
             WelcomeLine(icon: "gauge.with.dots.needle.33percent",
-                        text: tr("Les performances en direct (images par seconde, processeur…) : Réglages › Afficher les performances."))
+                        text: tr("Les performances en direct (images par seconde, processeur…) : Réglages › En jeu › Afficher les performances."))
         }
     }
 
@@ -277,14 +277,14 @@ struct WelcomeView: View {
             }
             if EmulatorSession.engineInstalled(for: .nds) {
                 WelcomeLine(icon: "wifi",
-                            text: tr("DS en ligne : échanges et combats Pokémon, Mario Kart DS…, par des serveurs de passionnés (Réglages › Nintendo DS en ligne)."))
+                            text: tr("DS en ligne : échanges et combats Pokémon, Mario Kart DS…, par des serveurs de passionnés (Réglages › En ligne)."))
             }
             if let last = twoPlayerNames.last {
                 let names = twoPlayerNames.count > 1 ? twoPlayerNames.dropLast().joined(separator: ", ") + tr(" et ") + last : last
                 WelcomeLine(icon: "person.2", text: tr("À deux avec deux manettes : \(names)."))
             }
             WelcomeLine(icon: "trophy",
-                        text: tr("RetroAchievements : des succès à débloquer dans tes jeux, avec ton compte gratuit (Réglages › RetroAchievements)."))
+                        text: tr("RetroAchievements : des succès à débloquer dans tes jeux, avec ton compte gratuit (Réglages › En ligne)."))
         }
     }
 

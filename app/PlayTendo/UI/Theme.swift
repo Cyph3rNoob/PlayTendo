@@ -1,7 +1,7 @@
 import CoreText
 import SwiftUI
 
-/// Thème de l'interface (Réglages › Thème), appliqué tout de suite : Néon (cyberpunk, d'origine), Rétro 8-bit (gris
+/// Thème de l'interface (Réglages › Apparence), appliqué tout de suite : Néon (cyberpunk, d'origine), Rétro 8-bit (gris
 /// des consoles des années 80-90, rouge et bleu marine, coins carrés, police pixel), Minimal sombre (bleu nuit avec
 /// des vagues de lumière immobiles, texte blanc, un accent bleu, coins arrondis) ou Pixel Art (coucher de soleil en
 /// pixels immobile, accent jaune, coins en escalier, police pixel). L'image des jeux, leurs boutons tactiles et

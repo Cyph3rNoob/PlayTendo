@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Réglages › RetroAchievements : connexion avec le compte du joueur, mode Hardcore, déconnexion.
+/// Réglages › En ligne : connexion avec le compte du joueur, mode Hardcore, déconnexion.
 struct RetroAchievementsSection: View {
     @ObservedObject private var achievements = Achievements.shared
     @State private var user = ""

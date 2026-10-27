@@ -2,7 +2,7 @@
 #if PLAYTENDO_VITA
 import Foundation
 
-/// Firmware de la PS Vita (Réglages › PS Vita) : les fichiers .PUP du dossier BIOS avec leur version, ce que la mémoire
+/// Firmware de la PS Vita (Réglages › BIOS et firmwares) : les fichiers .PUP du dossier BIOS avec leur version, ce que la mémoire
 /// de la console contient déjà, et l'import d'un nouveau .PUP dans BIOS. L'installation se fait au lancement d'un jeu
 /// PS Vita (`EmulatorSession.prepareVita`), comme pour un .PUP copié à la main.
 enum VitaFirmware {

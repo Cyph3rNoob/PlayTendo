@@ -1,6 +1,6 @@
 import Foundation
 
-/// BIOS PS2 de l'utilisateur (Réglages › BIOS PS2) : ceux du dossier BIOS, leur région et leur version lues dans le
+/// BIOS PS2 de l'utilisateur (Réglages › BIOS et firmwares) : ceux du dossier BIOS, leur région et leur version lues dans le
 /// fichier, celui que le moteur PS2 prendra, et l'import d'un nouveau directement dans BIOS.
 enum PS2BIOS {
     struct Info: Identifiable, Equatable, Sendable {
