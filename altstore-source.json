@@ -19,7 +19,33 @@
       "iconURL": "https://playtendo.me/assets/app-icon.png",
       "tintColor": "#00F0FF",
       "category": "games",
-      "screenshots": [],
+      "screenshots": [
+        {
+          "imageURL": "https://playtendo.me/assets/screens/1-consoles.jpg",
+          "width": 1320,
+          "height": 2868
+        },
+        {
+          "imageURL": "https://playtendo.me/assets/screens/2-jaquettes.jpg",
+          "width": 1320,
+          "height": 2868
+        },
+        {
+          "imageURL": "https://playtendo.me/assets/screens/3-themes.jpg",
+          "width": 1320,
+          "height": 2868
+        },
+        {
+          "imageURL": "https://playtendo.me/assets/screens/4-reprise.jpg",
+          "width": 1320,
+          "height": 2868
+        },
+        {
+          "imageURL": "https://playtendo.me/assets/screens/5-fonctions.jpg",
+          "width": 1320,
+          "height": 2868
+        }
+      ],
       "versions": [
         {
           "version": "1.1",
