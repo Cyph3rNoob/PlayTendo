@@ -30,3 +30,5 @@ libs/libarchive/sim/
 libs/libarchive/mac/
 # Notes privées (journal complet, règles, appareils) : jamais publiées
 notes-privees/
+# Vraies jaquettes de jeux (droits des éditeurs) : jamais publiées avec la vitrine
+vitrine/assets/covers/
