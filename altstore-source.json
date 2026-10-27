@@ -2,7 +2,7 @@
   "name": "PlayTendo",
   "identifier": "com.playtendo.source",
   "subtitle": "Tes jeux Nintendo et Sony, sur ton iPhone et ton iPad.",
-  "description": "Source officielle de PlayTendo pour AltStore et SideStore. PlayTendo ne contient aucun jeu ni BIOS : il fait tourner ceux que tu possèdes.",
+  "description": "Source officielle de PlayTendo pour ton installateur d'apps (AltStore, SideStore, Feather…). PlayTendo ne contient aucun jeu ni BIOS : il fait tourner ceux que tu possèdes.",
   "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
   "website": "https://github.com/Cyph3rNoob/PlayTendo",
   "tintColor": "#00F0FF",
@@ -13,19 +13,28 @@
       "bundleIdentifier": "com.playtendo.app",
       "developerName": "Cyph3rNoob",
       "subtitle": "14 consoles, de la NES à la PS Vita, dans une seule app.",
-      "localizedDescription": "Émulateur pour iPhone et iPad : NES, Super Nintendo, Nintendo 64, GameCube, Wii, Game Boy, Game Boy Color, Game Boy Advance, DS, 3DS, PlayStation, PlayStation 2, PSP et PS Vita (expérimentale), avec des moteurs d'émulation libres.\n\nBibliothèque qui reconnaît tes jeux et télécharge leurs jaquettes, sauvegarde rapide et reprise automatique, avance rapide et retour en arrière, codes de triche, patchs de romhacks (.ips, .bps, .ups), boutons à l'écran sur mesure, manettes Bluetooth (touches, vibrations, deux joueurs) et quatre thèmes.\n\nMode turbo (JIT) via l'app StikDebug, indispensable pour la PS2, la GameCube, la Wii, la 3DS et la PS Vita.\n\nAucun jeu ni BIOS n'est fourni. PlayTendo n'est affilié ni à Nintendo ni à Sony.",
+      "localizedDescription": "Émulateur pour iPhone et iPad : NES, Super Nintendo, Nintendo 64, GameCube, Wii, Game Boy, Game Boy Color, Game Boy Advance, DS, 3DS, PlayStation, PlayStation 2, PSP et PS Vita (expérimentale), avec des moteurs d'émulation libres.\n\nBibliothèque qui reconnaît tes jeux et télécharge leurs jaquettes en boîtes 3D, import de fichiers, dossiers et archives, sauvegarde rapide et reprise automatique, avance rapide et retour en arrière de ×2 à ×5, codes de triche, patchs de romhacks (.ips, .bps, .ups), boutons à l'écran sur mesure, manettes Bluetooth (touches, vibrations, deux joueurs) et quatre thèmes.\n\nEnsemble : câble link Game Boy / Color entre deux appareils proches, DS en ligne, succès RetroAchievements.\n\nMode turbo (JIT), indispensable pour la PS2, la GameCube, la Wii, la 3DS et la PS Vita : JIT intégré avec StikJIT sur iOS 26 ou plus, activé automatiquement au lancement des jeux compatibles (mode développeur, fichier de jumelage et LocalDevVPN nécessaires, Wi-Fi recommandé) ; StikDebug reste disponible sur les versions d'iOS plus anciennes.\n\nAucun jeu ni BIOS n'est fourni. PlayTendo n'est affilié ni à Nintendo ni à Sony.",
       "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
       "tintColor": "#00F0FF",
       "category": "games",
       "screenshots": [],
       "versions": [
         {
+          "version": "1.1",
+          "buildVersion": "2",
+          "date": "2026-10-26",
+          "localizedDescription": "JIT intégré avec StikJIT (iOS 26 ou plus). Câble link Game Boy / Color, DS en ligne, deux joueurs, RetroAchievements. Jaquettes en boîtes 3D, fiches des jeux, favoris et tri, jeux en plusieurs disques, homebrews 3DS, import de dossiers. Menu pause repensé, vitesses ×2 à ×5, codes de triche, filtres 2D, boutons et touches de manette sur mesure, vibrations, affichage des performances. Thèmes Minimal sombre et Pixel Art. Moins d'à-coups (3DS, GameCube, Wii), économie de batterie en pause. Game Boy / Color sur le moteur Gambatte : les sauvegardes rapides GB/GBC de la 1.0 ne se rechargent pas.",
+          "downloadURL": "https://github.com/Cyph3rNoob/PlayTendo/releases/download/v1.1/PlayTendo.ipa",
+          "size": 61027809,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "1.0",
           "buildVersion": "1",
-          "date": "2026-10-23",
-          "localizedDescription": "Codes de triche (à taper ou à télécharger), patchs de romhacks, jaquette perso, thèmes Pixel Art et Minimal sombre, touches de manette sur mesure, vibrations, deux joueurs, affichage des performances.",
+          "date": "2026-10-21",
+          "localizedDescription": "Première version publiée : 12 moteurs, de la NES à la PS Vita.",
           "downloadURL": "https://github.com/Cyph3rNoob/PlayTendo/releases/download/v1.0/PlayTendo.ipa",
-          "size": 58657439,
+          "size": 67238358,
           "minOSVersion": "18.0"
         }
       ],
@@ -34,7 +43,9 @@
           "com.apple.developer.kernel.increased-memory-limit",
           "get-task-allow"
         ],
-        "privacy": {}
+        "privacy": {
+          "NSLocalNetworkUsageDescription": "PlayTendo relie deux appareils proches pour le câble link Game Boy (échanges et combats Pokémon)."
+        }
       }
     }
   ],
