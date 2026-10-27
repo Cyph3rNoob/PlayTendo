@@ -4,7 +4,7 @@
   "subtitle": "Tes jeux Nintendo et Sony, sur ton iPhone et ton iPad.",
   "description": "Source officielle de PlayTendo pour ton installateur d'apps (AltStore, SideStore, Feather…). PlayTendo ne contient aucun jeu ni BIOS : il fait tourner ceux que tu possèdes.",
   "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
-  "website": "https://github.com/Cyph3rNoob/PlayTendo",
+  "website": "https://playtendo.me",
   "tintColor": "#00F0FF",
   "featuredApps": ["com.playtendo.app"],
   "apps": [
