@@ -18,6 +18,7 @@ Les versions prêtes à installer sont dans **[Releases](../../releases)** :
 | Fichier | Pour | Installation |
 |---|---|---|
 | `PlayTendo.ipa` | iPhone, iPad | AltServer sur le Mac (icône › ⌥ › « Sideload .ipa… ») ou AltStore. Toujours installer **par-dessus** l'ancienne version : supprimer l'app effacerait jeux et sauvegardes. |
+| Source d'apps | AltStore, SideStore, Feather | Ajouter la source `https://playtendo.me/source.json` : les mises à jour arrivent toutes seules. |
 | `PlayTendo.dmg` | Mac avec puce Apple (M1 ou plus récent), macOS 14 ou plus | Glisser PlayTendo dans Applications. Si macOS la bloque : Réglages Système › Confidentialité et sécurité › « Ouvrir quand même ». |
 
 ## Consoles

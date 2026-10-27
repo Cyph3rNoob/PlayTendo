@@ -3,18 +3,20 @@
   "identifier": "com.playtendo.source",
   "subtitle": "Tes jeux Nintendo et Sony, sur ton iPhone et ton iPad.",
   "description": "Source officielle de PlayTendo pour ton installateur d'apps (AltStore, SideStore, Feather…). PlayTendo ne contient aucun jeu ni BIOS : il fait tourner ceux que tu possèdes.",
-  "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+  "iconURL": "https://playtendo.me/assets/app-icon.png",
   "website": "https://playtendo.me",
   "tintColor": "#00F0FF",
-  "featuredApps": ["com.playtendo.app"],
+  "featuredApps": [
+    "com.playtendo.app"
+  ],
   "apps": [
     {
       "name": "PlayTendo",
       "bundleIdentifier": "com.playtendo.app",
-      "developerName": "Cyph3rNoob",
+      "developerName": "PlayTendo Team",
       "subtitle": "14 consoles, de la NES à la PS Vita, dans une seule app.",
       "localizedDescription": "Émulateur pour iPhone et iPad : NES, Super Nintendo, Nintendo 64, GameCube, Wii, Game Boy, Game Boy Color, Game Boy Advance, DS, 3DS, PlayStation, PlayStation 2, PSP et PS Vita (expérimentale), avec des moteurs d'émulation libres.\n\nBibliothèque qui reconnaît tes jeux et télécharge leurs jaquettes en boîtes 3D, import de fichiers, dossiers et archives, sauvegarde rapide et reprise automatique, avance rapide et retour en arrière de ×2 à ×5, codes de triche, patchs de romhacks (.ips, .bps, .ups), boutons à l'écran sur mesure, manettes Bluetooth (touches, vibrations, deux joueurs) et quatre thèmes.\n\nEnsemble : câble link Game Boy / Color entre deux appareils proches, DS en ligne, succès RetroAchievements.\n\nMode turbo (JIT), indispensable pour la PS2, la GameCube, la Wii, la 3DS et la PS Vita : JIT intégré avec StikJIT sur iOS 26 ou plus, activé automatiquement au lancement des jeux compatibles (mode développeur, fichier de jumelage et LocalDevVPN nécessaires, Wi-Fi recommandé) ; StikDebug reste disponible sur les versions d'iOS plus anciennes.\n\nAucun jeu ni BIOS n'est fourni. PlayTendo n'est affilié ni à Nintendo ni à Sony.",
-      "iconURL": "https://raw.githubusercontent.com/Cyph3rNoob/PlayTendo/main/app/PlayTendo/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+      "iconURL": "https://playtendo.me/assets/app-icon.png",
       "tintColor": "#00F0FF",
       "category": "games",
       "screenshots": [],
