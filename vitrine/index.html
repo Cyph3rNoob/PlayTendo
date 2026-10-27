@@ -422,6 +422,20 @@ section.band { padding-block: 64px; scroll-margin-top: calc(env(safe-area-inset-
 .how b { color: var(--text); font-weight: 600; }
 @media (max-width: 900px) { .dl-grid { grid-template-columns: minmax(0, 1fr); } }
 
+/* ---------- Aperçu : les visuels de la source d'apps, en bande qu'on fait défiler ---------- */
+.shots {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 6px 2px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--violet) transparent;
+}
+.shots a { flex: 1 0 min(170px, 62vw); max-width: 240px; scroll-snap-align: start; border-radius: 18px; transition: transform .2s ease, box-shadow .2s ease; }
+.shots a:hover, .shots a:focus-visible { transform: translateY(-4px); box-shadow: 0 10px 40px -10px var(--k, var(--cyan)); }
+.shots img { display: block; width: 100%; height: auto; aspect-ratio: 1320 / 2868; border-radius: 18px; border: 1px solid rgba(138, 77, 255, .35); }
+
 /* Crédits */
 .table-scroll { overflow-x: auto; border: 1px solid var(--rule); }
 table { width: 100%; border-collapse: collapse; min-width: 560px; font-size: 15px; }
@@ -556,6 +570,19 @@ footer .first { color: var(--text); font-weight: 600; }
           </div>
         </div>
         <p class="caption"><span class="fr"><span class="try">Aperçu à toucher :</span> les filtres de consoles</span><span class="en"><span class="try">Tap to try:</span> the console filters · app in French</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="apercu">
+    <div class="wrap">
+      <h2 class="sec" style="--k:var(--magenta)"><span class="fr">Aperçu</span><span class="en">Screenshots</span><i></i><b>05</b></h2>
+      <div class="shots">
+        <a href="assets/screens/1-consoles.jpg" target="_blank" rel="noopener" style="--k:#00f0ff"><img src="assets/screens/web/1-consoles.jpg" width="460" height="1000" loading="lazy" decoding="async" alt="14 consoles, une seule app"></a>
+        <a href="assets/screens/2-jaquettes.jpg" target="_blank" rel="noopener" style="--k:#ffc93c"><img src="assets/screens/web/2-jaquettes.jpg" width="460" height="1000" loading="lazy" decoding="async" alt="Tes jeux en boîtes 3D"></a>
+        <a href="assets/screens/3-themes.jpg" target="_blank" rel="noopener" style="--k:#ff4060"><img src="assets/screens/web/3-themes.jpg" width="460" height="1000" loading="lazy" decoding="async" alt="4 thèmes à ton goût"></a>
+        <a href="assets/screens/4-reprise.jpg" target="_blank" rel="noopener" style="--k:#2f8bff"><img src="assets/screens/web/4-reprise.jpg" width="460" height="1000" loading="lazy" decoding="async" alt="Reprends où tu en étais"></a>
+        <a href="assets/screens/5-fonctions.jpg" target="_blank" rel="noopener" style="--k:#ff2bd6"><img src="assets/screens/web/5-fonctions.jpg" width="460" height="1000" loading="lazy" decoding="async" alt="Et ce n'est pas tout"></a>
       </div>
     </div>
   </section>
