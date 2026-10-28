@@ -7,6 +7,8 @@ struct LibraryView: View {
     @EnvironmentObject private var metadata: GameMetadata
     @EnvironmentObject private var jit: JITManager
     @State private var importing = false
+    /// iPhone et iPad : sélecteur des jeux qui rouvre le dossier du dernier import (`GamePicker`).
+    @State private var importingGames = false
     /// Sélecteur de fichiers ouvert pour la jaquette de ce jeu (sinon : jeux à ajouter). Un seul sélecteur pour les
     /// deux : sur Mac, un second, posé plus bas dans la vue, ne s'ouvrait pas.
     @State private var coverFileGame: Game?
@@ -104,6 +106,10 @@ struct LibraryView: View {
         // Bibliothèque relue au retour d'une partie (app compilée avec la PS Vita : un jeu installé a pu quitter Jeux,
         // sa copie installée le remplace).
 #if os(iOS)
+        .sheet(isPresented: $importingGames) {
+            GamePicker(isPresented: $importingGames) { urls in library.importFiles(urls) }
+                .ignoresSafeArea()
+        }
         .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
             EmulatorView(game: game)
         }
@@ -569,9 +575,14 @@ struct LibraryView: View {
     }
 
     /// Sélecteur de fichiers pour ajouter des jeux (une jaquette choisie puis annulée n'y reste pas accrochée).
+    /// iPhone et iPad : `GamePicker`, qui rouvre le dossier du dernier import ; Mac : la fenêtre d'ouverture le fait déjà.
     private func addGames() {
         coverFileGame = nil
+#if os(iOS)
+        importingGames = true
+#else
         importing = true
+#endif
     }
 
     private func applyCover(_ data: Data?, to game: Game) async {
