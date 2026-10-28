@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Installer PlayTendo sur iPhone et iPad — guide pas à pas</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+<meta name="description" content="Installer PlayTendo sur iPhone ou iPad avec SideStore : un ordinateur une seule fois, ensuite tout se fait sur l'iPhone.">
+<link rel="canonical" href="https://playtendo.me/installer/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PlayTendo">
+<meta property="og:url" content="https://playtendo.me/installer/">
+<meta property="og:title" content="Installer PlayTendo sur iPhone et iPad">
+<meta property="og:description" content="Un ordinateur une seule fois, ensuite tout se fait sur l'iPhone. Guide en 3 étapes.">
+<meta property="og:image" content="https://playtendo.me/assets/apercu-partage.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="../assets/fonts/orbitron.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+/* Mêmes polices et même ambiance que la page d'accueil (../index.html). */
+@font-face { font-family: "Orbitron"; font-style: normal; font-weight: 500 900; font-display: swap; src: url("../assets/fonts/orbitron.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url("../assets/fonts/barlow-400.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url("../assets/fonts/barlow-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 700; font-display: swap; src: url("../assets/fonts/barlow-700.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../assets/fonts/ibm-plex-mono-500.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("../assets/fonts/ibm-plex-mono-600.woff2") format("woff2"); }
+
+:root {
+  --bg: #05040d;
+  --night: #0f0626;
+  --panel: #0d0f21;
+  --cyan: #00f0ff;
+  --magenta: #ff2bd6;
+  --violet: #8a4dff;
+  --gold: #ffd56b;
+  --text: #e6f2ff;
+  --soft: #c3cde6;
+  --dim: #8f9bbb;
+  --rule: rgba(138, 77, 255, .3);
+  --display: "Orbitron", "Avenir Next", "Trebuchet MS", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--body); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(60rem 40rem at -10% -10%, rgba(0, 240, 255, .14), transparent 60%),
+    radial-gradient(50rem 40rem at 110% 45%, rgba(255, 43, 214, .12), transparent 60%),
+    linear-gradient(var(--night), var(--bg) 45%, #030109);
+}
+
+/* Langue : deux boutons radio (marchent même sans script) ; le français par défaut. */
+:root:not(:has(#l-en:checked)) .en { display: none !important; }
+:root:has(#l-en:checked) .fr { display: none !important; }
+.lang input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+
+a { color: var(--cyan); }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.wrap { max-width: 880px; margin-inline: auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.cut { --c: 14px; clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
+
+/* Barre du haut */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: linear-gradient(rgba(5, 4, 13, .92), rgba(5, 4, 13, .7)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
+.topbar .wrap { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+.mark { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.mark img { width: 32px; height: 32px; border-radius: 22.37%; }
+.mark span { font-family: var(--display); font-weight: 900; letter-spacing: .12em; font-size: 14px; }
+.back { margin-left: auto; color: var(--dim); text-decoration: none; font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; }
+.back:hover { color: var(--cyan); }
+.lang { display: flex; padding: 1px; background: linear-gradient(90deg, var(--cyan), var(--magenta)); }
+.lang label { font: 700 13px/1 var(--display); letter-spacing: .12em; color: var(--text); background: var(--bg); padding: 10px 13px; cursor: pointer; user-select: none; }
+.lang input + label + input + label { margin-left: 1px; }
+.lang input:checked + label { background: transparent; color: #000; }
+.lang input:focus-visible + label { outline: 2px solid var(--cyan); outline-offset: -4px; }
+@media (max-width: 480px) { .back { display: none; } .lang { margin-left: auto; } }
+
+/* En-tête de page */
+.head { padding-block: 48px 8px; }
+.eyebrow { font: 500 13px/1.4 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--cyan); margin: 0 0 10px; }
+h1 { font: 900 clamp(28px, 5vw, 46px)/1.1 var(--display); letter-spacing: .04em; margin: 0 0 16px; text-wrap: balance;
+  background: linear-gradient(90deg, var(--cyan), #9a8cff 55%, var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { color: var(--soft); max-width: 38em; margin: 0 0 24px; font-size: 18px; }
+
+/* Résumé : ce qu'il faut, combien de temps */
+.need { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 12px; padding: 0; list-style: none; }
+.need li { --c: 10px; min-width: 0; padding: 14px 16px; background: var(--panel); box-shadow: inset 0 0 0 1px rgba(138, 77, 255, .35); }
+.need b { display: block; font: 600 11px/1.3 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--violet); margin-bottom: 4px; }
+.need span { color: var(--soft); font-size: 15.5px; }
+@media (max-width: 700px) { .need { grid-template-columns: minmax(0, 1fr); } }
+
+/* Frise des étapes */
+.timeline { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 28px 0 0; font: 600 12px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.timeline a { color: var(--text); text-decoration: none; border: 1px solid var(--k); padding: 6px 10px; }
+.timeline a:hover { background: color-mix(in srgb, var(--k) 18%, transparent); }
+.timeline i { font-style: normal; color: var(--dim); }
+
+/* Étapes */
+.step { --k: var(--cyan); margin-top: 40px; padding: 26px 24px; background: linear-gradient(160deg, color-mix(in srgb, var(--k) 10%, transparent), transparent 50%), var(--panel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 40%, transparent); scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 70px); }
+.step-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 6px; }
+.step .n { font: 900 34px/1 var(--display); color: transparent; -webkit-text-stroke: 1px var(--k); letter-spacing: .06em; }
+.step h2 { font: 800 clamp(18px, 2.6vw, 22px)/1.25 var(--display); letter-spacing: .06em; margin: 0; text-wrap: balance; }
+.where { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #000; background: var(--k); padding: 5px 7px; }
+.step > p { color: var(--soft); margin: 10px 0 0; max-width: 42em; }
+ol.do { margin: 16px 0 0; padding: 0; list-style: none; counter-reset: do; display: grid; gap: 12px; }
+ol.do > li { counter-increment: do; position: relative; padding-left: 40px; color: var(--soft); }
+ol.do > li::before { content: counter(do); position: absolute; left: 0; top: 0; width: 26px; height: 26px; display: grid; place-items: center; font: 700 12px/1 var(--display); color: var(--k); border: 1px solid color-mix(in srgb, var(--k) 70%, transparent); }
+ol.do b { color: var(--text); font-weight: 600; }
+.path { font-family: var(--mono); font-size: 14px; color: var(--k); }
+.ui { font-family: var(--mono); font-size: 14px; color: var(--text); background: rgba(230, 242, 255, .08); padding: 1px 6px; white-space: nowrap; }
+.tip { margin: 18px 0 0; padding: 12px 14px; border-left: 3px solid var(--k); background: color-mix(in srgb, var(--k) 7%, transparent); color: var(--soft); font-size: 15.5px; }
+.tip b { color: var(--text); }
+
+/* Boutons */
+.btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.btn { --c: 8px; display: inline-flex; align-items: center; gap: 10px; padding: 12px 16px; font: 700 12px/1.25 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--text); text-decoration: none; background: color-mix(in srgb, var(--k) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 60%, transparent); border: 0; cursor: pointer; }
+.btn:hover, .btn:focus-visible { background: color-mix(in srgb, var(--k) 24%, transparent); outline: none; }
+.btn small { font: 600 10px/1 var(--mono); letter-spacing: .12em; color: var(--k); border: 1px solid color-mix(in srgb, var(--k) 60%, transparent); padding: 4px 6px; }
+.src-url { display: block; margin-top: 10px; font: 500 13px/1.4 var(--mono); color: var(--text); overflow-wrap: anywhere; user-select: all; }
+
+/* Après l'installation, problèmes */
+.after { margin-top: 48px; }
+.sec { display: flex; align-items: center; gap: 14px; margin: 0 0 16px; font: 800 clamp(17px, 2.2vw, 21px)/1.2 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+.sec::before { content: ""; flex: none; width: 5px; height: 24px; background: var(--k, var(--cyan)); box-shadow: 0 0 10px var(--k, var(--cyan)); }
+.sec i { flex: 1; min-width: 20px; height: 1px; background: linear-gradient(90deg, color-mix(in srgb, var(--k, var(--cyan)) 60%, transparent), transparent); }
+.after > p { color: var(--soft); max-width: 42em; margin: 0 0 12px; }
+details { border-top: 1px solid rgba(138, 77, 255, .22); padding: 14px 0; }
+details:last-of-type { border-bottom: 1px solid rgba(138, 77, 255, .22); }
+summary { cursor: pointer; font-weight: 600; color: var(--text); list-style-position: outside; }
+details p { color: var(--soft); margin: 10px 0 0; max-width: 42em; }
+
+footer { border-top: 1px solid var(--rule); padding-block: 32px 44px; margin-top: 64px; }
+footer p { margin: 0 0 8px; color: var(--dim); font-size: 14.5px; }
+main { padding-bottom: 8px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <a class="mark" href="../" aria-label="PlayTendo, accueil">
+      <img src="../assets/app-icon.png" alt="">
+      <span>PLAYTENDO</span>
+    </a>
+    <a class="back" href="../"><span class="fr">← Accueil</span><span class="en">← Home</span></a>
+    <div class="lang cut" style="--c:6px" role="radiogroup" aria-label="Langue / Language">
+      <input type="radio" name="langue" id="l-fr" value="fr" checked><label for="l-fr">FR</label>
+      <input type="radio" name="langue" id="l-en" value="en"><label for="l-en">EN</label>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="head">
+    <p class="eyebrow"><span class="fr">Installation · iPhone et iPad</span><span class="en">Install · iPhone and iPad</span></p>
+    <h1><span class="fr">Installer PlayTendo en 3 étapes</span><span class="en">Install PlayTendo in 3 steps</span></h1>
+    <p class="lede">
+      <span class="fr">PlayTendo n'est pas sur l'App Store : il s'installe avec <b>SideStore</b>. Il faut un ordinateur <b>une seule fois</b>, pendant quelques minutes. Ensuite, tout se fait sur l'iPhone, sans câble.</span>
+      <span class="en">PlayTendo isn't on the App Store: it installs with <b>SideStore</b>. You need a computer <b>only once</b>, for a few minutes. After that, everything happens on the iPhone, with no cable.</span>
+    </p>
+    <ul class="need">
+      <li class="cut"><b><span class="fr">Il te faut</span><span class="en">You need</span></b><span class="fr">un iPhone ou iPad (iOS 18 ou plus) avec un code, son câble, et le Wi-Fi.</span><span class="en">an iPhone or iPad (iOS 18 or later) with a passcode, its cable, and Wi-Fi.</span></li>
+      <li class="cut"><b><span class="fr">Un ordinateur</span><span class="en">A computer</span></b><span class="fr">Mac, Windows ou Linux, une seule fois. Celui d'un ami fait l'affaire.</span><span class="en">Mac, Windows or Linux, just once. A friend's works fine.</span></li>
+      <li class="cut"><b><span class="fr">Un compte Apple</span><span class="en">An Apple Account</span></b><span class="fr">gratuit, le tien. Rien à payer.</span><span class="en">a free one, your own. Nothing to pay.</span></li>
+    </ul>
+    <nav class="timeline" aria-label="Étapes">
+      <a href="#ordinateur" style="--k:var(--cyan)">1 · <span class="fr">Ordinateur</span><span class="en">Computer</span></a><i>→</i>
+      <a href="#reglages" style="--k:var(--magenta)">2 · <span class="fr">Réglages</span><span class="en">Settings</span></a><i>→</i>
+      <a href="#playtendo" style="--k:var(--gold)">3 · PlayTendo</a>
+    </nav>
+  </section>
+
+  <section class="step cut" id="ordinateur" style="--k:var(--cyan)">
+    <div class="step-top">
+      <span class="n">01</span>
+      <h2><span class="fr">Installer SideStore depuis l'ordinateur</span><span class="en">Install SideStore from the computer</span></h2>
+    </div>
+    <span class="where"><span class="fr">Ordinateur · une seule fois</span><span class="en">Computer · only once</span></span>
+    <ol class="do">
+      <li><span class="fr">Télécharge et installe <b>iloader</b>, l'installateur officiel de SideStore, pour ton ordinateur. <b>Sur Windows</b>, installe aussi iTunes avant.</span><span class="en">Download and install <b>iloader</b>, SideStore's official installer, for your computer. <b>On Windows</b>, install iTunes first.</span></li>
+      <li><span class="fr">Branche l'iPhone avec son câble. Sur l'iPhone, touche <span class="ui">Se fier</span> et tape ton code.</span><span class="en">Plug in the iPhone with its cable. On the iPhone, tap <span class="ui">Trust</span> and enter your passcode.</span></li>
+      <li><span class="fr">Ouvre iloader, connecte-toi avec ton compte Apple (attention aux majuscules du mot de passe), puis choisis ton iPhone.</span><span class="en">Open iloader, sign in with your Apple Account (the password is case-sensitive), then pick your iPhone.</span></li>
+      <li><span class="fr">Clique sur <span class="ui">Install SideStore (Stable)</span>. Quand c'est fini, tu peux débrancher : l'ordinateur ne sert plus.</span><span class="en">Click <span class="ui">Install SideStore (Stable)</span>. When it's done, unplug: you won't need the computer anymore.</span></li>
+    </ol>
+    <div class="btns">
+      <a class="btn cut" href="https://iloader.app" target="_blank" rel="noopener noreferrer"><span class="fr">Télécharger iloader</span><span class="en">Get iloader</span><small>ILOADER.APP</small></a>
+    </div>
+  </section>
+
+  <section class="step cut" id="reglages" style="--k:var(--magenta)">
+    <div class="step-top">
+      <span class="n">02</span>
+      <h2><span class="fr">Autoriser SideStore sur l'iPhone</span><span class="en">Allow SideStore on the iPhone</span></h2>
+    </div>
+    <span class="where">iPhone</span>
+    <ol class="do">
+      <li><span class="fr">Ouvre <span class="path">Réglages › Général › VPN et gestion de l'appareil</span>, touche ton compte Apple, puis <span class="ui">Autoriser et redémarrer</span> et tape ton code.</span><span class="en">Open <span class="path">Settings › General › VPN &amp; Device Management</span>, tap your Apple Account, then <span class="ui">Allow &amp; Restart</span> and enter your passcode.</span></li>
+      <li><span class="fr">Ouvre <span class="path">Réglages › Confidentialité et sécurité</span>, descends tout en bas et active le <b>Mode développeur</b>. L'iPhone redémarre : confirme en touchant <span class="ui">Activer</span>.</span><span class="en">Open <span class="path">Settings › Privacy &amp; Security</span>, scroll to the bottom and turn on <b>Developer Mode</b>. The iPhone restarts: confirm by tapping <span class="ui">Turn On</span>.</span></li>
+      <li><span class="fr">Installe <b>LocalDevVPN</b> depuis l'App Store (gratuit), ouvre-le et touche <span class="ui">Connect</span>, puis accepte d'ajouter le VPN. Il ne fait sortir aucune donnée : il permet seulement à l'iPhone de signer ses apps tout seul.</span><span class="en">Install <b>LocalDevVPN</b> from the App Store (free), open it and tap <span class="ui">Connect</span>, then allow the VPN. No data leaves the phone: it only lets the iPhone sign its own apps.</span></li>
+    </ol>
+    <div class="btns">
+      <a class="btn cut" href="https://apps.apple.com/app/id6755608044" target="_blank" rel="noopener noreferrer"><span class="fr">LocalDevVPN sur l'App Store</span><span class="en">LocalDevVPN on the App Store</span><small>APP STORE</small></a>
+    </div>
+  </section>
+
+  <section class="step cut" id="playtendo" style="--k:var(--gold)">
+    <div class="step-top">
+      <span class="n">03</span>
+      <h2><span class="fr">Installer PlayTendo depuis SideStore</span><span class="en">Install PlayTendo from SideStore</span></h2>
+    </div>
+    <span class="where">iPhone</span>
+    <ol class="do">
+      <li><span class="fr">LocalDevVPN allumé, ouvre <b>SideStore</b> et connecte-toi avec le même compte Apple qu'à l'étape 1.</span><span class="en">With LocalDevVPN on, open <b>SideStore</b> and sign in with the same Apple Account as in step 1.</span></li>
+      <li><span class="fr">Dans <span class="ui">My Apps</span>, touche le compteur <span class="ui">7 DAYS</span> à côté de SideStore pour terminer sa mise en place. S'il propose un nouveau certificat, accepte. SideStore se ferme puis revient tout seul.</span><span class="en">In <span class="ui">My Apps</span>, tap the <span class="ui">7 DAYS</span> counter next to SideStore to finish setting it up. If it offers a new certificate, accept. SideStore closes and comes back on its own.</span></li>
+      <li><span class="fr">Copie l'adresse de la source PlayTendo avec le bouton ci-dessous. Dans SideStore : <span class="path">Sources › +</span>, colle l'adresse, ajoute la source.</span><span class="en">Copy the PlayTendo source address with the button below. In SideStore: <span class="path">Sources › +</span>, paste the address, add the source.</span></li>
+      <li><span class="fr">Ouvre la source PlayTendo et touche <span class="ui">Free</span> pour installer. C'est fini 🎮</span><span class="en">Open the PlayTendo source and tap <span class="ui">Free</span> to install. You're done 🎮</span></li>
+    </ol>
+    <div class="btns">
+      <button type="button" class="btn cut" data-copy="https://playtendo.me/source.json"><span class="fr">Copier l'adresse de la source</span><span class="en">Copy the source address</span><small><span class="fr" data-done="COPIÉE">COPIER</span><span class="en" data-done="COPIED">COPY</span></small></button>
+    </div>
+    <code class="src-url">https://playtendo.me/source.json</code>
+  </section>
+
+  <section class="after" style="--k:var(--violet)">
+    <h2 class="sec"><span class="fr">Ensuite</span><span class="en">After that</span><i></i></h2>
+    <p><span class="fr">Avec un compte Apple gratuit, les apps installées ainsi durent <b>7 jours</b>. Pour les prolonger, sans ordinateur : allume LocalDevVPN, ouvre SideStore et touche le compteur de jours (ou <span class="ui">Refresh All</span>). Fais-le dès qu'il descend, pour ne jamais tomber à zéro. Les mises à jour de PlayTendo arrivent aussi dans SideStore.</span><span class="en">With a free Apple Account, apps installed this way last <b>7 days</b>. To extend them, with no computer: turn on LocalDevVPN, open SideStore and tap the day counter (or <span class="ui">Refresh All</span>). Do it whenever it gets low so it never hits zero. PlayTendo updates also show up in SideStore.</span></p>
+
+    <h2 class="sec" style="margin-top:36px"><span class="fr">En cas de souci</span><span class="en">Troubleshooting</span><i></i></h2>
+    <details>
+      <summary><span class="fr">iloader ne voit pas mon iPhone</span><span class="en">iloader can't see my iPhone</span></summary>
+      <p><span class="fr">Déverrouille l'iPhone, rebranche le câble et touche bien « Se fier ». Sur Windows, vérifie qu'iTunes (ou l'app Appareils Apple) est installé. Essaie un autre câble ou un autre port USB.</span><span class="en">Unlock the iPhone, plug the cable back in and make sure you tap “Trust”. On Windows, check that iTunes (or the Apple Devices app) is installed. Try another cable or USB port.</span></p>
+    </details>
+    <details>
+      <summary><span class="fr">SideStore n'arrive pas à installer ou à prolonger</span><span class="en">SideStore can't install or refresh</span></summary>
+      <p><span class="fr">Vérifie que LocalDevVPN est connecté et que tu es en Wi-Fi (les données mobiles ne suffisent pas). Si ça ne marche toujours pas, le « fichier de jumelage » de l'iPhone a pu expirer après une mise à jour d'iOS : il faut alors le refaire une fois avec l'ordinateur (iloader, même compte Apple).</span><span class="en">Check that LocalDevVPN is connected and that you're on Wi-Fi (mobile data isn't enough). If it still fails, the iPhone's “pairing file” may have expired after an iOS update: redo it once with the computer (iloader, same Apple Account).</span></p>
+    </details>
+    <details>
+      <summary><span class="fr">Le compteur est tombé à zéro</span><span class="en">The counter hit zero</span></summary>
+      <p><span class="fr">L'app ne s'ouvre plus, mais tes jeux et sauvegardes restent sur l'iPhone. Ouvre SideStore (LocalDevVPN allumé) et prolonge-la. Si SideStore lui-même a expiré, refais l'étape 1 avec l'ordinateur, sans rien supprimer.</span><span class="en">The app won't open, but your games and saves stay on the iPhone. Open SideStore (LocalDevVPN on) and refresh it. If SideStore itself has expired, redo step 1 with the computer, without deleting anything.</span></p>
+    </details>
+    <details>
+      <summary><span class="fr">« Nombre maximum d'apps atteint »</span><span class="en">“Maximum number of apps reached”</span></summary>
+      <p><span class="fr">Un compte Apple gratuit permet <b>3 apps</b> installées de cette façon en même temps, SideStore compris. Retire-en une dans SideStore pour faire de la place.</span><span class="en">A free Apple Account allows <b>3 apps</b> installed this way at the same time, SideStore included. Remove one in SideStore to make room.</span></p>
+    </details>
+    <details>
+      <summary><span class="fr">Et sur Mac ?</span><span class="en">What about the Mac?</span></summary>
+      <p><span class="fr">Rien de tout ça : télécharge le .dmg depuis <a href="../#telecharger">la page d'accueil</a>, ouvre-le et glisse PlayTendo dans Applications.</span><span class="en">None of this: download the .dmg from <a href="../#telecharger">the home page</a>, open it and drag PlayTendo into Applications.</span></p>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><span class="fr">SideStore, iloader et LocalDevVPN sont des projets indépendants de PlayTendo. Guide officiel complet : <a href="https://docs.sidestore.io" target="_blank" rel="noopener noreferrer">docs.sidestore.io</a>.</span><span class="en">SideStore, iloader and LocalDevVPN are projects independent from PlayTendo. Full official guide: <a href="https://docs.sidestore.io" target="_blank" rel="noopener noreferrer">docs.sidestore.io</a>.</span></p>
+    <p><span class="fr">PlayTendo n'est affilié ni à Nintendo ni à Sony. Aucun jeu ni BIOS n'est fourni.</span><span class="en">PlayTendo isn't affiliated with Nintendo or Sony. No games or BIOS files are included.</span></p>
+  </div>
+</footer>
+
+<script>
+// Bouton « Copier l'adresse de la source » : copie ; si le navigateur refuse, l'adresse affichée dessous est sélectionnée.
+document.querySelectorAll("[data-copy]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    function done() {
+      btn.querySelectorAll("[data-done]").forEach(function (s) { s.dataset.label = s.dataset.label || s.textContent; s.textContent = s.dataset.done; });
+      setTimeout(function () { btn.querySelectorAll("[data-done]").forEach(function (s) { s.textContent = s.dataset.label; }); }, 2000);
+    }
+    function select() {
+      var code = document.querySelector(".src-url"), r = document.createRange();
+      r.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(btn.getAttribute("data-copy")).then(done, select);
+    else select();
+  });
+});
+// Langue : reprend le choix fait sur la page d'accueil, et le garde.
+(function () {
+  var key = "playtendo-langue";
+  try { if (localStorage.getItem(key) === "en") { document.getElementById("l-en").checked = true; document.documentElement.lang = "en"; } } catch (e) {}
+  document.querySelectorAll('input[name="langue"]').forEach(function (r) {
+    r.addEventListener("change", function () { document.documentElement.lang = r.value; try { localStorage.setItem(key, r.value); } catch (e) {} });
+  });
+})();
+</script>
+</body>
+</html>
