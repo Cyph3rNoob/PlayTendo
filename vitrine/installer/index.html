@@ -96,6 +96,14 @@ h1 { font: 900 clamp(28px, 5vw, 46px)/1.1 var(--display); letter-spacing: .04em;
 .need span { color: var(--soft); font-size: 15.5px; }
 @media (max-width: 700px) { .need { grid-template-columns: minmax(0, 1fr); } }
 
+/* Vidéo du tuto (verticale) */
+.tuto { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; align-items: center; margin: 0 0 24px; }
+.tuto video { display: block; width: 100%; max-width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 22px; border: 1px solid rgba(138, 77, 255, .4); box-shadow: 0 20px 50px -20px rgba(0, 240, 255, .35); }
+.tuto p { margin: 0; color: var(--soft); }
+.tuto b { color: var(--text); }
+.tuto .len { display: inline-block; margin-bottom: 8px; font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #000; background: var(--gold); padding: 5px 7px; }
+@media (max-width: 640px) { .tuto { grid-template-columns: minmax(0, 1fr); } .tuto video { max-width: 320px; margin-inline: auto; } }
+
 /* Frise des étapes */
 .timeline { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 28px 0 0; font: 600 12px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
 .timeline a { color: var(--text); text-decoration: none; border: 1px solid var(--k); padding: 6px 10px; }
@@ -164,6 +172,15 @@ main { padding-bottom: 8px; }
       <span class="fr">PlayTendo n'est pas sur l'App Store : il s'installe avec <b>SideStore</b>. Il faut un ordinateur <b>une seule fois</b>, pendant quelques minutes. Ensuite, tout se fait sur l'iPhone, sans câble.</span>
       <span class="en">PlayTendo isn't on the App Store: it installs with <b>SideStore</b>. You need a computer <b>only once</b>, for a few minutes. After that, everything happens on the iPhone, with no cable.</span>
     </p>
+    <div class="tuto">
+      <video controls playsinline preload="none" poster="../assets/video/tuto-installation.jpg">
+        <source src="../assets/video/tuto-installation.mp4" type="video/mp4">
+      </video>
+      <div>
+        <span class="len"><span class="fr">Vidéo · 1 min 44</span><span class="en">Video · 1 min 44</span></span>
+        <p><span class="fr"><b>Toute l'installation en vidéo</b>, écran par écran : l'ordinateur, les réglages de l'iPhone, puis SideStore. Les étapes écrites sont juste en dessous.</span><span class="en"><b>The whole install on video</b>, screen by screen: the computer, the iPhone settings, then SideStore. The written steps are right below. (Video in French.)</span></p>
+      </div>
+    </div>
     <ul class="need">
       <li class="cut"><b><span class="fr">Il te faut</span><span class="en">You need</span></b><span class="fr">un iPhone ou iPad (iOS 18 ou plus) avec un code, son câble, et le Wi-Fi.</span><span class="en">an iPhone or iPad (iOS 18 or later) with a passcode, its cable, and Wi-Fi.</span></li>
       <li class="cut"><b><span class="fr">Un ordinateur</span><span class="en">A computer</span></b><span class="fr">Mac, Windows ou Linux, une seule fois. Celui d'un ami fait l'affaire.</span><span class="en">Mac, Windows or Linux, just once. A friend's works fine.</span></li>
