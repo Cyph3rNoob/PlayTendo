@@ -7,8 +7,10 @@ struct LibraryView: View {
     @EnvironmentObject private var metadata: GameMetadata
     @EnvironmentObject private var jit: JITManager
     @State private var importing = false
-    /// iPhone et iPad : sélecteur des jeux qui rouvre le dossier du dernier import (`GamePicker`).
-    @State private var importingGames = false
+    /// iPhone et iPad : le sélecteur choisit un dossier (« + » › Dossier) au lieu de fichiers. Les deux restent séparés :
+    /// un sélecteur qui accepte fichiers et dossiers à la fois cache les Favoris et ne retient plus le dernier
+    /// emplacement (iOS rouvre le dernier dossier choisi comme dossier).
+    @State private var importingFolder = false
     /// Sélecteur de fichiers ouvert pour la jaquette de ce jeu (sinon : jeux à ajouter). Un seul sélecteur pour les
     /// deux : sur Mac, un second, posé plus bas dans la vue, ne s'ouvrait pas.
     @State private var coverFileGame: Game?
@@ -88,8 +90,9 @@ struct LibraryView: View {
             }
             .allowsHitTesting(false)
         }
-        // Jeux : fichiers, archives et dossiers (jeu PS Vita extrait, dossier de jeux) ; jaquette : une image.
-        .fileImporter(isPresented: $importing, allowedContentTypes: coverFileGame == nil ? [.item, .folder] : [.image],
+        // Jeux : fichiers et archives, ou un dossier (jeu PS Vita extrait, dossier de jeux) ; jaquette : une image.
+        // Sur Mac, la fenêtre d'ouverture prend les deux à la fois sans défaut.
+        .fileImporter(isPresented: $importing, allowedContentTypes: importTypes,
                       allowsMultipleSelection: coverFileGame == nil) { result in
             guard case .success(let urls) = result else { return }
             if let game = coverFileGame {
@@ -106,10 +109,6 @@ struct LibraryView: View {
         // Bibliothèque relue au retour d'une partie (app compilée avec la PS Vita : un jeu installé a pu quitter Jeux,
         // sa copie installée le remplace).
 #if os(iOS)
-        .sheet(isPresented: $importingGames) {
-            GamePicker(isPresented: $importingGames) { urls in library.importFiles(urls) }
-                .ignoresSafeArea()
-        }
         .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
             EmulatorView(game: game)
         }
@@ -342,8 +341,18 @@ struct LibraryView: View {
                 .accessibilityLabel(tr("À propos"))
             NeonIconButton(systemName: "gearshape.fill", color: Neon.magenta) { showingSettings = true }
                 .accessibilityLabel(tr("Réglages"))
+#if os(iOS)
+            Menu {
+                Button { addGames() } label: { Label(tr("Fichiers"), systemImage: "doc.on.doc") }
+                Button { addFolder() } label: { Label(tr("Dossier"), systemImage: "folder") }
+            } label: {
+                NeonIconLabel(systemName: "plus")
+            }
+            .accessibilityLabel(tr("Ajouter des jeux"))
+#else
             NeonIconButton(systemName: "plus") { addGames() }
                 .accessibilityLabel(tr("Ajouter des jeux"))
+#endif
         }
         .padding(.top, 8)
     }
@@ -575,13 +584,26 @@ struct LibraryView: View {
     }
 
     /// Sélecteur de fichiers pour ajouter des jeux (une jaquette choisie puis annulée n'y reste pas accrochée).
-    /// iPhone et iPad : `GamePicker`, qui rouvre le dossier du dernier import ; Mac : la fenêtre d'ouverture le fait déjà.
     private func addGames() {
         coverFileGame = nil
-#if os(iOS)
-        importingGames = true
-#else
+        importingFolder = false
         importing = true
+    }
+
+    /// iPhone et iPad : sélecteur de dossier (jeu PS Vita extrait, dossier de jeux).
+    private func addFolder() {
+        coverFileGame = nil
+        importingFolder = true
+        importing = true
+    }
+
+    /// Types acceptés par le sélecteur selon ce qu'on choisit.
+    private var importTypes: [UTType] {
+        if coverFileGame != nil { return [.image] }
+#if os(iOS)
+        return importingFolder ? [.folder] : [.item]
+#else
+        return [.item, .folder]
 #endif
     }
 
