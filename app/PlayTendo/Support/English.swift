@@ -387,7 +387,6 @@ enum English {
         "Pixel Art": "Pixel Art",
         "Photos": "Photos",
         "Fichiers": "Files",
-        "Dossier": "Folder",
         "Choisir une jaquette": "Choose a cover",
         "Retirer ma jaquette": "Remove my cover",
         "Image illisible": "Unreadable image",

@@ -475,25 +475,15 @@ struct NeonIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            NeonIconLabel(systemName: systemName, color: color)
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 42, height: 42)
+                .background(Chamfer(cut: 10).fill(color.opacity(0.08)))
+                .overlay(Chamfer(cut: 10).stroke(color.opacity(0.7), lineWidth: 1))
+                .neonGlow(color, radius: 6)
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Apparence d'un bouton icône néon, seule (pour l'étiquette d'un menu, comme le « + » sur iPhone).
-struct NeonIconLabel: View {
-    let systemName: String
-    var color: Color = Neon.cyan
-
-    var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 16, weight: .bold))
-            .foregroundStyle(color)
-            .frame(width: 42, height: 42)
-            .background(Chamfer(cut: 10).fill(color.opacity(0.08)))
-            .overlay(Chamfer(cut: 10).stroke(color.opacity(0.7), lineWidth: 1))
-            .neonGlow(color, radius: 6)
     }
 }
 
