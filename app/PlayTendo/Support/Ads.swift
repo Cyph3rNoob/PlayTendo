@@ -17,11 +17,27 @@ import UserMessagingPlatform
 final class Ads: NSObject, ObservableObject, FullScreenContentDelegate {
     static let shared = Ads()
 
-    /// Identifiants des pubs. Pubs d'essai de Google pour l'instant (aucun compte AdMob nécessaire) ; les vrais
-    /// identifiants (et GADApplicationIdentifier dans app/AppStore-Info.plist) viendront du compte AdMob.
+    /// Identifiants des pubs. Ceux du compte AdMob de PlayTendo ne sont pas dans le dépôt : ils viennent de
+    /// secrets/admob_banner et secrets/admob_interstitial, mis dans l'Info.plist (PTAdMobBanner,
+    /// PTAdMobInterstitial) par scripts/build_appstore.sh, comme l'ID de l'app (GADApplicationIdentifier,
+    /// secrets/admob_app_id). Compilation Debug (simulateur, essais), ou identifiants absents : pubs d'essai de
+    /// Google, jamais les vraies (cliquer sur ses propres pubs fait fermer le compte AdMob).
     enum Unit {
-        static let banner = "ca-app-pub-3940256099942544/2934735716"
-        static let interstitial = "ca-app-pub-3940256099942544/4411468910"
+        private static let testBanner = "ca-app-pub-3940256099942544/2934735716"
+        private static let testInterstitial = "ca-app-pub-3940256099942544/4411468910"
+#if DEBUG
+        static let banner = testBanner
+        static let interstitial = testInterstitial
+#else
+        static let banner = configured("PTAdMobBanner") ?? testBanner
+        static let interstitial = configured("PTAdMobInterstitial") ?? testInterstitial
+
+        private static func configured(_ key: String) -> String? {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+                  value.hasPrefix("ca-app-pub-") else { return nil }
+            return value
+        }
+#endif
     }
 
     private static let firstInterstitialDelay: TimeInterval = 2 * 60

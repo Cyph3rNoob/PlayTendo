@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- Version App Store : clés ajoutées à l'Info.plist de l'app par scripts/build_appstore.sh.
-     GADApplicationIdentifier : identifiant d'essai de Google, à remplacer par celui du compte AdMob.
+     GADApplicationIdentifier : ID d'essai de Google ; celui du compte AdMob de PlayTendo (secrets/admob_app_id, hors du
+     dépôt) le remplace dans l'IPA, avec PTAdMobBanner et PTAdMobInterstitial (scripts/build_appstore.sh).
      NSUserTrackingUsageDescription : texte français ; l'anglais est dans app/AppStore/en.lproj/InfoPlist.strings.
      ITSAppUsesNonExemptEncryption = NO : seulement le HTTPS d'Apple (chiffrement exempté, aucun document à fournir).
      SKAdNetworkItems : liste de Google et des acheteurs qu'il cite (developers.google.com/admob/ios/3p-skadnetworks,

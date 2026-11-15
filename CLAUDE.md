@@ -428,7 +428,8 @@ Le « stable » du buildbot RetroArch est recompilé en continu : ce n'est pas u
   consentement UMP (Europe forcée en Debug), question de suivi d'Apple, `MobileAds.shared.start`. Bandeau classique 320×50 (728×90 si
   la largeur le permet ; `AdBannerView`, `safeAreaInset` de la bibliothèque) ; pub plein écran au `onDismiss` d'une partie (pas
   avant 2 min, puis 5 min d'écart) ; Réglages › « Confidentialité des pubs » si UMP l'exige. Identifiants d'essai de
-  Google pour l'instant. Âge maximum des pubs : `maxAdContentRating = .parentalGuidance` (12 ans et plus).
+  Google en Debug, vrais identifiants AdMob dans l'IPA (`secrets/admob_app_id`, `admob_banner`, `admob_interstitial` → Info.plist
+  `GADApplicationIdentifier`, `PTAdMobBanner`, `PTAdMobInterstitial`) ; `vitrine/app-ads.txt`. Âge maximum des pubs : `maxAdContentRating = .parentalGuidance` (12 ans et plus).
   Publication (étape C) : `app/AppStore-Info.plist` (GADApplicationIdentifier, `ITSAppUsesNonExemptEncryption` NO,
   NSUserTrackingUsageDescription, 50 SKAdNetwork de Google du 30 janvier 2026), `app/AppStore/` (PrivacyInfo.xcprivacy
   de l'app : UserDefaults CA92.1, dates de fichiers C617.1/3B52.1, place libre E174.1, temps écoulé 35F9.1 ;

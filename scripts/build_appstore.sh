@@ -75,6 +75,8 @@ if [ "${1:-}" = "sim" ]; then
   fi
   grep -E "warning:" "$LOG" | grep "/app/PlayTendo/" | sort -u | head -20 || true
   add_ads_keys "$SIMAPP"
+  # Simulateur (Debug) : identifiant d'application d'essai de Google, comme les blocs d'essai d'Ads.swift.
+  /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier ca-app-pub-3940256099942544~1458002511" "$SIMAPP/Info.plist"
   add_appstore_resources "$SIMAPP" ios-arm64_x86_64-simulator
   codesign --force --sign - --timestamp=none "$SIMAPP" >> "$LOG" 2>&1
   if ! xcrun simctl install booted "$SIMAPP"; then
@@ -118,6 +120,15 @@ PAYLOAD_APP="$ROOT/build/ipa-appstore/Payload/PlayTendo.app"
 /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PAYLOAD_APP/Info.plist" 2>/dev/null || true
 add_ads_keys "$PAYLOAD_APP"
 add_appstore_resources "$PAYLOAD_APP" ios-arm64
+# Identifiants du compte AdMob (secrets/, hors du dépôt, jamais affichés) ; sans eux, l'app garde les pubs d'essai.
+if [ -s "$ROOT/secrets/admob_app_id" ] && [ -s "$ROOT/secrets/admob_banner" ] && [ -s "$ROOT/secrets/admob_interstitial" ]; then
+  /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier $(cat "$ROOT/secrets/admob_app_id")" \
+    -c "Add :PTAdMobBanner string $(cat "$ROOT/secrets/admob_banner")" \
+    -c "Add :PTAdMobInterstitial string $(cat "$ROOT/secrets/admob_interstitial")" "$PAYLOAD_APP/Info.plist"
+  echo ">>> Identifiants AdMob du compte embarqués (vraies pubs)"
+else
+  echo "!!! Pas d'identifiants AdMob (secrets/admob_app_id, admob_banner, admob_interstitial) : pubs d'essai de Google"
+fi
 # (« stikdebug:// » seulement : la traduction anglaise d'un texte d'aide contient le nom du site.)
 if grep -aq "stikdebug" "$PAYLOAD_APP/Info.plist" || grep -aq "stikdebug://" "$PAYLOAD_APP/PlayTendo"; then
   echo "!!! L'adresse « stikdebug » est encore dans l'app : version App Store refusée"
