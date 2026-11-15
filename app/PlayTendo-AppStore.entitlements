@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Droits de la version App Store (scripts/build_appstore.sh). Pas de get-task-allow : l'App Store le refuse et
+     cette version n'a pas de turbo. increased-memory-limit : à cocher aussi dans l'identifiant de l'app sur le
+     portail développeur d'Apple au moment de la publication. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+</dict>
+</plist>

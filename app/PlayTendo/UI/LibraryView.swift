@@ -104,9 +104,19 @@ struct LibraryView: View {
         // Bibliothèque relue au retour d'une partie (app compilée avec la PS Vita : un jeu installé a pu quitter Jeux,
         // sa copie installée le remplace).
 #if os(iOS)
-        .fullScreenCover(item: $playing, onDismiss: { library.refresh() }) { game in
+        .fullScreenCover(item: $playing, onDismiss: {
+            library.refresh()
+#if PLAYTENDO_APPSTORE
+            Ads.shared.gameEnded()
+#endif
+        }) { game in
             EmulatorView(game: game)
         }
+#if PLAYTENDO_APPSTORE
+        .onChange(of: playing == nil) { _, idle in Ads.shared.inGame = !idle }
+        // Bandeau de pub en bas de la bibliothèque (rien si « Retirer les pubs » est acheté).
+        .safeAreaInset(edge: .bottom, spacing: 0) { AdBannerView() }
+#endif
 #else
         // Mac : jeux glissés dans la fenêtre depuis le Finder.
         .dropDestination(for: URL.self) { urls, _ in

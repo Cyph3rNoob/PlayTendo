@@ -1,3 +1,22 @@
+// Version App Store (PLAYTENDO_APPSTORE) : le JIT y est interdit. Ce fichier ne garde que l'interface vide, pour que
+// les moteurs et l'app compilent sans changer leurs appels : jamais de turbo, aucune fonction privée d'Apple (csops,
+// SecTask), ni débogueur, ni mémoire exécutable. La PSP et la 3DS prennent alors leur interpréteur.
+#if PLAYTENDO_APPSTORE
+#import "PTJIT.h"
+
+bool PTJITIsDebugged(void) { return false; }
+bool PTJITIsTraced(void) { return false; }
+bool PTJITHasGetTaskAllow(void) { return false; }
+bool PTJITPreparePool(size_t size, char *error, size_t errorSize) { return false; }
+bool PTJITPrepareSimulatedPool(size_t size, char *error, size_t errorSize) { return false; }
+__attribute__((visibility("default"), used)) bool PTJITIsActive(void) { return false; }
+__attribute__((visibility("default"), used)) void *PTJITAlloc(size_t size, void **executable) { return NULL; }
+__attribute__((visibility("default"), used)) void PTJITFree(void *writable) {}
+size_t PTJITLargestFree(void) { return 0; }
+unsigned PTJITFailureCount(void) { return 0; }
+
+#else
+
 #import "PTJIT.h"
 #import "PTCore.h"
 
@@ -372,3 +391,5 @@ void PTJITFree(void *writable) {
     }
     os_unfair_lock_unlock(&gLock);
 }
+
+#endif

@@ -335,6 +335,8 @@ final class GameLibrary: ObservableObject {
         case .noGame: importFailuresPending.append(tr("\(name) : aucun jeu reconnu dans l'archive"))
         case .cia3DS:
             importFailuresPending.append(tr("\(name) : jeu 3DS au format .cia (à installer), pas encore pris en charge ; il faut un .3ds ou .cci décrypté"))
+        case .unavailableConsole(let system):
+            importFailuresPending.append(tr("\(name) : jeu \(system.name), console absente de cette version de PlayTendo"))
         case nil: if let failure { importFailuresPending.append(tr("\(name) : \(failure)")) }
         }
         // Le jeu ajouté apparaît tout de suite, sans attendre la fin des autres.
@@ -404,6 +406,8 @@ final class GameLibrary: ObservableObject {
         case noGame
         /// Jeu 3DS au format d'installation .cia (seul ou dans une archive) : le moteur libretro ne l'ouvre pas.
         case cia3DS
+        /// Jeu d'une console absente de cette version de l'app (version App Store : PS2, GameCube, Wii).
+        case unavailableConsole(GameSystem)
     }
 
     /// Ce qu'a fait l'import d'un fichier, pour le journal.
@@ -431,6 +435,7 @@ final class GameLibrary: ObservableObject {
         case .unsupported: line += "format non reconnu"
         case .noGame: line += "aucun jeu reconnu"
         case .cia3DS: line += "jeu 3DS en .cia, non pris en charge"
+        case .unavailableConsole(let system): line += "jeu \(system.shortName), console absente de cette version"
         case nil: line += "échec : \(failure ?? "?")"
         }
         if stats.written > 0 {
@@ -470,6 +475,8 @@ final class GameLibrary: ObservableObject {
             return try importArchive(url, stats: &stats, update: update)
         }
         if ext == "cia" { return .cia3DS }
+        // Jeu d'une console absente de cette version (version App Store : PS2, GameCube, Wii) : rien n'est copié.
+        if let system = GameSystem.detectAny(url), !system.isAvailable { return .unavailableConsole(system) }
         stats.format = "copie"
         guard let destination = destination(forFileNamed: url.lastPathComponent) else { return .unsupported }
         // Comparaison des chemins réels : l'app Fichiers peut donner « /private/var/… » pour « /var/… ».
@@ -655,6 +662,8 @@ final class GameLibrary: ObservableObject {
         var added = 0
         var present = 0
         var hasCIA = false
+        /// Console d'un jeu de l'archive absente de cette version (version App Store), s'il y en avait un.
+        var unavailable: GameSystem?
         var files: [URL] = []
         /// Fichiers décompressés dans `staging` (chemins dans l'archive), à mettre à leur place à la fin.
         var staged: [String] = []
@@ -723,6 +732,12 @@ final class GameLibrary: ObservableObject {
             }
             stats.written += written
             stats.files += 1
+            // Jeu d'une console absente de cette version (version App Store : PS2, GameCube, Wii) : pas gardé.
+            if !toBIOS, let system = GameSystem.detectAny(target), !system.isAvailable {
+                try? manager.removeItem(at: target)
+                unavailable = system
+                continue
+            }
             added += 1
             if !toBIOS && !moveIfPS2BIOS(target) { staged.append(relative) }
         }
@@ -733,6 +748,7 @@ final class GameLibrary: ObservableObject {
         }
         if added > 0 { return .added(added, files) }
         if present > 0 { return .alreadyThere(files) }
+        if let unavailable { return .unavailableConsole(unavailable) }
         return hasCIA ? .cia3DS : .noGame
     }
 
@@ -1117,11 +1133,15 @@ private struct DetectionCache: Codable {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let size = values?.fileSize ?? -1
         let modified = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
-        if let entry = entries[path], entry.size == size, entry.modified == modified { return entry.system }
-        let system = GameSystem.detect(url)
+        // Le cache garde la vraie console, même absente de cette version (version App Store : PS2, GameCube, Wii),
+        // pour rester juste quand l'une et l'autre version s'installent par-dessus ; elle est filtrée à la lecture.
+        if let entry = entries[path], entry.size == size, entry.modified == modified {
+            return entry.system.flatMap { $0.isAvailable ? $0 : nil }
+        }
+        let system = GameSystem.detectAny(url)
         entries[path] = Entry(size: size, modified: modified, system: system)
         changed = true
-        return system
+        return system.flatMap { $0.isAvailable ? $0 : nil }
     }
 
     /// Enregistré si quelque chose a changé ; les fichiers disparus sont oubliés.

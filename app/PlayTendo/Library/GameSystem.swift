@@ -330,8 +330,10 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
                 "citra_analog_function": "c_stick",
                 "citra_enable_mouse_touchscreen": "disabled",
                 "citra_enable_touch_touchscreen": "enabled",
-                "citra_use_cpu_jit": "enabled",
-                "citra_use_shader_jit": "enabled",
+                // Version App Store : interpréteurs seulement (JIT interdit), même si le moteur vérifie déjà
+                // GET_JIT_CAPABLE.
+                "citra_use_cpu_jit": Self.jitOption,
+                "citra_use_shader_jit": Self.jitOption,
                 "citra_language_value": "French",
             ].merging(N3DSSettings.coreOptions) { $1 }
         case .psx:
@@ -362,6 +364,15 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Recompilateurs des moteurs libretro (3DS) : jamais dans la version App Store.
+    private static var jitOption: String {
+#if PLAYTENDO_APPSTORE
+        "disabled"
+#else
+        "enabled"
+#endif
+    }
+
     private static var pspBackend: String {
 #if os(iOS)
         "opengl"
@@ -372,7 +383,11 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
 
     /// Ordre d'affichage dans la bibliothèque et la présentation (choisi par l'utilisateur le 2026-10-07) : Nintendo de
     /// salon, portables Nintendo, puis Sony.
-#if PLAYTENDO_VITA
+    /// Version App Store (PLAYTENDO_APPSTORE) : sans la PS2, la GameCube ni la Wii, injouables sans JIT (la PS Vita en
+    /// est déjà absente : PLAYTENDO_VITA=0).
+#if PLAYTENDO_APPSTORE
+    static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gb, .gbc, .gba, .nds, .n3ds, .psx, .psp]
+#elseif PLAYTENDO_VITA
     static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .ps2, .psp, .vita]
 #else
     static let displayOrder: [GameSystem] = [.nes, .snes, .n64, .gameCube, .wii, .gb, .gbc, .gba, .nds, .n3ds, .psx, .ps2, .psp]
@@ -391,9 +406,18 @@ enum GameSystem: String, CaseIterable, Identifiable, Codable {
         return displayOrder.first { $0.extensions.contains(ext) }
     }
 
-    /// Console d'un fichier : d'après l'extension, en lisant le début du fichier pour les
-    /// formats partagés entre consoles Sony.
+    /// Console présente dans cette version de l'app (toutes, sauf dans la version App Store).
+    var isAvailable: Bool { Self.displayOrder.contains(self) }
+
+    /// Console d'un fichier, seulement si elle est dans cette version de l'app (version App Store : un jeu PS2,
+    /// GameCube ou Wii n'est pas un jeu reconnu).
     static func detect(_ url: URL) -> GameSystem? {
+        detectAny(url).flatMap { $0.isAvailable ? $0 : nil }
+    }
+
+    /// Console d'un fichier : d'après l'extension, en lisant le début du fichier pour les
+    /// formats partagés entre consoles Sony. Même pour une console absente de cette version (message à l'import).
+    static func detectAny(_ url: URL) -> GameSystem? {
         let ext = url.pathExtension.lowercased()
         switch ext {
         case "pbp":

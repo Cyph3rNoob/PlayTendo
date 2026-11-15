@@ -32,3 +32,5 @@ libs/libarchive/mac/
 notes-privees/
 # Vraies jaquettes de jeux (droits des éditeurs) : jamais publiées avec la vitrine
 vitrine/assets/covers/
+# Kits de Google de la version App Store (pubs, consentement) : téléchargés par scripts/fetch_googleads.sh
+libs/googleads/

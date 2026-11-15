@@ -401,6 +401,42 @@ Le « stable » du buildbot RetroArch est recompilé en continu : ce n'est pas u
 - État : jeux simples jouables ; interfaces de certains jeux invisibles (menus Minecraft : cause inconnue après le
   masque) ; Metal exige que chaque entrée du fragment shader soit écrite par le vertex shader.
 
+## Version App Store (PLAYTENDO_APPSTORE)
+- `zsh scripts/build_appstore.sh` → `PlayTendo-AppStore.ipa` (compilation à part dans `build/xcode-appstore`, droits
+  `app/PlayTendo-AppStore.entitlements` : sans `get-task-allow`). Réglages du projet `PLAYTENDO_APPSTORE_CONDITION` /
+  `_DEFINE` (vides par défaut), Vita retirée (`PLAYTENDO_VITA=0`). L'app normale n'est pas touchée.
+- Sans PS2, GameCube, Wii ni PS Vita (`displayOrder` ; la phase « Embed cores » saute PS2Core et DolphinCore) ;
+  `GameSystem.detect` ne rend que les consoles présentes (`isAvailable`), `detectAny` toutes : l'import refuse un jeu
+  d'une console absente (`ImportResult.unavailableConsole`, rien n'est copié), le cache `consoles.json` garde la vraie
+  console et filtre à la lecture (les deux versions s'installent l'une par-dessus l'autre), `removeVitaLeftovers`
+  n'est pas appelé.
+- Aucun JIT : `PTJIT.m` réduit à des fonctions vides (ni csops, ni SecTask, ni mémoire exécutable),
+  `JITManager.benefits` toujours faux, page Turbo des réglages, panneau turbo, carte de la présentation et section
+  d'À propos retirées ; 3DS `citra_use_cpu_jit`/`citra_use_shader_jit` = disabled ; PSP sur IR.
+  `LSApplicationQueriesSchemes` retiré de l'Info.plist par le script, qui vérifie l'absence des trois moteurs et de
+  « stikdebug:// ».
+- Achat « Retirer les pubs » (`Support/AdFree.swift`, StoreKit 2, non consommable `com.playtendo.app.removeads`, à
+  créer dans App Store Connect) : `isAdFree` relu dans `Transaction.currentEntitlements` à chaque lancement (copie
+  `pubsRetirees` pour le premier affichage), `Transaction.updates` écouté dès l'ouverture (`PlayTendoApp.init`),
+  « Restaurer mes achats » = `AppStore.sync()`. Section « PlayTendo sans pubs » en tête des Réglages (iOS).
+  Simulateur Debug : boutique d'essai (`isSimulated`, clé `pubsRetireesEssai`, « Remettre les pubs (essai) »).
+  `zsh scripts/build_appstore.sh sim` compile cette version en Debug et l'installe sur le simulateur ouvert.
+- Pubs AdMob (`Support/Ads.swift`) : kits statiques Google Mobile Ads 13.12.0 et User Messaging Platform 3.1.0
+  (`scripts/fetch_googleads.sh` → `libs/googleads/`, SHA-256 vérifiés), liés seulement par `build_appstore.sh`
+  (`FRAMEWORK_SEARCH_PATHS` de la partie de l'xcframework, `-ObjC`) ; clés `app/AppStore-Info.plist` fusionnées dans
+  l'Info.plist compilé (puis signature refaite). `Ads.prepare()` après l'animation et la présentation, hors partie :
+  consentement UMP (Europe forcée en Debug), question de suivi d'Apple, `MobileAds.shared.start`. Bandeau classique 320×50 (728×90 si
+  la largeur le permet ; `AdBannerView`, `safeAreaInset` de la bibliothèque) ; pub plein écran au `onDismiss` d'une partie (pas
+  avant 2 min, puis 5 min d'écart) ; Réglages › « Confidentialité des pubs » si UMP l'exige. Identifiants d'essai de
+  Google pour l'instant. Âge maximum des pubs : `maxAdContentRating = .parentalGuidance` (12 ans et plus).
+  Publication (étape C) : `app/AppStore-Info.plist` (GADApplicationIdentifier, `ITSAppUsesNonExemptEncryption` NO,
+  NSUserTrackingUsageDescription, 50 SKAdNetwork de Google du 30 janvier 2026), `app/AppStore/` (PrivacyInfo.xcprivacy
+  de l'app : UserDefaults CA92.1, dates de fichiers C617.1/3B52.1, place libre E174.1, temps écoulé 35F9.1 ;
+  `en.lproj`/`fr.lproj` InfoPlist.strings), manifestes des kits Google mis dans `<Kit>Resources.bundle`, le tout posé
+  par `add_appstore_resources`. Fiche et réponses aux questionnaires : `appstore/fiche-app-store.md` ; page de
+  confidentialité : `vitrine/confidentialite/`. Restent : vrais identifiants AdMob, blocage des catégories sensibles
+  dans AdMob, archive signée pour l'envoi (compte développeur).
+
 ## Version Mac
 - Même projet et même code (`#if os(iOS)` / `#if os(macOS)`), arm64, macOS 14, sans bac à sable, signature « - »
   sans hardened runtime (JIT). `Paths.documents` = `~/Library/Application Support/PlayTendo` (Jeux, BIOS,

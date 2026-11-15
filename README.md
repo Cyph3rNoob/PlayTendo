@@ -113,4 +113,6 @@ envoyé sur GitHub ; les clés sont masquées dans l'app à la compilation.
 
 ## Licences
 
-Chaque moteur garde sa licence (GPL pour la plupart) ; la liste complète est dans l'app, écran **À propos**.
+Le code de PlayTendo est sous licence **GPL-3.0** (fichier [LICENSE](LICENSE)). Chaque moteur garde sa licence (GPL
+pour la plupart) ; la liste complète est dans l'app, écran **À propos**. Les fichiers repris d'autres projets
+(rcheevos, polices…) gardent la leur.

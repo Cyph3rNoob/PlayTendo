@@ -20,6 +20,16 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var stikDebugInstalled = false
+#if PLAYTENDO_APPSTORE
+    /// Version App Store : achat « Retirer les pubs ».
+    @ObservedObject private var adFree = AdFree.shared
+    /// Version App Store : choix de confidentialité des pubs (Europe).
+    @ObservedObject private var ads = Ads.shared
+#if DEBUG && targetEnvironment(simulator)
+    /// Boutique d'essai du simulateur : confirmation qui imite celle de l'App Store.
+    @State private var confirmingTestPurchase = false
+#endif
+#endif
     @State private var vpnConnected = false
     @State private var biosList: [PS2BIOS.Info] = []
     @State private var biosInUse: PS2BIOS.Info?
@@ -133,7 +143,10 @@ struct SettingsView: View {
             return EmulatorSession.engineInstalled(for: .ps2)
         }
 
-#if os(iOS)
+#if os(iOS) && PLAYTENDO_APPSTORE
+        // Version App Store : pas de mode turbo (JIT interdit).
+        static var visible: [Page] { [.appearance, .play, .online] + (hasSystemFiles ? [.systemFiles] : []) }
+#elseif os(iOS)
         static var visible: [Page] { [.appearance, .play, .turbo, .online] + (hasSystemFiles ? [.systemFiles] : []) }
 #else
         static var visible: [Page] { [.appearance, .play, .online, .keyboard] + (hasSystemFiles ? [.systemFiles] : []) + [.folders] }
@@ -196,6 +209,9 @@ struct SettingsView: View {
     private var layout: some View {
         NavigationStack {
             List {
+#if PLAYTENDO_APPSTORE
+                adFreeSection
+#endif
                 Section {
                     ForEach(Page.visible) { page in
                         NavigationLink(value: page) { pageRow(page) }
@@ -217,12 +233,29 @@ struct SettingsView: View {
                     Button("OK") { dismiss() }
                 }
             }
+#if PLAYTENDO_APPSTORE
+            .alert(tr("Retirer les pubs"), isPresented: Binding(get: { adFree.message != nil },
+                                                               set: { if !$0 { adFree.message = nil } })) {
+                Button("OK") {}
+            } message: {
+                Text(adFree.message ?? "")
+            }
+#if DEBUG && targetEnvironment(simulator)
+            .confirmationDialog(tr("Achat d'essai (simulateur) : retirer les pubs pour 4,99 € ?"),
+                                isPresented: $confirmingTestPurchase, titleVisibility: .visible) {
+                Button(tr("Acheter (essai)")) { Task { await adFree.purchase() } }
+                Button(tr("Annuler"), role: .cancel) {}
+            }
+#endif
+#endif
             .task {
+#if !PLAYTENDO_APPSTORE
                 // LocalDevVPN peut se connecter pendant que les réglages sont ouverts.
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     vpnConnected = JITManager.isLocalDevVPNConnected
                 }
+#endif
             }
         }
     }
@@ -578,6 +611,60 @@ struct SettingsView: View {
             }
         }
     }
+
+#if PLAYTENDO_APPSTORE
+    /// Version App Store : en tête des réglages, l'achat unique qui retire les pubs, et sa restauration.
+    private var adFreeSection: some View {
+        Section {
+            if adFree.isAdFree {
+                Label(tr("Pubs retirées. Merci pour ton soutien !"), systemImage: "checkmark.seal.fill")
+#if DEBUG && targetEnvironment(simulator)
+                if adFree.isSimulated {
+                    Button(tr("Remettre les pubs (essai)")) { adFree.resetSimulatedPurchase() }
+                }
+#endif
+            } else {
+                Button(action: buyAdFree) {
+                    HStack {
+                        Label(tr("Retirer les pubs"), systemImage: "sparkles")
+                        Spacer()
+                        if adFree.busy {
+                            ProgressView()
+                        } else if let price = adFree.displayPrice {
+                            Text(price).foregroundStyle(Neon.dim)
+                        }
+                    }
+                }
+                .disabled(adFree.busy || adFree.displayPrice == nil)
+                Button(tr("Restaurer mes achats")) { Task { await adFree.restore() } }
+                    .disabled(adFree.busy)
+                // Exigé par Google en Europe : pouvoir changer ses choix de consentement à tout moment.
+                if ads.privacyOptionsRequired {
+                    Button(tr("Confidentialité des pubs")) { ads.showPrivacyOptions() }
+                }
+            }
+        } header: {
+            Text(tr("PlayTendo sans pubs"))
+        } footer: {
+            if !adFree.isAdFree && adFree.storeChecked && adFree.displayPrice == nil {
+                Text(tr("L'App Store ne répond pas pour l'instant : réessaie plus tard."))
+            } else if !adFree.isAdFree {
+                Text(tr("Un seul achat, pour toujours, sur tous tes appareils avec le même compte Apple."))
+            }
+        }
+        .task { await adFree.refresh() }
+    }
+
+    private func buyAdFree() {
+#if DEBUG && targetEnvironment(simulator)
+        if adFree.isSimulated {
+            confirmingTestPurchase = true
+            return
+        }
+#endif
+        Task { await adFree.purchase() }
+    }
+#endif
 
     private var bootSection: some View {
         Section {

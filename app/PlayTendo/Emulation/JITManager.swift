@@ -83,15 +83,22 @@ final class JITManager: ObservableObject {
 
     var isActive: Bool { PTJITIsActive() }
 
-    /// Consoles dont le moteur sait se servir du JIT.
-    nonisolated static func benefits(_ system: GameSystem) -> Bool { [.psp, .ps2, .gameCube, .wii, .n3ds].contains(system) || system.isVita }
+    /// Consoles dont le moteur sait se servir du JIT. Version App Store (PLAYTENDO_APPSTORE) : aucune, le JIT y est
+    /// interdit ; la PSP et la 3DS tournent sur leur interpréteur, sans écran ni réglage de mode turbo.
+    nonisolated static func benefits(_ system: GameSystem) -> Bool {
+#if PLAYTENDO_APPSTORE
+        false
+#else
+        [.psp, .ps2, .gameCube, .wii, .n3ds].contains(system) || system.isVita
+#endif
+    }
 
     /// Consoles qui ne peuvent pas tourner sans JIT : aucune, sauf la PS Vita dans une app compilée avec elle (Vita3K
     /// n'a pas d'interpréteur).
     nonisolated static func requires(_ system: GameSystem) -> Bool { system.isVita }
 
     var isStikDebugInstalled: Bool {
-#if os(iOS)
+#if os(iOS) && !PLAYTENDO_APPSTORE
         UIApplication.shared.canOpenURL(URL(string: "stikdebug://")!)
 #else
         false
@@ -135,7 +142,10 @@ final class JITManager: ObservableObject {
     }
 
     private func run() async throws {
-#if targetEnvironment(simulator) || os(macOS)
+#if PLAYTENDO_APPSTORE
+        // Version App Store : pas de JIT (aucun écran ne le propose ; sécurité si un appel arrivait quand même).
+        throw Failure(message: tr("Le mode turbo est désactivé dans les réglages."))
+#elseif targetEnvironment(simulator) || os(macOS)
         // Pas de StikDebug dans le simulateur ni sur Mac : même réserve, sans débogueur.
         status = .activating(tr("Préparation de la mémoire…"))
         try await Self.preparePool(simulated: true)
@@ -170,6 +180,7 @@ final class JITManager: ObservableObject {
 #endif
     }
 
+#if !PLAYTENDO_APPSTORE
     /// stikdebug://enable-jit?bundle-id=…&pid=…&script-name=universal.js (identifiant réel de l'installation,
     /// AltStore y ajoute celui de l'équipe).
     private func stikDebugURL() -> URL? {
@@ -184,6 +195,7 @@ final class JITManager: ObservableObject {
         ]
         return components.url
     }
+#endif
 
     nonisolated private static func preparePool(simulated: Bool) async throws {
         try await Task.detached(priority: .userInitiated) {

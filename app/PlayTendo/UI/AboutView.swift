@@ -200,7 +200,7 @@ struct AboutView: View {
                         Label(tr("Sur Mac, il s'active tout seul : rien à installer."), systemImage: "bolt.fill")
                     }
                 }
-#else
+#elseif !PLAYTENDO_APPSTORE
                 Section(tr("Mode turbo")) {
 #if PLAYTENDO_VITA
                     Label(tr("Indispensable pour la PS2, la PS Vita, la GameCube, la Wii et la 3DS ; accélère la PSP."),
@@ -241,7 +241,11 @@ struct AboutView: View {
                 }
 
                 Section(tr("Un souci ?")) {
+#if PLAYTENDO_APPSTORE
+                    Label(tr("Un jeu ne démarre pas : vérifie son format et, pour la PlayStation, son BIOS."), systemImage: "questionmark.circle")
+#else
                     Label(tr("Un jeu ne démarre pas : vérifie son format, le BIOS (PS2) et le turbo."), systemImage: "questionmark.circle")
+#endif
                     ShareLink(item: Paths.logFile) {
                         Label(tr("Partager le journal technique"), systemImage: "doc.text.magnifyingglass")
                     }
@@ -268,7 +272,11 @@ struct AboutView: View {
                             .padding(.vertical, 2)
                         }
                     }
-#if os(iOS)
+                    // Code source (licence GPL-3.0, exigée par les moteurs GPL pour toute version distribuée).
+                    Link(destination: URL(string: "https://github.com/Cyph3rNoob/PlayTendo")!) {
+                        Label(tr("Code source de PlayTendo (GPL-3.0)"), systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+#if os(iOS) && !PLAYTENDO_APPSTORE
                     Text(tr("Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper (screenscraper.fr), puis libretro-thumbnails et SteamGridDB en secours. Codes de triche : libretro-database (cht, CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection et CheatDevicePS2 (GPL-3.0). Succès : rcheevos de RetroAchievements (MIT). Archives : libarchive 3.8.9 (BSD-2-Clause) et xz 5.8.4 (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo : StikDebug (app à part)."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)

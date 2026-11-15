@@ -32,6 +32,10 @@ struct PlayTendoApp: App {
         BootSound.prepare()
         // RetroAchievements : reconnexion au compte du joueur dès l'ouverture (jeton gardé dans le Trousseau).
         _ = Achievements.shared
+#if PLAYTENDO_APPSTORE
+        // Version App Store : achat « Retirer les pubs » relu, et achats faits ailleurs écoutés dès l'ouverture.
+        _ = AdFree.shared
+#endif
     }
 
     var body: some Scene {
@@ -100,6 +104,14 @@ struct PlayTendoApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { PTLogFlush() }
         }
+#if PLAYTENDO_APPSTORE
+        // Pubs : consentement puis démarrage, une fois l'animation et la présentation passées (et à chaque retour
+        // dans l'app tant que ce n'est pas fait).
+        .task(id: !showBoot && welcomeSeen >= WelcomeView.version && scenePhase == .active) {
+            guard !showBoot, welcomeSeen >= WelcomeView.version, scenePhase == .active else { return }
+            await Ads.shared.prepare()
+        }
+#endif
 #if DEBUG && os(iOS)
         .onAppear(perform: forceLandscapeForTesting)
 #endif

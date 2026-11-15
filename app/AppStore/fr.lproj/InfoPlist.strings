@@ -1,0 +1,3 @@
+/* Version App Store : textes des questions du système, en français (mêmes phrases que l'Info.plist). */
+"NSUserTrackingUsageDescription" = "Sert seulement à montrer des pubs plus adaptées. PlayTendo reste gratuit grâce à elles, et l'achat « Retirer les pubs » les enlève toutes.";
+"NSLocalNetworkUsageDescription" = "PlayTendo relie deux appareils proches pour le câble link Game Boy (échanges et combats Pokémon).";

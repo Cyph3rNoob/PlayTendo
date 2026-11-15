@@ -15,7 +15,12 @@ struct WelcomeView: View {
 
 #if os(iOS)
     private var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
+    /// Version App Store : pas de mode turbo, donc pas de page pour lui.
+#if PLAYTENDO_APPSTORE
+    private let showsTurbo = false
+#else
     private let showsTurbo = true
+#endif
 #else
     private let device = "Mac"
     /// Sur Mac, la carte du mode turbo n'apparaît qu'avec une console qui s'en sert.

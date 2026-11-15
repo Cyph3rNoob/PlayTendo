@@ -33,12 +33,14 @@ enum Paths {
         writeReadme()
         // Ancien réglage PRÉCISION de la PS Vita (retiré le 2026-10-12 : sans effet visible).
         UserDefaults.standard.removeObject(forKey: "precisionVita")
-#if !PLAYTENDO_VITA
+        // Version App Store : rien n'est effacé (elle peut être essayée par-dessus la version complète, dont elle doit
+        // laisser intacts les jeux PS Vita installés).
+#if !PLAYTENDO_VITA && !PLAYTENDO_APPSTORE
         removeVitaLeftovers()
 #endif
     }
 
-#if !PLAYTENDO_VITA
+#if !PLAYTENDO_VITA && !PLAYTENDO_APPSTORE
     /// App compilée sans la PS Vita (PLAYTENDO_VITA=0 zsh scripts/build_app.sh) : ce qu'une version précédente
     /// de l'app avait installé (jeux, firmware, réglages et journal du moteur, icônes) est effacé, à sa demande.
     /// Les sauvegardes des jeux (mémoire de la console : vita/ux0/user, et Sauvegardes/Vita) restent toujours, prêtes

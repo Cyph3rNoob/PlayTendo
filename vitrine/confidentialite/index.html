@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Confidentialité — PlayTendo</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png">
+<meta name="description" content="Politique de confidentialité de PlayTendo : ce qui reste sur ton appareil, les services contactés, les pubs de la version App Store.">
+<link rel="canonical" href="https://playtendo.me/confidentialite/">
+<meta name="robots" content="index, follow">
+<link rel="preload" href="../assets/fonts/orbitron.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+/* Mêmes polices et même ambiance que la page d'accueil (../index.html) et le guide d'installation. */
+@font-face { font-family: "Orbitron"; font-style: normal; font-weight: 500 900; font-display: swap; src: url("../assets/fonts/orbitron.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url("../assets/fonts/barlow-400.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url("../assets/fonts/barlow-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 700; font-display: swap; src: url("../assets/fonts/barlow-700.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../assets/fonts/ibm-plex-mono-500.woff2") format("woff2"); }
+
+:root {
+  --bg: #05040d;
+  --night: #0f0626;
+  --panel: #0d0f21;
+  --cyan: #00f0ff;
+  --magenta: #ff2bd6;
+  --violet: #8a4dff;
+  --text: #e6f2ff;
+  --soft: #c3cde6;
+  --dim: #8f9bbb;
+  --rule: rgba(138, 77, 255, .3);
+  --display: "Orbitron", "Avenir Next", "Trebuchet MS", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--body); font-size: 17px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(60rem 40rem at -10% -10%, rgba(0, 240, 255, .12), transparent 60%),
+    radial-gradient(50rem 40rem at 110% 45%, rgba(255, 43, 214, .1), transparent 60%),
+    linear-gradient(var(--night), var(--bg) 45%, #030109);
+}
+
+/* Langue : deux boutons radio (marchent même sans script) ; le français par défaut. */
+:root:not(:has(#l-en:checked)) .en { display: none !important; }
+:root:has(#l-en:checked) .fr { display: none !important; }
+.lang input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+
+a { color: var(--cyan); overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.wrap { max-width: 820px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+.topbar { position: sticky; top: 0; z-index: 30; background: linear-gradient(rgba(5, 4, 13, .92), rgba(5, 4, 13, .7)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
+.topbar .wrap { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+.mark { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.mark img { width: 32px; height: 32px; border-radius: 22.37%; }
+.mark span { font-family: var(--display); font-weight: 900; letter-spacing: .12em; font-size: 14px; }
+.lang { margin-left: auto; display: flex; padding: 1px; background: linear-gradient(90deg, var(--cyan), var(--magenta)); }
+.lang label { font: 700 13px/1 var(--display); letter-spacing: .12em; color: var(--text); background: var(--bg); padding: 10px 13px; cursor: pointer; user-select: none; }
+.lang input + label + input + label { margin-left: 1px; }
+.lang input:checked + label { background: transparent; color: #000; }
+.lang input:focus-visible + label { outline: 2px solid var(--cyan); outline-offset: -4px; }
+
+.head { padding-block: 44px 4px; }
+.eyebrow { font: 500 13px/1.4 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--cyan); margin: 0 0 10px; }
+h1 { font: 900 clamp(26px, 5vw, 42px)/1.1 var(--display); letter-spacing: .04em; margin: 0 0 14px; text-wrap: balance;
+  background: linear-gradient(90deg, var(--cyan), #9a8cff 55%, var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { color: var(--soft); margin: 0 0 8px; font-size: 18px; }
+.date { color: var(--dim); font: 500 12px/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+
+.short { margin: 26px 0 0; padding: 18px 20px; background: var(--panel); box-shadow: inset 0 0 0 1px rgba(0, 240, 255, .35); }
+.short ul { margin: 0; padding-left: 1.2em; }
+.short li { color: var(--soft); margin: 4px 0; }
+.short b { color: var(--text); }
+
+section { margin-top: 36px; }
+h2 { font: 800 clamp(17px, 2.4vw, 20px)/1.3 var(--display); letter-spacing: .06em; margin: 0 0 10px; color: var(--text); }
+section p, section li { color: var(--soft); }
+section ul { padding-left: 1.2em; }
+section li { margin: 6px 0; }
+section b { color: var(--text); }
+
+footer { margin-top: 56px; padding-block: 24px 40px; border-top: 1px solid var(--rule); color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="mark" href="../"><img src="../assets/app-icon.png" alt="" width="32" height="32"><span>PLAYTENDO</span></a>
+    <div class="lang" role="radiogroup" aria-label="Langue / Language">
+      <input type="radio" name="lang" id="l-fr" checked><label for="l-fr">FR</label>
+      <input type="radio" name="lang" id="l-en"><label for="l-en">EN</label>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ======================= FRANÇAIS ======================= -->
+<div class="fr" lang="fr">
+  <div class="head">
+    <p class="eyebrow">Politique de confidentialité</p>
+    <h1>Tes données restent chez toi</h1>
+    <p class="lede">PlayTendo est une app d'émulation pour iPhone, iPad et Mac. Elle n'a ni compte, ni serveur à elle : elle ne collecte aucune donnée personnelle pour son propre compte.</p>
+    <p class="date">Mise à jour : 15 novembre 2026</p>
+  </div>
+
+  <div class="short">
+    <ul>
+      <li><b>Tes jeux, BIOS, sauvegardes et réglages</b> restent sur ton appareil. Ils ne sont jamais envoyés nulle part.</li>
+      <li><b>Pas de compte PlayTendo</b>, pas de statistiques d'utilisation, pas de suivi par PlayTendo.</li>
+      <li><b>Version App Store seulement :</b> des pubs Google AdMob, avec ton consentement, et un achat pour les retirer.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>Ce qui reste sur ton appareil</h2>
+    <ul>
+      <li>Les jeux et fichiers système que tu ajoutes, les sauvegardes, les jaquettes téléchargées, tes réglages et tes favoris.</li>
+      <li>Un journal technique (Journal.txt) qui aide à comprendre un plantage. Il ne quitte ton appareil que si tu choisis de le partager.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Les services que l'app contacte</h2>
+    <p>Pour certaines fonctions, PlayTendo interroge des services externes, toujours en connexion chiffrée (HTTPS). Comme tout site web, ils voient l'adresse IP de ta connexion.</p>
+    <ul>
+      <li><b>Jaquettes et fiches de jeux :</b> ScreenScraper (screenscraper.fr) reçoit le nom du fichier du jeu, sa taille et son empreinte (CRC) ; libretro-thumbnails et SteamGridDB reçoivent le titre du jeu.</li>
+      <li><b>Listes de jeux et codes de triche :</b> téléchargées depuis GitHub (libretro-database) et d'autres listes publiques, sans aucune information sur toi.</li>
+      <li><b>RetroAchievements (facultatif) :</b> seulement si tu te connectes à ton compte RetroAchievements. Ton pseudo, un jeton de connexion (gardé dans le Trousseau d'Apple, jamais ton mot de passe) et l'empreinte du jeu lancé sont envoyés à retroachievements.org.</li>
+      <li><b>Jeu en ligne DS (facultatif) :</b> les jeux DS qui se connectent passent par le serveur choisi dans les réglages (Kaeru WFC, Wiimmfi ou AltWFC).</li>
+      <li><b>Câble link Game Boy :</b> les deux appareils se parlent directement sur ton réseau local, sans passer par Internet.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Les pubs (version App Store)</h2>
+    <p>La version de l'App Store est gratuite et affiche des pubs de <b>Google AdMob</b> : un bandeau en bas de la bibliothèque, et parfois une pub en quittant un jeu, jamais pendant une partie. Les pubs sont limitées aux contenus « 12 ans et plus ». La version installée hors App Store n'a aucune pub.</p>
+    <ul>
+      <li><b>Ce que Google peut collecter :</b> l'identifiant publicitaire de l'appareil (seulement si tu autorises le suivi), l'adresse IP, des informations sur l'appareil, les interactions avec les pubs et des données de diagnostic. Détails : <a href="https://policies.google.com/technologies/partner-sites">utilisation des données par Google dans les apps partenaires</a> et <a href="https://policies.google.com/privacy">règles de confidentialité de Google</a>.</li>
+      <li><b>Ton consentement :</b> en Europe, une fenêtre de Google te demande ton choix au premier lancement. Tu peux le changer à tout moment dans Réglages › Confidentialité des pubs.</li>
+      <li><b>Le suivi :</b> iOS te demande si PlayTendo peut te suivre. Si tu refuses, les pubs restent, simplement moins ciblées. Tu peux changer d'avis dans Réglages de l'iPhone › Confidentialité et sécurité › Suivi.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>L'achat « Retirer les pubs »</h2>
+    <p>L'achat se fait par Apple, avec ton compte Apple. PlayTendo ne voit aucune information de paiement : il reçoit seulement d'Apple la confirmation que l'achat est fait.</p>
+  </section>
+
+  <section>
+    <h2>Enfants</h2>
+    <p>PlayTendo n'est pas destiné spécifiquement aux enfants. Les pubs sont limitées aux contenus « 12 ans et plus ».</p>
+  </section>
+
+  <section>
+    <h2>Tes droits et contact</h2>
+    <p>PlayTendo ne garde aucune donnée sur toi : il n'y a rien à consulter ni à effacer de notre côté. Supprimer l'app efface tout ce qu'elle contenait. Pour les données des pubs, tu peux exercer tes droits auprès de Google (liens ci-dessus) et réinitialiser ton identifiant publicitaire dans les réglages de l'iPhone. Une question : <a href="mailto:contact@playtendo.me">contact@playtendo.me</a>.</p>
+  </section>
+</div>
+
+<!-- ======================= ENGLISH ======================= -->
+<div class="en" lang="en">
+  <div class="head">
+    <p class="eyebrow">Privacy policy</p>
+    <h1>Your data stays with you</h1>
+    <p class="lede">PlayTendo is an emulation app for iPhone, iPad and Mac. It has no accounts and no servers of its own: it doesn't collect any personal data for itself.</p>
+    <p class="date">Last updated: November 15, 2026</p>
+  </div>
+
+  <div class="short">
+    <ul>
+      <li><b>Your games, BIOS files, saves and settings</b> stay on your device. They are never sent anywhere.</li>
+      <li><b>No PlayTendo account</b>, no usage statistics, no tracking by PlayTendo.</li>
+      <li><b>App Store version only:</b> Google AdMob ads, with your consent, and a purchase to remove them.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>What stays on your device</h2>
+    <ul>
+      <li>The games and system files you add, your saves, downloaded box art, your settings and favorites.</li>
+      <li>A technical log (Journal.txt) that helps understand a crash. It only leaves your device if you choose to share it.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Services the app contacts</h2>
+    <p>For some features, PlayTendo queries external services, always over an encrypted connection (HTTPS). Like any website, they see your connection's IP address.</p>
+    <ul>
+      <li><b>Box art and game details:</b> ScreenScraper (screenscraper.fr) receives the game's file name, size and checksum (CRC); libretro-thumbnails and SteamGridDB receive the game's title.</li>
+      <li><b>Game lists and cheat codes:</b> downloaded from GitHub (libretro-database) and other public lists, with no information about you.</li>
+      <li><b>RetroAchievements (optional):</b> only if you sign in to your RetroAchievements account. Your username, a sign-in token (kept in Apple's Keychain, never your password) and the checksum of the game you launch are sent to retroachievements.org.</li>
+      <li><b>DS online play (optional):</b> DS games that go online use the server chosen in the settings (Kaeru WFC, Wiimmfi or AltWFC).</li>
+      <li><b>Game Boy link cable:</b> the two devices talk directly over your local network, not through the internet.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Ads (App Store version)</h2>
+    <p>The App Store version is free and shows <b>Google AdMob</b> ads: a banner at the bottom of the library, and sometimes an ad when you quit a game, never during play. Ads are limited to "12+" content. The version installed outside the App Store has no ads.</p>
+    <ul>
+      <li><b>What Google may collect:</b> the device's advertising identifier (only if you allow tracking), IP address, device information, ad interactions and diagnostic data. Details: <a href="https://policies.google.com/technologies/partner-sites">how Google uses data from partner apps</a> and <a href="https://policies.google.com/privacy">Google's privacy policy</a>.</li>
+      <li><b>Your consent:</b> in Europe, a Google form asks for your choice on first launch. You can change it at any time in Settings › Ad privacy choices.</li>
+      <li><b>Tracking:</b> iOS asks whether PlayTendo may track you. If you decline, ads remain, just less targeted. You can change your mind in iPhone Settings › Privacy &amp; Security › Tracking.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>The "Remove ads" purchase</h2>
+    <p>The purchase goes through Apple, with your Apple Account. PlayTendo never sees any payment information: Apple only tells it the purchase is done.</p>
+  </section>
+
+  <section>
+    <h2>Children</h2>
+    <p>PlayTendo isn't specifically aimed at children. Ads are limited to "12+" content.</p>
+  </section>
+
+  <section>
+    <h2>Your rights and contact</h2>
+    <p>PlayTendo keeps no data about you: there is nothing to access or delete on our side. Deleting the app erases everything it contained. For ad data, you can exercise your rights with Google (links above) and reset your advertising identifier in the iPhone settings. Questions: <a href="mailto:contact@playtendo.me">contact@playtendo.me</a>.</p>
+  </section>
+</div>
+
+<footer>
+  <span class="fr">PlayTendo n'est affilié ni à Nintendo ni à Sony. Aucun jeu ni BIOS n'est fourni.</span>
+  <span class="en">PlayTendo is not affiliated with Nintendo or Sony. No games or BIOS files are provided.</span>
+</footer>
+</main>
+</body>
+</html>
