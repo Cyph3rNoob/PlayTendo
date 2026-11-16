@@ -241,7 +241,7 @@ struct SettingsView: View {
                 Text(adFree.message ?? "")
             }
 #if DEBUG && targetEnvironment(simulator)
-            .confirmationDialog(tr("Achat d'essai (simulateur) : retirer les pubs pour 4,99 € ?"),
+            .confirmationDialog(tr("Achat d'essai (simulateur) : retirer les pubs pour 5,99 € ?"),
                                 isPresented: $confirmingTestPurchase, titleVisibility: .visible) {
                 Button(tr("Acheter (essai)")) { Task { await adFree.purchase() } }
                 Button(tr("Annuler"), role: .cancel) {}

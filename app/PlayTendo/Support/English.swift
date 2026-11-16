@@ -605,7 +605,7 @@ enum English {
         "Achat restauré : plus de pubs. Merci !": "Purchase restored: no more ads. Thanks!",
         "Aucun achat « Retirer les pubs » sur ce compte Apple.": "No \"Remove ads\" purchase on this Apple Account.",
         "Restauration impossible : %@": "Restore failed: %@",
-        "Achat d'essai (simulateur) : retirer les pubs pour 4,99 € ?": "Test purchase (simulator): remove ads for €4.99?",
+        "Achat d'essai (simulateur) : retirer les pubs pour 5,99 € ?": "Test purchase (simulator): remove ads for €5.99?",
         "Acheter (essai)": "Buy (test)",
         "Remettre les pubs (essai)": "Bring ads back (test)",
         "Confidentialité des pubs": "Ad privacy choices",

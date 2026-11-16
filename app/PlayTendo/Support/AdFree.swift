@@ -44,11 +44,11 @@ final class AdFree: ObservableObject {
         Task { await refresh() }
     }
 
-    /// Prix affiché sur le bouton (« 4,99 € »), nil si la boutique ne répond pas.
+    /// Prix affiché sur le bouton (« 5,99 € »), nil si la boutique ne répond pas.
     var displayPrice: String? {
         if let product { return product.displayPrice }
 #if DEBUG && targetEnvironment(simulator)
-        return isSimulated ? "4,99 €" : nil
+        return isSimulated ? "5,99 €" : nil
 #else
         return nil
 #endif
@@ -66,7 +66,9 @@ final class AdFree: ObservableObject {
             storeChecked = true
         }
 #if DEBUG && targetEnvironment(simulator)
-        if isSimulated {
+        // Le faux achat d'essai reste prioritaire même quand le vrai produit est connu (captures d'écran, essais
+        // sans pubs) ; jamais compilé dans la version publiée.
+        if isSimulated || UserDefaults.standard.bool(forKey: Self.simulatedKey) {
             setAdFree(UserDefaults.standard.bool(forKey: Self.simulatedKey))
             return
         }

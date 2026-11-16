@@ -47,6 +47,9 @@ final class Ads: NSObject, ObservableObject, FullScreenContentDelegate {
     @Published private(set) var started = false
     /// Google exige un accès aux choix de confidentialité (Europe) : ligne dans les Réglages.
     @Published private(set) var privacyOptionsRequired = false
+    /// Le bandeau a reçu une pub : sa bande s'affiche seulement alors (sans pub — compte AdMob pas encore actif,
+    /// pas de réseau, aucune pub disponible —, rien du tout plutôt qu'une bande vide).
+    @Published var bannerLoaded = false
 
     private var preparing = false
     /// Partie en cours (bibliothèque) : ni fenêtre de consentement ni pub par-dessus le jeu.
@@ -153,7 +156,8 @@ final class Ads: NSObject, ObservableObject, FullScreenContentDelegate {
 
 /// Bandeau en bas de la bibliothèque, format classique (choisi le 2026-11-15 : le « grand » format adaptatif de Google
 /// était trop haut) : 320 × 50, ou 728 × 90 quand la largeur le permet (iPad), centré sur une bande de toute la
-/// largeur. Rien du tout tant que le kit n'est pas démarré ou si l'achat « Retirer les pubs » est fait.
+/// largeur, transparente (la pub flotte sur le fond de l'app, choisi le 2026-11-15). Rien du tout tant que le kit
+/// n'est pas démarré ou si l'achat « Retirer les pubs » est fait.
 ///
 /// La largeur vient d'une zone vide qui prend toute la place proposée ; le bandeau est posé par-dessus, à sa taille
 /// fixe. Sinon la vue de Google annonçait une largeur plus grande que l'écran et toute la bibliothèque s'élargissait
@@ -167,18 +171,19 @@ struct AdBannerView: View {
         if ads.started && !adFree.isAdFree {
             let size = width >= cgSize(for: AdSizeLeaderboard).width ? AdSizeLeaderboard : AdSizeBanner
             let bannerSize = cgSize(for: size)
+            // La vue de Google est toujours là (elle charge sa pub), mais la bande reste à hauteur 0 tant qu'aucune
+            // pub n'est arrivée.
             Color.clear
                 .frame(maxWidth: .infinity)
-                .frame(height: bannerSize.height)
+                .frame(height: ads.bannerLoaded ? bannerSize.height : 0)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-                .overlay {
+                .overlay(alignment: .top) {
                     if width > 0 {
                         BannerRepresentable(adSize: size)
                             .frame(width: bannerSize.width, height: bannerSize.height)
                     }
                 }
                 .clipped()
-                .background(Neon.background)
         }
     }
 }
@@ -186,9 +191,12 @@ struct AdBannerView: View {
 private struct BannerRepresentable: UIViewRepresentable {
     let adSize: AdSize
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeUIView(context: Context) -> BannerView {
         let banner = BannerView(adSize: adSize)
         banner.adUnitID = Ads.Unit.banner
+        banner.delegate = context.coordinator
         banner.load(Request())
         return banner
     }
@@ -200,10 +208,36 @@ private struct BannerRepresentable: UIViewRepresentable {
         banner.load(Request())
     }
 
+    static func dismantleUIView(_ banner: BannerView, coordinator: Coordinator) {
+        coordinator.retry?.cancel()
+    }
+
     /// Toujours la taille donnée par SwiftUI, jamais celle que la vue de Google réclame.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: BannerView, context: Context) -> CGSize? {
         let size = cgSize(for: adSize)
         return CGSize(width: proposal.width ?? size.width, height: proposal.height ?? size.height)
+    }
+
+    /// Pub reçue : la bande s'affiche. Pas de pub : raison au journal, nouvel essai dans une minute (Google ne
+    /// réessaie pas seul après un échec ; une pub déjà affichée reste en place).
+    @MainActor
+    final class Coordinator: NSObject, BannerViewDelegate {
+        var retry: Task<Void, Never>?
+
+        func bannerViewDidReceiveAd(_ bannerView: BannerView) {
+            if !Ads.shared.bannerLoaded { PTLogLine("Pubs : bandeau reçu") }
+            Ads.shared.bannerLoaded = true
+        }
+
+        func bannerView(_ bannerView: BannerView, didFailToReceiveAdWithError error: Error) {
+            PTLogLine("Pubs : bandeau non chargé (\(error.localizedDescription))")
+            retry?.cancel()
+            retry = Task { [weak bannerView] in
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard !Task.isCancelled, let bannerView, bannerView.window != nil else { return }
+                bannerView.load(Request())
+            }
+        }
     }
 }
 #endif

@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Compile la version App Store de PlayTendo et fabrique PlayTendo-AppStore.ipa (signature locale, pour l'essayer par
-# AltServer avant la publication). « zsh scripts/build_appstore.sh sim » : version Debug installée sur le simulateur. Réglage PLAYTENDO_APPSTORE : sans PS2, GameCube, Wii ni PS Vita (moteurs qui
+# AltServer avant la publication). « zsh scripts/build_appstore.sh sim » : version Debug installée sur le simulateur ;
+# « zsh scripts/build_appstore.sh envoi » : version signée envoyée à App Store Connect. Réglage PLAYTENDO_APPSTORE : sans PS2, GameCube, Wii ni PS Vita (moteurs qui
 # exigent le JIT, interdit sur l'App Store) et sans aucun code du mode turbo (StikDebug, débogueur) ; PSP et 3DS sur
 # leurs interpréteurs. L'app normale (scripts/build_app.sh, PlayTendo.ipa) n'est pas touchée : compilation à part
 # dans build/xcode-appstore.
@@ -84,6 +85,81 @@ if [ "${1:-}" = "sim" ]; then
     exit 1
   fi
   echo "=== OK : version App Store installée sur le simulateur ==="
+  exit 0
+fi
+
+# « envoi » : version signée pour la distribution, envoyée à App Store Connect (onglet TestFlight de la fiche
+# PlayTendo). Signature automatique par la clé API App Store Connect (secrets/AuthKey_<Key ID>.p8, secrets/asc_api.txt :
+# Key ID puis Issuer ID) : Apple crée lui-même le certificat de distribution et le profil. Tout ce que la version
+# App Store ajoute (Info.plist des pubs, manifestes de confidentialité, textes) est posé AVANT la signature.
+# Numéro de version : MARKETING_VERSION (1.0 par défaut) ; numéro de compilation = date et heure (unique à chaque envoi).
+if [ "${1:-}" = "envoi" ]; then
+  TEAM="6M9B4PZKJ9"
+  KEY_ID="$(sed -n 1p "$ROOT/secrets/asc_api.txt" 2>/dev/null)"; ISSUER="$(sed -n 2p "$ROOT/secrets/asc_api.txt" 2>/dev/null)"
+  KEY="$ROOT/secrets/AuthKey_$KEY_ID.p8"
+  if [ -z "$KEY_ID" ] || [ -z "$ISSUER" ] || [ ! -s "$KEY" ]; then
+    echo "!!! Clé API absente : secrets/asc_api.txt (Key ID, Issuer ID) et secrets/AuthKey_<Key ID>.p8"
+    exit 1
+  fi
+  for f in admob_app_id admob_banner admob_interstitial; do
+    [ -s "$ROOT/secrets/$f" ] || { echo "!!! secrets/$f absent : l'envoi exige les vrais identifiants AdMob"; exit 1; }
+  done
+  ENVOI="$ROOT/build/appstore-envoi"
+  rm -rf "${ENVOI:?}"; mkdir -p "$ENVOI/res"
+  # Info.plist de cette version : celui de l'app, sans StikDebug, avec les clés des pubs et les identifiants AdMob.
+  cp "$ROOT/app/Info.plist" "$ENVOI/Info.plist"
+  /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$ENVOI/Info.plist" 2>/dev/null || true
+  add_ads_keys "$ENVOI"
+  /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier $(cat "$ROOT/secrets/admob_app_id")" \
+    -c "Add :PTAdMobBanner string $(cat "$ROOT/secrets/admob_banner")" \
+    -c "Add :PTAdMobInterstitial string $(cat "$ROOT/secrets/admob_interstitial")" "$ENVOI/Info.plist"
+  add_appstore_resources "$ENVOI/res" ios-arm64
+  VERSION="${MARKETING_VERSION:-1.0}"; NUMERO="$(date +%Y%m%d%H%M)"
+  AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER")
+  echo ">>> Archive signée (version $VERSION, compilation $NUMERO)…"
+  if ! xcodebuild -project "$ROOT/app/PlayTendo.xcodeproj" -scheme PlayTendo -configuration Release \
+      -destination 'generic/platform=iOS' -archivePath "$ENVOI/PlayTendo.xcarchive" \
+      -derivedDataPath "$ROOT/build/appstore-envoi-dd" "${AUTH[@]}" \
+      DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CODE_SIGN_ENTITLEMENTS="$ROOT/app/PlayTendo-AppStore.entitlements" \
+      INFOPLIST_FILE="$ENVOI/Info.plist" PLAYTENDO_EXTRA_RESOURCES="$ENVOI/res" PLAYTENDO_STRIP_CORES=YES \
+      MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$NUMERO" "${APPSTORE_SETTINGS[@]}" \
+      "${(f)$(ads_settings ios-arm64)}" \
+      archive > "$LOG" 2>&1; then
+    echo "!!! ECHEC de l'archive — erreurs :"
+    grep -E "error:|error :" "$LOG" | sort -u | head -40
+    exit 1
+  fi
+  ARCH_APP="$ENVOI/PlayTendo.xcarchive/Products/Applications/PlayTendo.app"
+  for fw in PS2Core DolphinCore VitaCore; do
+    [ -d "$ARCH_APP/Frameworks/$fw.framework" ] && { echo "!!! $fw.framework dans l'app : envoi annulé"; exit 1; }
+  done
+  if grep -aq "stikdebug" "$ARCH_APP/Info.plist" || grep -aq "stikdebug://" "$ARCH_APP/PlayTendo"; then
+    echo "!!! L'adresse « stikdebug » est encore dans l'app : envoi annulé"; exit 1
+  fi
+  [ -f "$ARCH_APP/PrivacyInfo.xcprivacy" ] || { echo "!!! Manifeste de confidentialité absent de l'app : envoi annulé"; exit 1; }
+  cat > "$ENVOI/ExportOptions.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key><string>app-store-connect</string>
+	<key>destination</key><string>upload</string>
+	<key>teamID</key><string>$TEAM</string>
+	<key>signingStyle</key><string>automatic</string>
+	<key>uploadSymbols</key><true/>
+	<key>manageAppVersionAndBuildNumber</key><false/>
+</dict>
+</plist>
+PLIST
+  echo ">>> Signature pour la distribution et envoi à App Store Connect…"
+  if ! xcodebuild -exportArchive -archivePath "$ENVOI/PlayTendo.xcarchive" -exportOptionsPlist "$ENVOI/ExportOptions.plist" \
+      -exportPath "$ENVOI/export" "${AUTH[@]}" >> "$LOG" 2>&1; then
+    echo "!!! ECHEC de l'envoi — erreurs :"
+    grep -iE "error|refus|invalid|missing" "$LOG" | grep -v "^ *$" | sort -u | tail -40
+    exit 1
+  fi
+  echo "=== OK : PlayTendo $VERSION ($NUMERO) envoyé à App Store Connect ==="
+  echo "    Apple le vérifie (quelques minutes à une heure) ; il apparaîtra ensuite dans la fiche, onglet TestFlight."
   exit 0
 fi
 

@@ -48,6 +48,9 @@ struct LibraryView: View {
     var body: some View {
         ZStack {
             CyberBackground()
+            // Version App Store : la liste s'arrête au-dessus du bandeau de pub, posé sur le fond de l'app (rien si
+            // « Retirer les pubs » est acheté, ni tant qu'aucune pub n'est arrivée).
+            VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
@@ -76,6 +79,10 @@ struct LibraryView: View {
             .scrollDismissesKeyboard(.immediately)
 #endif
             .refreshable { library.refresh() }
+#if PLAYTENDO_APPSTORE
+            AdBannerView()
+#endif
+            }
 
             // Fondu sombre derrière l'heure et la batterie quand les cartes défilent dessous.
             GeometryReader { proxy in
@@ -114,8 +121,6 @@ struct LibraryView: View {
         }
 #if PLAYTENDO_APPSTORE
         .onChange(of: playing == nil) { _, idle in Ads.shared.inGame = !idle }
-        // Bandeau de pub en bas de la bibliothèque (rien si « Retirer les pubs » est acheté).
-        .safeAreaInset(edge: .bottom, spacing: 0) { AdBannerView() }
 #endif
 #else
         // Mac : jeux glissés dans la fenêtre depuis le Finder.
@@ -977,8 +982,9 @@ private struct EmptyLibraryView: View {
             .buttonStyle(.plain)
 
             VStack(spacing: 8) {
-                HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii]) { SystemBadge(system: $0) } }
-                HStack(spacing: 8) { ForEach([GameSystem.gb, .gba, .nds, .n3ds]) { SystemBadge(system: $0) } }
+                // Seulement les consoles de cette version (la version App Store n'a ni GameCube ni Wii).
+                HStack(spacing: 8) { ForEach([GameSystem.nes, .snes, .n64, .gameCube, .wii].filter(\.isAvailable)) { SystemBadge(system: $0) } }
+                HStack(spacing: 8) { ForEach([GameSystem.gb, .gba, .nds, .n3ds].filter(\.isAvailable)) { SystemBadge(system: $0) } }
                 HStack(spacing: 8) { ForEach(GameSystem.displayOrder.filter { $0.brand == .sony }) { SystemBadge(system: $0) } }
             }
             .padding(.top, 10)

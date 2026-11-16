@@ -436,7 +436,13 @@ Le « stable » du buildbot RetroArch est recompilé en continu : ce n'est pas u
   `en.lproj`/`fr.lproj` InfoPlist.strings), manifestes des kits Google mis dans `<Kit>Resources.bundle`, le tout posé
   par `add_appstore_resources`. Fiche et réponses aux questionnaires : `appstore/fiche-app-store.md` ; page de
   confidentialité : `vitrine/confidentialite/`. Restent : vrais identifiants AdMob, blocage des catégories sensibles
-  dans AdMob, archive signée pour l'envoi (compte développeur).
+  dans AdMob.
+- Envoi à Apple : `zsh scripts/build_appstore.sh envoi` (équipe 6M9B4PZKJ9, App ID `com.playtendo.app` avec Increased
+  Memory Limit) : archive `-scheme PlayTendo` signée automatiquement par la clé API (`secrets/AuthKey_<id>.p8`,
+  `secrets/asc_api.txt` = Key ID puis Issuer ID, `-allowProvisioningUpdates`), Info.plist fusionné à part
+  (`build/appstore-envoi/Info.plist` via `INFOPLIST_FILE`), fichiers App Store posés par la phase « Embed cores »
+  (`PLAYTENDO_EXTRA_RESOURCES`, moteurs allégés si `PLAYTENDO_STRIP_CORES=YES`) avant la signature, puis
+  `-exportArchive` (app-store-connect, destination upload). Numéro de compilation = date et heure.
 
 ## Version Mac
 - Même projet et même code (`#if os(iOS)` / `#if os(macOS)`), arm64, macOS 14, sans bac à sable, signature « - »

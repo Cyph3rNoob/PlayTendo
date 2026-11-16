@@ -1,7 +1,7 @@
 # PlayTendo — fiche App Store (à copier dans App Store Connect)
 
 Préparée le 2026-11-15 pour la version App Store (`zsh scripts/build_appstore.sh`) : NES, SNES, N64, GB/GBC, GBA, DS,
-3DS, PS1, PSP, sans turbo ; gratuite avec pubs, achat « Retirer les pubs » à 4,99 €.
+3DS, PS1, PSP, sans turbo ; gratuite avec pubs, achat « Retirer les pubs » à 5,99 €.
 
 Règle d'Apple à garder en tête (guideline 2.3.7) : pas de marque qui n'est pas à nous dans le **nom**, le
 **sous-titre** ni les **mots-clés**. Les noms de consoles restent permis dans la **description**, pour dire ce que
@@ -119,7 +119,7 @@ PlayTendo is built on open-source engines (GPL, MPL licenses): the list and thei
 | Type | Non consommable |
 | Nom de référence (interne) | `Retirer les pubs` |
 | ID produit | `com.playtendo.app.removeads` (exactement, c'est celui du code) |
-| Prix | 4,99 € (palier d'Apple correspondant) |
+| Prix | 5,99 € en France (pays de référence États-Unis : 4,99 $, palier équivalent) |
 | Nom affiché FR / EN | `Retirer les pubs` / `Remove ads` |
 | Description FR | `Retire toutes les pubs de PlayTendo, pour toujours, sur tous tes appareils.` |
 | Description EN | `Removes all ads from PlayTendo, forever, on all your devices.` |
