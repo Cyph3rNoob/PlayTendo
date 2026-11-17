@@ -496,6 +496,41 @@ footer .first { color: var(--text); font-weight: 600; }
 }
 </style>
 
+<!-- Section « PlayTendo en 3D » : Three.js 0.187.0 (MIT, assets/3d/lib/LICENSE-three.txt), hébergé avec la page,
+     chargé seulement quand la section approche. -->
+<script type="importmap">
+{ "imports": {
+  "three": "./assets/3d/lib/three.module.min.js",
+  "three/addons/": "./assets/3d/lib/addons/"
+} }
+</script>
+<style>
+/* ---------- PlayTendo en 3D : l'iPhone reste à l'écran (sticky) pendant que les étapes défilent par-dessus ---------- */
+.tour3d { position: relative; }
+.tour-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; pointer-events: none; }
+.tour-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tour-repli { position: absolute; top: 50%; left: 72%; height: 62%; transform: translate(-50%, -50%) rotate(-4deg);
+  border-radius: 6% / 3%; box-shadow: 0 0 0 6px #1a1426, 0 0 60px -10px rgba(255, 43, 214, .55); }
+.tour3d.tour-pret .tour-repli { display: none; }
+.tour-steps { position: relative; margin-top: -100vh; margin-top: -100svh; }
+.tour-step { min-height: 100vh; min-height: 100svh; display: flex; align-items: center; }
+.tour-step > .wrap { width: 100%; display: flex; }
+.tour-step:nth-child(even) > .wrap { justify-content: flex-end; }
+.tour-card { max-width: 430px; padding: 24px 26px; background: rgba(13, 15, 33, .72); backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px); box-shadow: inset 0 0 0 1px var(--rule); }
+.tour-card .sec { margin-bottom: 18px; }
+.tour-kicker { margin: 0; font: 600 12px/1.3 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--k, var(--cyan)); }
+.tour-card h3 { margin: 8px 0 10px; font: 800 clamp(24px, 3vw, 36px)/1.15 var(--display); letter-spacing: .03em; }
+.tour-card h3 em { font-style: normal; color: var(--magenta); text-shadow: 0 0 18px rgba(255, 43, 214, .45); }
+.tour-card p.txt { margin: 0; color: #c3cde6; }
+/* Écran en hauteur (téléphone) : l'iPhone en haut, l'étape en bas. */
+@media (max-aspect-ratio: 1/1) {
+  .tour-step { align-items: flex-end; padding-bottom: 5svh; }
+  .tour-step > .wrap, .tour-step:nth-child(even) > .wrap { justify-content: center; }
+  .tour-card { max-width: 520px; }
+  .tour-repli { left: 50%; top: 34%; height: 48%; }
+}
+</style>
 </head>
 <body>
 <header class="topbar">
@@ -598,6 +633,46 @@ footer .first { color: var(--text); font-weight: 600; }
         </div>
         <p class="caption"><span class="fr"><span class="try">Aperçu à toucher :</span> les filtres de consoles</span><span class="en"><span class="try">Tap to try:</span> the console filters · app in French</span></p>
       </div>
+    </div>
+  </section>
+
+  <section class="tour3d" id="en-3d" aria-labelledby="tour3d-titre">
+    <div class="tour-sticky" aria-hidden="true">
+      <img class="tour-repli" src="assets/3d/ecrans/fr/1.jpg" alt="" loading="lazy" decoding="async">
+      <canvas class="tour-canvas"></canvas>
+    </div>
+    <div class="tour-steps">
+    <div class="tour-step"><div class="wrap"><div class="tour-card cut" style="--k:#00f0ff">
+        <h2 class="sec" id="tour3d-titre" style="--k:var(--cyan)"><span class="fr">En main</span><span class="en">In your hand</span><i></i><b>3D</b></h2>
+        <p class="tour-kicker"><span class="fr">Fais défiler</span><span class="en">Scroll down</span></p>
+        <h3><span class="fr">PlayTendo, <em>en vrai</em></span><span class="en">PlayTendo, <em>for real</em></span></h3>
+        <p class="txt"><span class="fr">L'app telle qu'elle tourne sur iPhone, écran par écran.</span><span class="en">The app as it runs on iPhone, screen by screen.</span></p>
+      </div></div></div>
+    <div class="tour-step"><div class="wrap"><div class="tour-card cut" style="--k:#ff2bd6">
+        <p class="tour-kicker"><span class="fr">Ta bibliothèque</span><span class="en">Your library</span></p>
+        <h3><span class="fr">Tous tes jeux, <em>une seule app</em></span><span class="en">All your games, <em>one app</em></span></h3>
+        <p class="txt"><span class="fr">Jaquettes automatiques, fiches de jeu, favoris : ta collection rangée par console toute seule.</span><span class="en">Automatic covers, game info, favorites: your collection sorted by console on its own.</span></p>
+      </div></div></div>
+    <div class="tour-step"><div class="wrap"><div class="tour-card cut" style="--k:#33ff8c">
+        <p class="tour-kicker"><span class="fr">NES · SNES · N64</span><span class="en">NES · SNES · N64</span></p>
+        <h3><span class="fr">Du salon <em>à la poche</em></span><span class="en">From the couch <em>to your pocket</em></span></h3>
+        <p class="txt"><span class="fr">Des boutons tactiles taillés pour chaque console, ou ta manette préférée.</span><span class="en">Touch controls tailored to each console, or your favorite controller.</span></p>
+      </div></div></div>
+    <div class="tour-step"><div class="wrap"><div class="tour-card cut" style="--k:#bdff42">
+        <p class="tour-kicker"><span class="fr">Game Boy · Color · Advance</span><span class="en">Game Boy · Color · Advance</span></p>
+        <h3><span class="fr">Les portables <em>de légende</em></span><span class="en">Legendary <em>handhelds</em></span></h3>
+        <p class="txt"><span class="fr">Sauvegarde rapide, retour arrière, avance rapide : en un geste.</span><span class="en">Quick save, rewind, fast-forward: one tap away.</span></p>
+      </div></div></div>
+    <div class="tour-step"><div class="wrap"><div class="tour-card cut" style="--k:#ff4d4d">
+        <p class="tour-kicker"><span class="fr">DS · 3DS</span><span class="en">DS · 3DS</span></p>
+        <h3><span class="fr">Deux écrans, <em>zéro compromis</em></span><span class="en">Two screens, <em>no compromise</em></span></h3>
+        <p class="txt"><span class="fr">L'écran tactile au bout du doigt, en portrait comme en paysage.</span><span class="en">The touch screen at your fingertip, in portrait or landscape.</span></p>
+      </div></div></div>
+    <div class="tour-step"><div class="wrap"><div class="tour-card cut" style="--k:#5c8bff">
+        <p class="tour-kicker"><span class="fr">PlayStation · PSP</span><span class="en">PlayStation · PSP</span></p>
+        <h3><span class="fr">Sony <em>aussi</em></span><span class="en">Sony <em>too</em></span></h3>
+        <p class="txt"><span class="fr">PS1 et PSP en haute résolution, avec filtres et lissage.</span><span class="en">PS1 and PSP in high resolution, with filters and smoothing.</span></p>
+      </div></div></div>
     </div>
   </section>
 
@@ -926,6 +1001,10 @@ footer .first { color: var(--text); font-weight: 600; }
         <span class="fr">Reconnaissance des jeux : libretro-database (No-Intro, Redump). Jaquettes : ScreenScraper, puis libretro-thumbnails et SteamGridDB en secours. Codes de triche : libretro-database (CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection et CheatDevicePS2 (GPL-3.0). Succès : rcheevos de RetroAchievements (MIT). Archives : libarchive (BSD-2-Clause) et xz (0BSD). Polices : Orbitron et Press Start 2P (OFL). Turbo sur iPhone : StikDebug (app à part).</span>
         <span class="en">Game recognition: libretro-database (No-Intro, Redump). Cover art: ScreenScraper, then libretro-thumbnails and SteamGridDB as fallbacks. Cheat codes: libretro-database (CC BY-SA 4.0), Dolphin, codes.rc24.xyz, pcsx2_cheats_collection and CheatDevicePS2 (GPL-3.0). Achievements: rcheevos by RetroAchievements (MIT). Archives: libarchive (BSD-2-Clause) and xz (0BSD). Typefaces: Orbitron and Press Start 2P (OFL). Turbo on iPhone: StikDebug (separate app).</span>
       </p>
+      <p class="more">
+        <span class="fr">Ce site : modèle 3D de l'iPhone « iPhone 18 Pro Max – High Quality 3D Model » par Pro Animator (Sketchfab, <a href="https://creativecommons.org/licenses/by/4.0/deed.fr" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>), adapté pour le web ; affichage 3D avec Three.js (MIT).</span>
+        <span class="en">This website: iPhone 3D model “iPhone 18 Pro Max – High Quality 3D Model” by Pro Animator (Sketchfab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>), adapted for the web; 3D rendering with Three.js (MIT).</span>
+      </p>
     </div>
   </section>
 </main>
@@ -1054,6 +1133,8 @@ document.querySelectorAll("[data-copy]").forEach(function (btn) {
   }
 })();
 </script>
+
+<script type="module" src="assets/3d/tour3d.js"></script>
 
 <!-- Compteur de visites GoatCounter (sans cookies, rien d'affiché). Version figée : le navigateur refuse le script
      si son contenu ne correspond plus à l'empreinte, publiée sur goatcounter.com/help/countjs-versions. -->
