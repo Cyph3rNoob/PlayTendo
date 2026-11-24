@@ -196,6 +196,13 @@ a { color: var(--cyan); }
 .specs { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; margin: 0 0 28px; list-style: none; font: 500 13px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
 .specs b { color: var(--text); font-weight: 600; }
 .jump { display: flex; flex-wrap: wrap; gap: 12px; }
+/* Badge officiel App Store (fichiers d'Apple, non modifiés) : 48 px de haut, au moins 40 selon Apple. */
+.appstore-badge { display: inline-flex; align-self: center; line-height: 0; }
+.appstore-badge img { height: 48px; width: auto; }
+.appstore-badge:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.appstore-hero { margin: 0 0 16px; }
+.turbo-in .appstore-badge { margin-top: 18px; }
+.dl .appstore-badge { justify-self: start; }
 .btn {
   font: 800 13px/1 var(--display);
   letter-spacing: .14em;
@@ -577,12 +584,13 @@ footer .first { color: var(--text); font-weight: 600; }
           <li><b>iOS 18+</b> <span class="fr">iPhone · iPad</span><span class="en">iPhone · iPad</span></li>
           <li><b>macOS 14+</b> <span class="fr">Mac Apple silicon</span><span class="en">Apple silicon Mac</span></li>
         </ul>
+        <a class="appstore-badge appstore-hero" href="https://apps.apple.com/app/id6835256921" target="_blank" rel="noopener noreferrer"><img class="fr" src="assets/appstore/badge-fr.svg" alt="Télécharger dans l'App Store" width="152" height="48"><img class="en" src="assets/appstore/badge-en.svg" alt="Download on the App Store" width="144" height="48"></a>
         <div class="jump">
           <a class="btn solid cut" target="_self" href="#consoles"><span class="fr">Voir les consoles</span><span class="en">See the consoles</span></a>
           <a class="btn guide cut" href="installer/"><span class="fr">Comment l'installer</span><span class="en">How to install</span></a>
           <a class="btn line cut" target="_self" href="#telecharger"><span class="fr">Télécharger</span><span class="en">Download</span></a>
         </div>
-        <p class="guide-hint"><span class="fr">Pas sur l'App Store : <a href="installer/">guide d'installation en 3 étapes</a>, un ordinateur une seule fois.</span><span class="en">Not on the App Store: <a href="installer/">3-step install guide</a>, a computer only once.</span></p>
+        <p class="guide-hint"><span class="fr">Sur l'App Store, ou la version complète avec toutes les consoles : <a href="installer/">guide d'installation en 3 étapes</a>, un ordinateur une seule fois.</span><span class="en">On the App Store, or the full version with every console: <a href="installer/">3-step install guide</a>, a computer only once.</span></p>
       </div>
 
       <div class="phone-col">
@@ -876,11 +884,12 @@ footer .first { color: var(--text); font-weight: 600; }
       <div class="turbo-band cut">
         <div class="turbo-in cut">
           <div>
-            <h2><span class="fr">Bientôt sur l'App Store</span><span class="en">Coming to the App Store</span></h2>
+            <h2><span class="fr">Disponible sur l'App Store</span><span class="en">Available on the App Store</span></h2>
             <p>
-              <span class="fr">Une version App Store de PlayTendo arrive : gratuite avec des pubs discrètes (jamais pendant une partie), et un achat unique à 5,99 € pour les retirer. Apple interdit le JIT sur l'App Store : la PS2, la GameCube, la Wii et la PS Vita, qui en ont besoin, n'y seront pas, et la PSP et la 3DS y tourneront sans turbo, donc plus lentement. La version complète, sans pubs et avec toutes les consoles, reste disponible ici gratuitement.</span>
-              <span class="en">An App Store version of PlayTendo is on its way: free with unobtrusive ads (never during play), and a one-time €5.99 purchase to remove them. Apple doesn't allow JIT on the App Store: the PS2, GameCube, Wii and PS Vita, which need it, won't be there, and the PSP and 3DS will run without turbo, so more slowly. The full version, ad-free and with every console, stays available here for free.</span>
+              <span class="fr">PlayTendo est sur l'App Store : gratuite avec des pubs discrètes (jamais pendant une partie), et un achat unique à 5,99 € pour les retirer. Apple interdit le JIT sur l'App Store : la PS2, la GameCube, la Wii et la PS Vita, qui en ont besoin, n'y sont pas, et la PSP et la 3DS y tournent sans turbo, donc plus lentement. La version complète, sans pubs et avec toutes les consoles, reste disponible ici gratuitement.</span>
+              <span class="en">PlayTendo is on the App Store: free with unobtrusive ads (never during play), and a one-time €5.99 purchase to remove them. Apple doesn't allow JIT on the App Store: the PS2, GameCube, Wii and PS Vita, which need it, aren't there, and the PSP and 3DS run without turbo, so more slowly. The full version, ad-free and with every console, stays available here for free.</span>
             </p>
+            <a class="appstore-badge" href="https://apps.apple.com/app/id6835256921" target="_blank" rel="noopener noreferrer"><img class="fr" src="assets/appstore/badge-fr.svg" alt="Télécharger dans l'App Store" width="152" height="48"><img class="en" src="assets/appstore/badge-en.svg" alt="Download on the App Store" width="144" height="48"></a>
           </div>
           <dl class="needs">
             <div>
@@ -940,7 +949,9 @@ footer .first { color: var(--text); font-weight: 600; }
         <div class="dl cut" style="--k:var(--cyan)">
           <h3><span class="fr">iPhone et iPad</span><span class="en">iPhone and iPad</span></h3>
           <p class="req"><span class="fr">iOS 18 ou plus · fichier .ipa</span><span class="en">iOS 18 or later · .ipa file</span></p>
-          <p><span class="fr">Le plus simple : <b>SideStore</b>. Un ordinateur une seule fois, puis l'app s'installe, se prolonge et se met à jour depuis l'iPhone.</span><span class="en">The easiest way: <b>SideStore</b>. A computer only once, then the app installs, refreshes and updates from the iPhone.</span></p>
+          <p><span class="fr"><b>App Store</b> : l'installation la plus simple, avec pubs, sans PS2, GameCube, Wii ni PS Vita.</span><span class="en"><b>App Store</b>: the simplest install, with ads, without the PS2, GameCube, Wii or PS Vita.</span></p>
+          <a class="appstore-badge" href="https://apps.apple.com/app/id6835256921" target="_blank" rel="noopener noreferrer"><img class="fr" src="assets/appstore/badge-fr.svg" alt="Télécharger dans l'App Store" width="152" height="48"><img class="en" src="assets/appstore/badge-en.svg" alt="Download on the App Store" width="144" height="48"></a>
+          <p><span class="fr">Version complète : le plus simple est <b>SideStore</b>. Un ordinateur une seule fois, puis l'app s'installe, se prolonge et se met à jour depuis l'iPhone.</span><span class="en">Full version: the easiest way is <b>SideStore</b>. A computer only once, then the app installs, refreshes and updates from the iPhone.</span></p>
           <a class="dl-btn dl-guide cut" href="installer/"><span class="fr">Guide d'installation (3 étapes)</span><span class="en">Install guide (3 steps)</span><small><span class="fr">GUIDE</span><span class="en">GUIDE</span></small></a>
           <a class="dl-btn cut" href="https://github.com/Cyph3rNoob/PlayTendo/releases/latest/download/PlayTendo.ipa"><span class="fr">Télécharger l'IPA</span><span class="en">Download the IPA</span><small>.IPA</small></a>
           <button type="button" class="dl-btn cut" data-copy="https://playtendo.me/source.json"><span class="fr">Copier l'adresse de la source</span><span class="en">Copy the source address</span><small><span class="fr" data-done="COPIÉE">COPIER</span><span class="en" data-done="COPIED">COPY</span></small></button>
